@@ -40,6 +40,9 @@ export const BUILT_IN_LINEAR_TRACKER: TrackerDescriptor = {
     priority: true,
     feature: false,
     blockers: false,
+    // Assignment would need the team's member list; the board reads the name
+    // Linear already reports and never writes one.
+    assignee: false,
     filters: { people: true, priority: true },
     projectMapping: true,
     sessionComments: true,
@@ -49,6 +52,8 @@ export const BUILT_IN_LINEAR_TRACKER: TrackerDescriptor = {
     containersAreProjects: false,
     create: false,
     edit: false,
+    // The legacy shim only reads and updates state.
+    delete: false,
   },
   stateFilters: ['open', 'all', 'backlog', 'todo', 'in-progress', 'inReview', 'done', 'canceled', 'duplicate'],
   urlPatterns: [{ host: 'linear.app', path: '^/[^/]+/issue/([A-Za-z][A-Za-z0-9]*-\\d+)(?:/|$)' }],

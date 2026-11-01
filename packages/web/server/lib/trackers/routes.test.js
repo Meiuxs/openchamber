@@ -30,6 +30,7 @@ const fakeTracker = () => ({
   updateState: vi.fn(async () => ({ connected: true, item })),
   create: vi.fn(async () => ({ connected: true, item })),
   edit: vi.fn(async () => ({ connected: true, item })),
+  remove: vi.fn(async () => ({ connected: true, removed: true })),
   liveSummaries: vi.fn(),
   matchUrl: () => null,
   mapping: {
@@ -83,6 +84,7 @@ describe('tracker routes', () => {
       request(app).post('/api/tracker/nope/items/update').send({ id: 'ENG-12', stateId: 's' }),
       request(app).post('/api/tracker/nope/items/create').send({ title: 'x', containerId: 't' }),
       request(app).post('/api/tracker/nope/items/edit').send({ id: 'ENG-12' }),
+      request(app).delete('/api/tracker/nope/items?id=ENG-12'),
       request(app).get('/api/tracker/nope/states?containerId=t'),
       request(app).get('/api/tracker/nope/mapping'),
       request(app).put('/api/tracker/nope/mapping').send({}),
@@ -235,7 +237,7 @@ describe('tracker routes', () => {
     };
     const limited = createApp([
       {
-        descriptor: descriptorFor('limited', { multipleAccounts: false, stateUpdate: false, projectMapping: false, sessionComments: false, create: false, edit: false }),
+        descriptor: descriptorFor('limited', { multipleAccounts: false, stateUpdate: false, projectMapping: false, sessionComments: false, create: false, edit: false, delete: false }),
         load: async () => tracker,
       },
       // Capabilities claim more than the implementation carries.
@@ -246,6 +248,9 @@ describe('tracker routes', () => {
       request(limited).post('/api/tracker/limited/items/update').send({ id: 'ENG-12', stateId: 's' }),
       request(limited).post('/api/tracker/limited/items/create').send({ title: 'x', containerId: 't' }),
       request(limited).post('/api/tracker/limited/items/edit').send({ id: 'ENG-12' }),
+      request(limited).delete('/api/tracker/limited/items?id=ENG-12'),
+      // The capability says yes, the implementation carries no `remove`.
+      request(limited).delete('/api/tracker/bare/items?id=ENG-12'),
       request(limited).get('/api/tracker/limited/states?containerId=t'),
       request(limited).get('/api/tracker/limited/mapping'),
       request(limited).put('/api/tracker/limited/mapping').send({}),
@@ -263,6 +268,7 @@ describe('tracker routes', () => {
     expect(tracker.updateState).not.toHaveBeenCalled();
     expect(tracker.create).not.toHaveBeenCalled();
     expect(tracker.edit).not.toHaveBeenCalled();
+    expect(tracker.remove).not.toHaveBeenCalled();
     expect(tracker.mapping.set).not.toHaveBeenCalled();
   });
 
@@ -308,12 +314,42 @@ describe('tracker routes', () => {
     await request(full).post('/api/tracker/full/items/edit').send({ id: 'ENG-12', feature: null, blockedBy: [] }).expect(200);
     expect(tracker.edit).toHaveBeenLastCalledWith({ id: 'ENG-12', feature: null, blockedBy: [] });
 
+    // The assignee is a name, trimmed like every other text field; an explicit
+    // null clears it rather than being dropped like an absent field.
+    await request(full)
+      .post('/api/tracker/full/items/create')
+      .send({ title: 'Owned', containerId: 'team-1', assignee: '  Ada Lovelace  ' })
+      .expect(200);
+    expect(tracker.create).toHaveBeenLastCalledWith({
+      containerId: 'team-1', title: 'Owned', description: null, priority: null, labels: [], assignee: 'Ada Lovelace',
+    });
+    await request(full).post('/api/tracker/full/items/edit').send({ id: 'ENG-12', assignee: null }).expect(200);
+    expect(tracker.edit).toHaveBeenLastCalledWith({ id: 'ENG-12', assignee: null });
+
     const gatedTracker = fakeTracker();
     const gated = createApp([{ descriptor: descriptorFor('gated'), load: async () => gatedTracker }]);
     await request(gated).post('/api/tracker/gated/items/create').send({ title: 'x', containerId: 't' }).expect(404);
     await request(gated).post('/api/tracker/gated/items/edit').send({ id: 'ENG-12' }).expect(404);
     expect(gatedTracker.create).not.toHaveBeenCalled();
     expect(gatedTracker.edit).not.toHaveBeenCalled();
+  });
+
+  it('deletes an item behind the delete capability', async () => {
+    const full = createApp([{ descriptor: descriptorFor('full', { delete: true }), load: async () => tracker }]);
+
+    await request(full).delete('/api/tracker/full/items').expect(400);
+    await request(full).delete('/api/tracker/full/items').query({ id: 'ENG-12', containerId: 'team-1' }).expect(200);
+    expect(tracker.remove).toHaveBeenLastCalledWith({ id: 'ENG-12', containerId: 'team-1' });
+    // The container is the same hint the edit takes, by either name.
+    await request(full).delete('/api/tracker/full/items').query({ id: 'ENG-12', projectDirectory: 'team-1' }).expect(200);
+    expect(tracker.remove).toHaveBeenLastCalledWith({ id: 'ENG-12', containerId: 'team-1' });
+    await request(full).delete('/api/tracker/full/items').query({ id: 'ENG-12' }).expect(200);
+    expect(tracker.remove).toHaveBeenLastCalledWith({ id: 'ENG-12' });
+
+    const gatedTracker = fakeTracker();
+    const gated = createApp([{ descriptor: descriptorFor('gated'), load: async () => gatedTracker }]);
+    await request(gated).delete('/api/tracker/gated/items').query({ id: 'ENG-12' }).expect(404);
+    expect(gatedTracker.remove).not.toHaveBeenCalled();
   });
 
   it('caps JSON bodies at 16kb', async () => {

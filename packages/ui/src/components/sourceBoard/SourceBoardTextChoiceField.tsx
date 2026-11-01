@@ -1,29 +1,35 @@
 import * as React from 'react';
 
 import { Icon } from '@/components/icon/Icon';
+import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { shouldDismissDropdown } from '@/components/ui/dropdown-navigation';
 import { dropdownTriggerVariants } from '@/components/ui/dropdown-trigger';
 import { cn } from '@/lib/utils';
-import { featureChoices } from './trackerChoices';
+import { textChoices } from './trackerChoices';
 
-// The rows that are not an existing grouping: a grouping is any text, so these
+// The rows that are not an existing value: any text is a legal one, so these
 // read from a range no typed name carries.
 const CREATE_ROW = '\u0000create';
 const CLEAR_ROW = '\u0000clear';
 
 /**
- * One grouping slug, picked from the slugs the tracker already lists or typed
- * as a new one. A plain text field let `auth` and `Auth` become two groupings
- * that filter apart; offering the existing spellings makes the one that is
- * already used the easy choice, and the new one still possible.
+ * One free-text value, picked from the spellings the tracker already lists or
+ * typed as a new one. A plain text field let `auth` and `Auth` become two
+ * groupings that filter apart, and one person become two assignees; offering
+ * the existing spellings makes the one already in use the easy choice, and a
+ * new one still possible.
+ *
+ * Two triggers share the menu: `field` is the form's full-width control, `icon`
+ * is the pencil a preview's meta row puts beside the value it shows.
  */
-export const SourceBoardFeatureField: React.FC<{
+export const SourceBoardTextChoiceField: React.FC<{
     value: string;
-    /** Every grouping slug in scope, as the list's facets hold them. */
+    /** Every spelling in scope, as the list's facets hold them. */
     options: readonly string[];
     onChange: (value: string) => void;
+    /** Shown by the `field` trigger while the value is empty. */
     placeholder: string;
     searchPlaceholder: string;
     emptyText: string;
@@ -31,13 +37,17 @@ export const SourceBoardFeatureField: React.FC<{
     createLabel: (value: string) => string;
     clearLabel: string;
     ariaLabel: string;
-}> = ({ value, options, onChange, placeholder, searchPlaceholder, emptyText, createLabel, clearLabel, ariaLabel }) => {
+    trigger?: 'field' | 'icon';
+    /** A write is in flight: the trigger shows it and does not open. */
+    busy?: boolean;
+}> = ({ value, options, onChange, placeholder, searchPlaceholder, emptyText, createLabel, clearLabel, ariaLabel, trigger = 'field', busy = false }) => {
     const [open, setOpen] = React.useState(false);
     const [query, setQuery] = React.useState('');
     const typed = query.trim();
-    const { matches, creates } = React.useMemo(() => featureChoices(options, typed), [options, typed]);
+    const { matches, creates } = React.useMemo(() => textChoices(options, typed), [options, typed]);
 
     const changeOpen = (next: boolean) => {
+        if (busy) return;
         setOpen(next);
         if (!next) setQuery('');
     };
@@ -49,16 +59,29 @@ export const SourceBoardFeatureField: React.FC<{
     return (
         <DropdownMenu open={open} onOpenChange={changeOpen}>
             <DropdownMenuTrigger asChild>
-                <button
-                    type="button"
-                    aria-label={ariaLabel}
-                    className={cn(dropdownTriggerVariants({ size: 'default' }), 'w-full max-w-full')}
-                >
-                    <span className={cn('truncate', value ? 'text-foreground' : 'text-muted-foreground')}>
-                        {value || placeholder}
-                    </span>
-                    <Icon name="arrow-down-s" className="size-4 shrink-0 text-muted-foreground" />
-                </button>
+                {trigger === 'icon' ? (
+                    <Button
+                        variant="ghost"
+                        size="xs"
+                        aria-label={ariaLabel}
+                        title={ariaLabel}
+                        disabled={busy}
+                        className="size-6 shrink-0 px-0 text-muted-foreground data-[state=open]:bg-interactive-hover"
+                    >
+                        <Icon name={busy ? 'loader-4' : 'pencil'} className={cn('size-3.5', busy && 'animate-spin')} />
+                    </Button>
+                ) : (
+                    <button
+                        type="button"
+                        aria-label={ariaLabel}
+                        className={cn(dropdownTriggerVariants({ size: 'default' }), 'w-full max-w-full')}
+                    >
+                        <span className={cn('truncate', value ? 'text-foreground' : 'text-muted-foreground')}>
+                            {value || placeholder}
+                        </span>
+                        <Icon name="arrow-down-s" className="size-4 shrink-0 text-muted-foreground" />
+                    </button>
+                )}
             </DropdownMenuTrigger>
             <DropdownMenuContent
                 align="start"
@@ -75,7 +98,7 @@ export const SourceBoardFeatureField: React.FC<{
                     <CommandInput autoFocus placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
                     <CommandList disableHorizontal>
                         {matches.map((option) => (
-                            <CommandItem key={option} value={`grouping:${option}`} onSelect={() => choose(option)}>
+                            <CommandItem key={option} value={`choice:${option}`} onSelect={() => choose(option)}>
                                 <span className="flex size-4 shrink-0 items-center justify-center">
                                     {option === value ? <Icon name="check" className="size-4" /> : null}
                                 </span>

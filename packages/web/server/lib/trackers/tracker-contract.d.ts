@@ -116,6 +116,12 @@ export type TrackerDescriptor = {
     feature: boolean;
     /** Items wait on others by identifier (`blockedBy`), so a form can offer the field. */
     blockers: boolean;
+    /**
+     * The board can set who an item is assigned to, as the name it writes into
+     * `assignee`. False when assignment needs the tracker's own member list
+     * (Linear picks a person by id), leaving the row read-only.
+     */
+    assignee: boolean;
     filters: { people: boolean; priority: boolean };
     /** Container to OpenChamber project mapping (Linear: team). */
     projectMapping: boolean;
@@ -147,6 +153,11 @@ export type TrackerDescriptor = {
     create: boolean;
     /** UI can edit item fields (POST items/edit). */
     edit: boolean;
+    /**
+     * The item can be deleted for good (DELETE items), so the edit form offers
+     * the action. False when the tracker has no way to delete one.
+     */
+    delete: boolean;
   };
   /** In menu order: `open`, `all`, categories, then provider extras (`inReview`, `duplicate`). */
   stateFilters: string[];
@@ -204,6 +215,9 @@ export type TrackerEditItemInput = {
   blockedBy?: string[];
 };
 
+/** The item to delete, and the container it is in when identifiers repeat. */
+export type TrackerDeleteItemInput = { id: string; containerId?: string };
+
 /** Server-side implementation a registry entry loads. JSON in, JSON out. */
 export interface TrackerImplementation {
   auth: {
@@ -219,6 +233,12 @@ export interface TrackerImplementation {
   updateState(input: { id: string; stateId: string }): Promise<Connected<{ item: TrackerItem | null }>>;
   create(input: TrackerCreateItemInput): Promise<Connected<{ item: TrackerItem | null }>>;
   edit(input: TrackerEditItemInput): Promise<Connected<{ item: TrackerItem | null }>>;
+  /**
+   * Removes the item for good. Optional: a tracker without a delete has no
+   * `remove`, and its `delete` capability is false, so the route answers
+   * UNSUPPORTED before reaching here.
+   */
+  remove?(input: TrackerDeleteItemInput): Promise<Connected<{ removed: boolean }>>;
   liveSummaries(identifiers: string[]): Promise<Connected<{ items: TrackerLiveSummaryWire[] }>>;
   matchUrl(url: string): string | null;
   mapping?: {

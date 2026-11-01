@@ -2,13 +2,13 @@ import type { TrackerItemSummary } from '@/lib/api/types';
 import { rankByQuery } from '@/lib/search/fuzzySearch';
 
 /**
- * What the grouping field offers for the text typed so far: the groupings that
- * match, and whether that text is a new one. A new one is offered only for a
- * word no grouping is spelled as — picking an existing spelling is what the
- * list is for, and a near miss (`Auth` beside `auth`) is how one grouping
- * became two.
+ * What a free-text choice field offers for the text typed so far: the existing
+ * spellings that match, and whether that text is a new one. A new one is
+ * offered only for a word nothing is spelled as — picking an existing spelling
+ * is what the list is for, and a near miss (`Auth` beside `auth`) is how one
+ * grouping, or one assignee, became two.
  */
-export const featureChoices = (options: readonly string[], typed: string) => {
+export const textChoices = (options: readonly string[], typed: string) => {
     const query = typed.trim();
     return {
         matches: query ? rankByQuery(options, query, (option) => [option]) : options,

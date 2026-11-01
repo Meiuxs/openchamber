@@ -802,10 +802,12 @@ const TrackerPreview: React.FC<{
     stateControl?: React.ReactNode;
     /** Replaces the blocker identifiers with ones that change them. */
     blockersControl?: React.ReactNode;
+    /** Replaces the assignee with one that changes it; without it the name is text. */
+    assigneeControl?: React.ReactNode;
     onOpenIssue?: (issue: TrackerItemSummary) => void;
     /** Opens a blocker by identifier; without it blockers are plain text. */
     onOpenIdentifier?: (identifier: string) => void;
-}> = ({ issue, detail, purpose, pinned, now, footer: footerOverride, stateControl, blockersControl, onOpenIssue, onOpenIdentifier }) => {
+}> = ({ issue, detail, purpose, pinned, now, footer: footerOverride, stateControl, blockersControl, assigneeControl, onOpenIssue, onOpenIdentifier }) => {
     const { t } = useI18n();
     const relative = useRelative(now);
     const descriptor = useTrackerDescriptor(issue.provider);
@@ -883,7 +885,10 @@ const TrackerPreview: React.FC<{
                             <RelatedTrackerItem issue={parent} onOpen={onOpenIssue} />
                         </MetaRow>
                     ) : null}
-                    {assignee ? <MetaRow label={t('references.picker.preview.assignee')}>{assignee}</MetaRow> : null}
+                    {assigneeControl ? (
+                        // Shown with no assignee too, so one can be given.
+                        <MetaRow label={t('references.picker.preview.assignee')}>{assigneeControl}</MetaRow>
+                    ) : assignee ? <MetaRow label={t('references.picker.preview.assignee')}>{assignee}</MetaRow> : null}
                     {issue.container ? <MetaRow label={t(trackerPresentation(issue.provider).copy.containerMeta)}>{issue.container.name}</MetaRow> : null}
                     {capabilities.priority && issue.priority && issue.priority !== 'none' ? (
                         <MetaRow label={t('references.picker.preview.priority')}>{t(TRACKER_PRIORITY_KEYS[issue.priority])}</MetaRow>
@@ -954,6 +959,8 @@ export const ReferencePreview: React.FC<{
     reviewersControl?: React.ReactNode;
     /** Replaces a tracker item's blockers with ones that change them. */
     blockersControl?: React.ReactNode;
+    /** Replaces a tracker item's assignee with one that changes it. */
+    assigneeControl?: React.ReactNode;
     /** Opens the previewed PR's check runs from its checks totals. */
     onOpenChecks?: () => void;
     /** An issue's or PR's comments, pinned above the composer one by one or together. */
@@ -972,7 +979,7 @@ export const ReferencePreview: React.FC<{
     onOpenStackLayer?: (layer: PullRequestStackLayer) => void;
     /** A change's revisions to pick the shown one from, where the host keeps revisions. */
     revisionChoice?: RevisionChoice;
-}> = ({ item, directory, pullStatus, trackerDetail, repositoryDetail, purpose, pinned, includeDiff, onIncludeDiffChange, now, footer, pullLinks, trackerStateControl, reply, labelsControl, reviewersControl, blockersControl, onOpenChecks, commentAttachments, stateMenu, onOpenTrackerItem, onOpenTrackerIdentifier, onRefresh, threadActions, onOpenStackLayer, revisionChoice }) => {
+}> = ({ item, directory, pullStatus, trackerDetail, repositoryDetail, purpose, pinned, includeDiff, onIncludeDiffChange, now, footer, pullLinks, trackerStateControl, reply, labelsControl, reviewersControl, blockersControl, assigneeControl, onOpenChecks, commentAttachments, stateMenu, onOpenTrackerItem, onOpenTrackerIdentifier, onRefresh, threadActions, onOpenStackLayer, revisionChoice }) => {
     const { t } = useI18n();
     const rewriteMarkdown = useProjectUploadRewrite(directory, item?.source === 'repository' ? item.reference : null);
     const links = useReferenceLinks(directory, item?.source === 'repository' ? item.reference : null);
@@ -984,7 +991,7 @@ export const ReferencePreview: React.FC<{
         );
     }
     if (item.source === 'tracker') {
-        return <TrackerPreview issue={item.item} detail={trackerDetail} purpose={purpose} pinned={pinned} now={now} footer={footer} stateControl={trackerStateControl} blockersControl={blockersControl} onOpenIssue={onOpenTrackerItem} onOpenIdentifier={onOpenTrackerIdentifier} />;
+        return <TrackerPreview issue={item.item} detail={trackerDetail} purpose={purpose} pinned={pinned} now={now} footer={footer} stateControl={trackerStateControl} blockersControl={blockersControl} assigneeControl={assigneeControl} onOpenIssue={onOpenTrackerItem} onOpenIdentifier={onOpenTrackerIdentifier} />;
     }
     return (
         <ReferenceMarkdownRewriteContext.Provider value={rewriteMarkdown}>

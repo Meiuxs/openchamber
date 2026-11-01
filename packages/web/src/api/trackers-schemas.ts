@@ -130,6 +130,9 @@ export const disconnected = z.object({ connected: z.literal(false) }).transform(
 // has no group rather than an empty one.
 const facetsSchema = z.object({
   feature: listOf(text).nullish().catch(null).transform((value) => value ?? undefined),
+  // The names in use, for the assignee row's options. Dropped here, the row
+  // would open to an empty list while the server had answered with names.
+  assignee: listOf(text).nullish().catch(null).transform((value) => value ?? undefined),
 }).nullish().catch(null).transform((value) => value ?? undefined);
 
 export const listResultSchema: z.ZodType<TrackerListResult> = z.union([

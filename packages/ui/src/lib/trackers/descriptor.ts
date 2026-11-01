@@ -45,6 +45,7 @@ const descriptorSchema = z.object({
     priority: flag,
     feature: flag,
     blockers: flag,
+    assignee: flag,
     filters: z.object({ people: flag, priority: flag }).catch({ people: false, priority: false }),
     projectMapping: flag,
     sessionComments: flag,
@@ -60,6 +61,7 @@ const descriptorSchema = z.object({
     // An older server's descriptor carries neither key; a missing key is off.
     create: flag,
     edit: flag,
+    delete: flag,
   }),
   stateFilters: z.array(z.string().min(1).max(32)).max(32),
   // A pattern that does not compile is dropped; the tracker still lists.
@@ -107,6 +109,7 @@ export const unknownTrackerDescriptor = (id: string): TrackerDescriptor => {
       priority: false,
       feature: false,
       blockers: false,
+      assignee: false,
       filters: { people: false, priority: false },
       projectMapping: false,
       sessionComments: false,

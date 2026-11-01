@@ -66,7 +66,7 @@ describe('tracker registry', () => {
       name: 'jira',
       authMethods: [],
       capabilities: {
-        multipleAccounts: false, stateUpdate: false, children: false, labels: false, priority: false, feature: false, blockers: false,
+        multipleAccounts: false, stateUpdate: false, children: false, labels: false, priority: false, feature: false, blockers: false, assignee: false,
         filters: { people: false, priority: false }, projectMapping: false, sessionComments: false, hostAccess: false,
         externalUrl: false,
         translatedStates: false,
@@ -271,5 +271,8 @@ describe('tracker descriptor list', () => {
     // word, since translating a name someone wrote is the worse mistake.
     expect(parsed?.capabilities.translatedStates).toBe(false);
     expect(parsed?.capabilities.containersAreProjects).toBe(false);
+    // No bit for assignment either: the read-only name Linear already reports
+    // is still shown, only writing one needs the server to say it can.
+    expect(parsed?.capabilities.assignee).toBe(false);
   });
 });

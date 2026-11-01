@@ -45,9 +45,13 @@ const toSingleLineLabels = (labels) => (Array.isArray(labels)
   ? labels.filter(isString).map(toSingleLine).filter((label) => label)
   : labels);
 
-// `none` is the UI's filter shape for "no priority", not a spec value; the
-// files store `null` for it, so neither create nor edit can write `none`.
-const normalizePriority = (priority) => (priority === 'none' ? null : priority);
+// Local issues default to `low` priority and cannot be unprioritized.
+// Any missing or `none` priority normalizes to `low`.
+const normalizePriority = (priority) => (priority === 'none' || !priority ? 'low' : priority);
+
+// The contract's person shape, filled from the name the file records. A local
+// issue has no member list, so there is no id and no avatar to resolve.
+const toTrackerPerson = (name) => (name ? { name, avatarUrl: null } : null);
 
 const shortSessionId = (sessionId) => (sessionId.length <= SESSION_ID_SHORT_LENGTH ? sessionId : sessionId.slice(0, SESSION_ID_SHORT_LENGTH));
 
@@ -70,6 +74,9 @@ export const LOCAL_TRACKER_DESCRIPTOR = Object.freeze({
     // The grouping slug a `feature` filter and the create/edit form work on.
     feature: true,
     blockers: true,
+    // Assigned by name: the board writes the name it is handed, since
+    // `.issues/` has no member list to pick an id from.
+    assignee: true,
     filters: Object.freeze({ people: false, priority: true }),
     projectMapping: false,
     sessionComments: true,
@@ -84,6 +91,8 @@ export const LOCAL_TRACKER_DESCRIPTOR = Object.freeze({
     containersAreProjects: true,
     create: true,
     edit: true,
+    // A file can be unlinked, which is all a delete is here.
+    delete: true,
   }),
   stateFilters: Object.freeze(['open', 'all', 'triage', 'backlog', 'todo', 'in-progress', 'done', 'canceled']),
   urlPatterns: Object.freeze([
@@ -133,9 +142,9 @@ function toTrackerItemSummary(issue, container) {
     title: issue.title,
     url: itemUrl(issue.identifier),
     state: { id: issue.state, name: issue.state, category: issue.state },
-    priority: issue.priority ?? 'none',
+    priority: issue.priority ?? 'low',
     labels: issue.labels.map((name, index) => ({ id: `label-${index}`, name, color: null })),
-    assignee: null,
+    assignee: toTrackerPerson(issue.assignee),
     container: toContainer(container),
     // The grouping slug and the blockers the file records, plus the derived
     // flag: a consumer cannot resolve a blocker's state on its own.
@@ -160,7 +169,7 @@ function toTrackerItem(issue, container) {
       id: `comment-${index}`,
       body: comment.text,
       createdAt: comment.iso,
-      author: null,
+      author: toTrackerPerson(comment.source),
     })),
   };
 }
@@ -310,7 +319,7 @@ export function createLocalTracker({ listProjects }) {
         hasMore: result.hasMore,
         // Every slug in the container, not only those the page holds: the
         // filter offers these as options, so they must survive the filter.
-        facets: { feature: result.features },
+        facets: { feature: result.features, assignee: result.assignees },
       };
     },
 
@@ -326,19 +335,20 @@ export function createLocalTracker({ listProjects }) {
       return { connected: true, item: toTrackerItemSummary(issue, await containerOfIssue(issue)) };
     },
 
-    create: async ({ containerId, title, description, priority, labels, feature, blockedBy }) => {
+    create: async ({ containerId, title, description, priority, labels, assignee, feature, blockedBy }) => {
       const issue = await scanner.create(containerId, {
         title: toSingleLine(title),
         description,
         priority: normalizePriority(priority),
         labels: toSingleLineLabels(labels),
+        assignee: toSingleLine(assignee),
         feature: toSingleLine(feature),
         blockedBy: toSingleLineLabels(blockedBy),
       });
       return { connected: true, item: toTrackerItemSummary(issue, await containerOfIssue(issue)) };
     },
 
-    edit: async ({ id, title, description, priority, labels, feature, blockedBy, containerId, projectDirectory }) => {
+    edit: async ({ id, title, description, priority, labels, assignee, feature, blockedBy, containerId, projectDirectory }) => {
       // Only the fields the caller carries are forwarded; an absent field
       // leaves the stored value alone, an explicit value replaces it.
       const patch = {};
@@ -346,10 +356,18 @@ export function createLocalTracker({ listProjects }) {
       if (description !== undefined) patch.description = description;
       if (priority !== undefined) patch.priority = normalizePriority(priority);
       if (labels !== undefined) patch.labels = toSingleLineLabels(labels);
+      if (assignee !== undefined) patch.assignee = toSingleLine(assignee);
       if (feature !== undefined) patch.feature = toSingleLine(feature);
       if (blockedBy !== undefined) patch.blockedBy = toSingleLineLabels(blockedBy);
       const issue = await scanner.edit(id, patch, containerId || projectDirectory);
       return { connected: true, item: toTrackerItemSummary(issue, await containerOfIssue(issue)) };
+    },
+
+    // Deletes the issue's file. The answer names what went away, since the
+    // caller no longer has anything to read it back from.
+    remove: async ({ id, containerId, projectDirectory }) => {
+      const issue = await scanner.remove(id, containerId || projectDirectory);
+      return { connected: true, removed: true, identifier: issue.identifier };
     },
 
     liveSummaries: async (identifiers) => ({ connected: true, items: await scanner.liveSummaries(identifiers) }),

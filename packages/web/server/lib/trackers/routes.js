@@ -179,6 +179,7 @@ export function registerTrackerRoutes(app, { registry }) {
     };
     if (body.feature !== undefined) input.feature = readString(body.feature) || null;
     if (body.blockedBy !== undefined) input.blockedBy = readIdentifiers(body.blockedBy);
+    if (body.assignee !== undefined) input.assignee = readString(body.assignee) || null;
     return tracker.create(input);
   }, hasCreate));
 
@@ -195,10 +196,24 @@ export function registerTrackerRoutes(app, { registry }) {
     if (body.labels !== undefined) input.labels = readLabels(body.labels);
     if (body.feature !== undefined) input.feature = readString(body.feature) || null;
     if (body.blockedBy !== undefined) input.blockedBy = readIdentifiers(body.blockedBy);
+    if (body.assignee !== undefined) input.assignee = readString(body.assignee) || null;
     const containerId = readString(body.containerId) || readString(body.projectDirectory);
     if (containerId) input.containerId = containerId;
     return tracker.edit(input);
   }, hasEdit));
+
+  // A delete names the item in the query, like `items/get`, so the identifier
+  // needs no path escaping and the container can ride along: the same number
+  // exists in every container of a tracker whose identifiers restart.
+  const hasDelete = (descriptor, tracker) => descriptor.capabilities.delete === true && Boolean(tracker.remove);
+  app.delete('/api/tracker/:provider/items', handle('delete item', ({ req, tracker }) => {
+    const id = queryValue(req, 'id');
+    if (!id) throw invalid('id is required');
+    const containerId = queryValue(req, 'containerId') || queryValue(req, 'projectDirectory');
+    const input = { id };
+    if (containerId) input.containerId = containerId;
+    return tracker.remove(input);
+  }, hasDelete));
 
   app.get('/api/tracker/:provider/states', handle('load workflow states', ({ req, tracker }) => {
     const containerId = queryValue(req, 'containerId');

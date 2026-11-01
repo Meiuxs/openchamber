@@ -10,12 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import type { TrackerItem, TrackerPriority } from '@/lib/api/types';
 import { useI18n } from '@/lib/i18n';
-import { createTrackerItem, editTrackerItem } from '@/lib/trackers/mutations';
+import { createTrackerItem, deleteTrackerItem, editTrackerItem } from '@/lib/trackers/mutations';
 import { useTrackerDescriptor } from '@/lib/trackers/registry';
-import type { TrackerCreateItemInput, TrackerEditItemInput } from '@/lib/trackers/types';
-import { SourceBoardFeatureField } from './SourceBoardFeatureField';
+import type { TrackerCreateItemInput, TrackerDeleteItemInput, TrackerEditItemInput } from '@/lib/trackers/types';
+import { SourceBoardTextChoiceField } from './SourceBoardTextChoiceField';
 
-const PRIORITIES: readonly TrackerPriority[] = ['none', 'urgent', 'high', 'medium', 'low'];
+// The form never offers `none`: a local issue always has a priority (default low).
+const PRIORITIES: readonly Exclude<TrackerPriority, 'none'>[] = ['urgent', 'high', 'medium', 'low'];
 
 const labelsOf = (value: string): string[] => (
   value.split(',').map((label) => label.trim()).filter(Boolean)
@@ -39,6 +40,10 @@ const editOf = (input: TrackerEditItemInput & { containerId: string }): TrackerE
  * failed submit keeps every field so the user can retry, and `onDone` lets the
  * caller refresh what it lists. The dialog's project options are the caller's
  * containers, the first of them preselected.
+ *
+ * Edit mode also deletes the item, where the tracker's `delete` capability
+ * allows it: the button asks once more before it runs, since the file behind a
+ * local issue is gone for good afterwards.
  */
 export const TrackerIssueDialog: React.FC<{
   provider: string;
@@ -49,22 +54,30 @@ export const TrackerIssueDialog: React.FC<{
   featureOptions?: readonly string[];
   /** The item edit mode works on. */
   initial?: TrackerItem;
+  /** Called once the tracker deleted the item; the caller drops it from its list. */
+  onDeleted?: (identifier: string) => void;
   onDone: (item: TrackerItem) => void;
   onClose: () => void;
-}> = ({ provider, mode, containers, featureOptions = [], initial, onDone, onClose }) => {
+}> = ({ provider, mode, containers, featureOptions = [], initial, onDeleted, onDone, onClose }) => {
   const { t } = useI18n();
   const { capabilities } = useTrackerDescriptor(provider);
   const isCreate = mode === 'create';
   const [title, setTitle] = React.useState(initial?.title ?? '');
   const [description, setDescription] = React.useState(initial?.description ?? '');
-  const [priority, setPriority] = React.useState<TrackerPriority>(initial?.priority ?? 'none');
+  const [priority, setPriority] = React.useState<TrackerPriority>(
+    initial?.priority && initial.priority !== 'none' ? initial.priority : 'low',
+  );
   const [containerId, setContainerId] = React.useState(containers[0]?.id ?? '');
   const [labels, setLabels] = React.useState((initial?.labels ?? []).map((label) => label.name).join(', '));
   const [feature, setFeature] = React.useState(initial?.feature ?? '');
   const [submitting, setSubmitting] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
+  // A delete takes two clicks: the first turns the button into the one that
+  // does it, so a slip on a toolbar-sized target cannot unlink an issue.
+  const [confirmingDelete, setConfirmingDelete] = React.useState(false);
+  const [deleteFailed, setDeleteFailed] = React.useState(false);
 
-  const canSubmit = Boolean(title.trim()) && !submitting
+  const canSubmit = Boolean(title.trim()) && !submitting && !confirmingDelete
     && (isCreate ? containerId !== '' : Boolean(initial?.id));
   const editContainerId = initial?.container?.id ?? '';
   // Sent only where the tracker has the field: one without it is never handed a
@@ -104,13 +117,61 @@ export const TrackerIssueDialog: React.FC<{
     }
   };
 
-  // A value outside the known set (a server ahead of this UI) reads as none.
-  const priorityLabel = (value: string | undefined): string => {
-    const priority = PRIORITIES.find((candidate) => candidate === value) ?? 'none';
-    return priority === 'none' ? t('references.picker.filter.tracker.priority.none') : t(TRACKER_PRIORITY_KEYS[priority]);
+  // A value outside the known set (a server ahead of this UI) reads as low.
+  const priorityLabel = (value: string | undefined): string => (
+    t(TRACKER_PRIORITY_KEYS[PRIORITIES.find((item) => item === value) ?? 'low'])
+  );
+  // Deleting is offered where an item exists to delete and the tracker can do
+  // it: a create form has nothing to remove, and a tracker without the bit has
+  // no route behind the button.
+  const canDelete = !isCreate && capabilities.delete === true && Boolean(initial?.id);
+  const remove = async () => {
+    if (!canDelete || submitting) return;
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      setDeleteFailed(false);
+      return;
+    }
+    setSubmitting(true);
+    setDeleteFailed(false);
+    try {
+      // Named with its container for the same reason an edit is: the number
+      // repeats in every project, and the one without the hint is the first.
+      const target: TrackerDeleteItemInput = { id: initial?.id ?? '' };
+      if (editContainerId) target.containerId = editContainerId;
+      await deleteTrackerItem(provider, target);
+      onDeleted?.(initial?.identifier ?? '');
+      onClose();
+    } catch {
+      setDeleteFailed(true);
+      // Back to one click: the confirm state belongs to a delete that ran.
+      setConfirmingDelete(false);
+    } finally {
+      setSubmitting(false);
+    }
   };
   const submitLabel = isCreate ? t('sourceBoard.tracker.create.submit') : t('sourceBoard.tracker.edit');
   const failureText = isCreate ? t('sourceBoard.tracker.create.failed') : t('sourceBoard.tracker.edit.failed');
+  const footerFailure = deleteFailed ? t('sourceBoard.tracker.delete.failed') : failureText;
+  const deleteControl = canDelete ? (
+    <div className="flex shrink-0 items-center gap-1">
+      <Button
+        type="button"
+        variant={confirmingDelete ? 'destructive' : 'ghost'}
+        size="sm"
+        className={confirmingDelete ? undefined : 'text-destructive hover:text-destructive'}
+        disabled={submitting}
+        onClick={() => void remove()}
+      >
+        {t(confirmingDelete ? 'sourceBoard.tracker.delete.confirm' : 'sourceBoard.tracker.delete')}
+      </Button>
+      {confirmingDelete ? (
+        <Button type="button" variant="ghost" size="sm" disabled={submitting} onClick={() => setConfirmingDelete(false)}>
+          {t('dialog.common.actions.cancel')}
+        </Button>
+      ) : null}
+    </div>
+  ) : null;
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -156,7 +217,7 @@ export const TrackerIssueDialog: React.FC<{
           </SettingsStackedField>
           {capabilities.feature ? (
             <SettingsStackedField label={t('sourceBoard.tracker.form.feature')} controlClassName="max-w-none">
-              <SourceBoardFeatureField
+              <SourceBoardTextChoiceField
                 value={feature}
                 options={featureOptions}
                 onChange={setFeature}
@@ -173,8 +234,9 @@ export const TrackerIssueDialog: React.FC<{
         <DialogFooter>
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
             <p className="flex min-h-4 min-w-0 flex-1 items-center gap-1.5 typography-micro text-destructive" aria-live="polite">
-              {failed ? <><Icon name="error-warning" className="size-3.5 shrink-0" />{failureText}</> : null}
+              {failed || deleteFailed ? <><Icon name="error-warning" className="size-3.5 shrink-0" />{footerFailure}</> : null}
             </p>
+            {deleteControl}
             <div className="flex shrink-0 gap-2">
               <Button type="button" variant="outline" size="sm" disabled={submitting} onClick={onClose}>
                 {t('dialog.common.actions.cancel')}

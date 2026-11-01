@@ -76,7 +76,7 @@ import { SourceBoardTrackerStatus } from './SourceBoardTrackerStatus';
 import { SourceBoardReply } from './SourceBoardReply';
 import { SourceBoardAcrossNote } from './SourceBoardAcrossNote';
 import { SourceBoardChecksDialog } from './SourceBoardChecksDialog';
-import { SourceBoardBlockers, SourceBoardLabels, SourceBoardReviewers } from './SourceBoardMetaEditors';
+import { SourceBoardAssignee, SourceBoardBlockers, SourceBoardLabels, SourceBoardReviewers } from './SourceBoardMetaEditors';
 import { SourceBoardContainerPicker, SourceBoardProjectPicker, SourceBoardRepositoryPicker } from './SourceBoardPickers';
 import { TrackerIssueDialog } from './TrackerIssueDialog';
 import { choiceForFocus, resolveBoardTab, shouldRememberAll, useBoardRepository, useLinkRepository } from './boardRepository';
@@ -761,6 +761,9 @@ const SourceBoardBody: React.FC<{
             featureOptions={browser.trackerFeatures}
             initial={issueDialog === 'edit' ? issueInitial : undefined}
             onDone={() => void refreshList()}
+            // The list no longer holds the item, so the highlight falls to the
+            // first row and the preview stops showing what is gone.
+            onDeleted={() => void refreshList()}
             onClose={() => setIssueDialog(null)}
         />
     ) : null;
@@ -796,6 +799,14 @@ const SourceBoardBody: React.FC<{
             onOpenTrackerIdentifier={browser.openTrackerIdentifier}
             blockersControl={previewItem?.source === 'tracker' && canEditIssue && trackerDescriptor.capabilities.blockers ? (
                 <SourceBoardBlockers
+                    key={referencePickerItemKey(previewItem)}
+                    item={previewItem.item}
+                    containerId={previewItem.item.container?.id ?? null}
+                    onChanged={browser.list.retry}
+                />
+            ) : undefined}
+            assigneeControl={previewItem?.source === 'tracker' && canEditIssue && trackerDescriptor.capabilities.assignee ? (
+                <SourceBoardAssignee
                     key={referencePickerItemKey(previewItem)}
                     item={previewItem.item}
                     containerId={previewItem.item.container?.id ?? null}

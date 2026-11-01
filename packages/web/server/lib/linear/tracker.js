@@ -36,6 +36,9 @@ export const LINEAR_TRACKER_DESCRIPTOR = Object.freeze({
     // Linear projects group items, but not by a per-item slug.
     feature: false,
     blockers: false,
+    // Assignment picks a member, by id, from the team's own member list: the
+    // board has no such list to offer, so the row stays read-only.
+    assignee: false,
     filters: Object.freeze({ people: true, priority: true }),
     projectMapping: true,
     sessionComments: true,
@@ -48,6 +51,8 @@ export const LINEAR_TRACKER_DESCRIPTOR = Object.freeze({
     containersAreProjects: false,
     create: false,
     edit: false,
+    // Deleting goes through Linear's own trash, not something these routes do.
+    delete: false,
   }),
   // The order is the filter menu's. `inReview` and `duplicate` are Linear's
   // own name-based filters; Linear has no triage list filter.

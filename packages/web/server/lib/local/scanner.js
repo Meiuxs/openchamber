@@ -95,6 +95,8 @@ const toIssueView = (project, parsed) => ({
   state: asString(fieldOf(parsed.fields, 'state'), DEFAULT_STATE),
   priority: asString(fieldOf(parsed.fields, 'priority')),
   labels: asStringArray(fieldOf(parsed.fields, 'labels')),
+  // A name, not an id: `.issues/` has no member list to resolve one against.
+  assignee: asString(fieldOf(parsed.fields, 'assignee')),
   feature: asString(fieldOf(parsed.fields, 'feature')),
   blockedBy: asStringArray(fieldOf(parsed.fields, 'blockedBy')),
   createdAt: asString(fieldOf(parsed.fields, 'createdAt')),
@@ -273,12 +275,16 @@ const createLocalScanner = ({ listProjects }) => {
     // container, not from the filtered page, since options narrowed by the
     // filter in force would leave the chosen slug as the only one pickable.
     const features = new Set();
+    // Names already used in the container, for the same reason: the assignee
+    // picker offers the spellings in use instead of inviting near-duplicates.
+    const assignees = new Set();
     for (const { project, issues } of await scanAll()) {
       if (containerId && project.id !== containerId) continue;
       const container = containerOf(project);
       containerByIssue.set(project.id, container);
       for (const issue of issues) {
         if (issue.feature) features.add(issue.feature);
+        if (issue.assignee) assignees.add(issue.assignee);
         if (!matchesState(issue.state, stateFilter)) continue;
         if (!matchesPriority(issue.priority, priorityFilter)) continue;
         if (!matchesFeature(issue.feature, featureFilter)) continue;
@@ -293,6 +299,7 @@ const createLocalScanner = ({ listProjects }) => {
       issues: filtered.slice(offset, offset + PAGE_SIZE),
       containerByIssue,
       features: [...features].sort((a, b) => a.localeCompare(b)),
+      assignees: [...assignees].sort((a, b) => a.localeCompare(b)),
       cursor: hasMore
         ? Buffer.from(JSON.stringify({ offset: offset + PAGE_SIZE })).toString('base64')
         : null,
@@ -430,8 +437,11 @@ const createLocalScanner = ({ listProjects }) => {
         }
       }
     }
-    if (patch.priority !== undefined) fieldsPatch.priority = patch.priority ?? null;
+    if (patch.priority !== undefined) fieldsPatch.priority = asString(patch.priority, 'low');
     if (patch.labels !== undefined) fieldsPatch.labels = asStringArray(patch.labels);
+    // `null` clears the key outright (`setFields` drops it), which reads back
+    // as no assignee, the same as the `assignee: null` a create writes.
+    if (patch.assignee !== undefined) fieldsPatch.assignee = asString(patch.assignee);
     if (patch.feature !== undefined) fieldsPatch.feature = asString(patch.feature);
     if (patch.blockedBy !== undefined) fieldsPatch.blockedBy = asStringArray(patch.blockedBy);
     let next = setFields(parsed, fieldsPatch);
@@ -441,6 +451,38 @@ const createLocalScanner = ({ listProjects }) => {
     next.fileName = nextFileName;
     next.slug = nextSlug;
     return persist(found.project, found.cache, setFields(next, { updatedAt: nowIso() }), oldFileName);
+  };
+
+  // A delete is irreversible, so unlike an edit it does not take the first
+  // match: the same number lives in every project, and a guess without a
+  // container could unlink the wrong file.
+  const locateUnambiguous = async (identifier) => {
+    let found = null;
+    for (const { project } of await scanAll()) {
+      const cache = caches.get(project.id);
+      const entry = cache && cache.issues.get(identifier);
+      if (!entry) continue;
+      if (found) throw new LocalIssueError(`Local issue ${identifier} exists in more than one project; name its container`);
+      found = { project, cache, entry };
+    }
+    return found;
+  };
+
+  // Deleting is the one write that removes a file instead of rewriting it. The
+  // cache loses the entry, and the project's derived `blocked` flags are
+  // recomputed: an issue everyone waited on settles them by no longer
+  // existing, which no state write would say.
+  const remove = async (identifier, projectHint = null) => {
+    const found = projectHint
+      ? await locate(identifier, projectHint)
+      : await locateUnambiguous(identifier);
+    if (!found) throw new LocalIssueError(`Unknown local issue: ${identifier}`);
+    const dirPath = path.join(found.project.path, found.cache.issuesDir);
+    fs.rmSync(path.join(dirPath, found.entry.fileName), { force: true });
+    found.cache.files.delete(found.entry.fileName);
+    found.cache.issues.delete(found.entry.issue.identifier);
+    applyBlocked(found.cache.issues);
+    return found.entry.issue;
   };
 
   const create = async (containerId, options = {}) => {
@@ -457,9 +499,9 @@ const createLocalScanner = ({ listProjects }) => {
 
     const fields = [
       ['state', 'todo'],
-      ['priority', asString(options.priority)],
+      ['priority', asString(options.priority, 'low')],
       ['labels', asStringArray(options.labels)],
-      ['assignee', null],
+      ['assignee', asString(options.assignee)],
       ['feature', asString(options.feature)],
       ['blockedBy', asStringArray(options.blockedBy)],
     ];
@@ -518,7 +560,7 @@ const createLocalScanner = ({ listProjects }) => {
     return scanned.filter(({ project }) => caches.get(project.id).readable).map(({ project }) => containerOf(project));
   };
 
-  return { list, get, locate, states, updateState, create, edit, liveSummaries, containers };
+  return { list, get, locate, states, updateState, create, edit, remove, liveSummaries, containers };
 };
 
 export { createLocalScanner, issuesDirOf };

@@ -31,9 +31,10 @@ beforeEach(() => {
 
 const scannerWith = async () => createLocalScanner({ listProjects: async () => [project] });
 
-/** The fixture above with a grouping slug, labels and blockers. */
-const issueWith = (n, title, { state = 'todo', feature = null, labels = [], blockedBy = [] } = {}) => issue(n, title, state)
+/** The fixture above with a grouping slug, labels, an assignee and blockers. */
+const issueWith = (n, title, { state = 'todo', feature = null, labels = [], blockedBy = [], assignee = null } = {}) => issue(n, title, state)
   .replace('labels: []', `labels: [${labels.join(', ')}]`)
+  .replace('assignee: null', `assignee: ${assignee ?? 'null'}`)
   .replace('feature: null', `feature: ${feature ?? 'null'}`)
   .replace('blockedBy: []', `blockedBy: [${blockedBy.join(', ')}]`);
 
@@ -203,6 +204,48 @@ describe('feature', () => {
     const both = await createLocalScanner({ listProjects: async () => [project, other] });
     expect((await both.list({ state: 'all', containerId: 'proj-1' })).features).toEqual(['archived', 'billing', 'login']);
     expect((await both.list({ state: 'all' })).features).toEqual(['archived', 'billing', 'elsewhere', 'login']);
+  });
+});
+
+describe('assignee', () => {
+  it('reads the name a file records, and offers every name in the container', async () => {
+    writeIssues([
+      ['LOCAL-1-login.md', issueWith(1, 'Login', { assignee: 'ada' })],
+      ['LOCAL-2-billing.md', issueWith(2, 'Billing', { assignee: 'grace' })],
+      ['LOCAL-3-plain.md', issueWith(3, 'Plain')],
+      ['LOCAL-4-backlog.md', issueWith(4, 'Backlog', { state: 'backlog', assignee: 'ada' })],
+    ]);
+    const scanner = await scannerWith();
+    const listed = await scanner.list({ state: 'all' });
+    expect(listed.issues.map((issue) => issue.assignee)).toEqual(['ada', 'grace', null, 'ada']);
+    // Every name in scope, like the slugs: the picker offers what is in use,
+    // not only what the filter in force left standing.
+    expect(listed.assignees).toEqual(['ada', 'grace']);
+    expect((await scanner.list({ state: 'open', query: 'login' })).assignees).toEqual(['ada', 'grace']);
+    // Scoped like the items: another container's names stay out.
+    const other = { id: 'proj-2', path: fs.mkdtempSync(path.join(os.tmpdir(), 'oc-scan-')), label: 'Proj Two' };
+    fs.mkdirSync(path.join(other.path, '.issues'), { recursive: true });
+    fs.writeFileSync(path.join(other.path, '.issues', 'LOCAL-1-elsewhere.md'), issueWith(1, 'Elsewhere', { assignee: 'linus' }));
+    const both = await createLocalScanner({ listProjects: async () => [project, other] });
+    expect((await both.list({ state: 'all', containerId: 'proj-1' })).assignees).toEqual(['ada', 'grace']);
+    expect((await both.list({ state: 'all' })).assignees).toEqual(['ada', 'grace', 'linus']);
+  });
+  it('writes the name on create, and none when given no name', async () => {
+    const scanner = await scannerWith();
+    const created = await scanner.create('proj-1', { title: 'Owned', assignee: 'Ada Lovelace' });
+    expect(created.assignee).toBe('Ada Lovelace');
+    expect(fs.readFileSync(path.join(root, '.issues', created.fileName), 'utf8')).toContain('assignee: Ada Lovelace');
+    const plain = await scanner.create('proj-1', { title: 'Plain' });
+    expect(plain.assignee).toBeNull();
+  });
+  it('sets and clears the name, dropping the key when cleared', async () => {
+    writeIssues([['LOCAL-1-owned.md', issueWith(1, 'Owned')]]);
+    const scanner = await scannerWith();
+    expect((await scanner.edit('LOCAL-1', { assignee: 'ada' })).assignee).toBe('ada');
+    expect((await scanner.edit('LOCAL-1', { assignee: null })).assignee).toBeNull();
+    // Cleared means gone, not `assignee: null`: the file reads back as no
+    // assignee either way, and a bare key invites a second way to say it.
+    expect(fs.readFileSync(path.join(root, '.issues', 'LOCAL-1-owned.md'), 'utf8')).not.toContain('assignee:');
   });
 });
 

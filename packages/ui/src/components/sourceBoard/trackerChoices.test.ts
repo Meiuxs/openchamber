@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import type { TrackerItemSummary } from '@/lib/api/types';
-import { blockerCandidates, featureChoices } from './trackerChoices';
+import { blockerCandidates, textChoices } from './trackerChoices';
 
 const issue = (identifier: string, title: string): TrackerItemSummary => ({
     provider: 'local',
@@ -12,34 +12,34 @@ const issue = (identifier: string, title: string): TrackerItemSummary => ({
     state: null,
 });
 
-describe('featureChoices', () => {
+describe('textChoices', () => {
     test('offers every grouping in scope while nothing is typed, and no new one', () => {
-        expect(featureChoices(['auth', 'billing'], '')).toEqual({ matches: ['auth', 'billing'], creates: false });
-        expect(featureChoices(['auth', 'billing'], '   ')).toEqual({ matches: ['auth', 'billing'], creates: false });
+        expect(textChoices(['auth', 'billing'], '')).toEqual({ matches: ['auth', 'billing'], creates: false });
+        expect(textChoices(['auth', 'billing'], '   ')).toEqual({ matches: ['auth', 'billing'], creates: false });
     });
 
     test('narrows to the groupings that match what was typed, and still offers the typed word itself', () => {
         // `bill` matches `billing`, but is not `billing`: both stay on offer.
-        expect(featureChoices(['auth', 'billing'], 'bill')).toEqual({ matches: ['billing'], creates: true });
+        expect(textChoices(['auth', 'billing'], 'bill')).toEqual({ matches: ['billing'], creates: true });
     });
 
     test('offers no new grouping once a grouping is spelled out in full', () => {
-        const { matches, creates } = featureChoices(['auth', 'billing'], 'billing');
+        const { matches, creates } = textChoices(['auth', 'billing'], 'billing');
         expect(matches).toContain('billing');
         expect(creates).toBe(false);
     });
 
     test('offers a new grouping only for a word no grouping is spelled as', () => {
-        expect(featureChoices(['auth'], 'search').creates).toBe(true);
+        expect(textChoices(['auth'], 'search').creates).toBe(true);
     });
 
     test('treats a different case and padding as the same grouping, not a new one', () => {
-        expect(featureChoices(['auth'], 'AUTH').creates).toBe(false);
-        expect(featureChoices(['auth'], '  AUTH  ').creates).toBe(false);
+        expect(textChoices(['auth'], 'AUTH').creates).toBe(false);
+        expect(textChoices(['auth'], '  AUTH  ').creates).toBe(false);
     });
 
     test('offers nothing but a new one when no grouping is in scope', () => {
-        expect(featureChoices([], 'auth')).toEqual({ matches: [], creates: true });
+        expect(textChoices([], 'auth')).toEqual({ matches: [], creates: true });
     });
 });
 

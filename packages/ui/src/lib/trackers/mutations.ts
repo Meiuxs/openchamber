@@ -1,17 +1,18 @@
 import { z } from 'zod';
 
 import { runtimeFetch } from '@/lib/runtime-fetch';
-import type { TrackerCreateItemInput, TrackerEditItemInput, TrackerItem, TrackerProviderId } from './types';
+import type { TrackerCreateItemInput, TrackerDeleteItemInput, TrackerEditItemInput, TrackerItem, TrackerProviderId } from './types';
 
 /**
- * The board's item mutations: `POST /api/tracker/:provider/items/create` and
- * `/items/edit`, the two writes the descriptor's `create`/`edit` capability
- * bits gate. The reads go through `RuntimeAPIs.trackers` (the web adapter in
+ * The board's item mutations: `POST /api/tracker/:provider/items/create`,
+ * `/items/edit` and `DELETE /items`, the writes the descriptor's
+ * `create`/`edit`/`delete` capability bits gate. The reads go through
+ * `RuntimeAPIs.trackers` (the web adapter in
  * `packages/web/src/api/trackers.ts`); these writes ride the same
  * `runtimeFetch` auth path that adapter uses.
  *
- * Both reject on failure — a non-2xx answer, and a 2xx that does not carry an
- * item — so a failed write never reaches the caller as a success.
+ * All reject on failure — a non-2xx answer, and a 2xx that does not carry what
+ * it claims — so a failed write never reaches the caller as a success.
  */
 
 const text = z.string().trim().min(1);
@@ -57,6 +58,12 @@ const itemResultSchema = z.union([
   z.object({ connected: z.literal(true), item: itemSchema.nullable().catch(null) }),
 ]);
 
+/** `remove` answers `{ connected, removed }`; a false `removed` is a failure too. */
+const removedSchema = z.union([
+  z.object({ connected: z.literal(false) }),
+  z.object({ connected: z.literal(true), removed: z.boolean().catch(false) }),
+]);
+
 const postItem = async (
   provider: TrackerProviderId,
   path: string,
@@ -85,3 +92,24 @@ export const createTrackerItem = (provider: TrackerProviderId, input: TrackerCre
 export const editTrackerItem = (provider: TrackerProviderId, input: TrackerEditItemInput): Promise<TrackerItem> => (
   postItem(provider, '/items/edit', input, 'Failed to save the tracker item')
 );
+
+/**
+ * Deletes an item for good, under the descriptor's `delete` capability. The
+ * item is named in the query, the container with it, so the tracker deletes
+ * the one in the project the board is showing rather than the first item
+ * carrying that number.
+ */
+export const deleteTrackerItem = async (provider: TrackerProviderId, input: TrackerDeleteItemInput): Promise<void> => {
+  const query = new URLSearchParams({ id: input.id });
+  if (input.containerId) query.set('containerId', input.containerId);
+  const response = await runtimeFetch(`/api/tracker/${encodeURIComponent(provider)}/items?${query.toString()}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) await failureOf(response, 'Failed to delete the tracker item');
+  const result = removedSchema.safeParse(await response.json().catch(() => null));
+  // A 2xx that says nothing about the delete is not a delete: the item may
+  // still be there, so the caller must not drop it from the list.
+  if (!result.success || !result.data.connected || !result.data.removed) {
+    throw new Error('Failed to delete the tracker item: unreadable answer');
+  }
+};

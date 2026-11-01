@@ -15,6 +15,11 @@ describe('descriptor', () => {
     expect(LOCAL_TRACKER_DESCRIPTOR.id).toBe('local');
     expect(LOCAL_TRACKER_DESCRIPTOR.capabilities.create).toBe(true);
     expect(LOCAL_TRACKER_DESCRIPTOR.capabilities.edit).toBe(true);
+    // A local issue is a file, so deleting it is an unlink.
+    expect(LOCAL_TRACKER_DESCRIPTOR.capabilities.delete).toBe(true);
+    // Assignment is a name here, and the board writes it: no member list to
+    // pick an id from.
+    expect(LOCAL_TRACKER_DESCRIPTOR.capabilities.assignee).toBe(true);
     expect(LOCAL_TRACKER_DESCRIPTOR.authMethods).toEqual([]);
   });
 });
@@ -76,7 +81,7 @@ Body of ${title}.
     expect((await t.list({ state: 'all', feature: 'login' })).items.map((i) => i.identifier)).toEqual(['LOCAL-2']);
     // The facets name every slug in the container, so the filter can switch
     // slugs without first being cleared.
-    expect((await t.list({ state: 'all', feature: 'login' })).facets).toEqual({ feature: ['login'] });
+    expect((await t.list({ state: 'all', feature: 'login' })).facets).toEqual({ feature: ['login'], assignee: [] });
 
     // Settling the blocker clears the flag on the next read, with no write to the waiting issue.
     await t.updateState({ id: 'LOCAL-1', stateId: 'done' });
@@ -93,22 +98,48 @@ Body of ${title}.
     expect(edited.item).toMatchObject({ feature: null, blockedBy: [], blocked: false });
     expect(fs.readFileSync(path.join(root, '.issues', 'LOCAL-2-waits.md'), 'utf8')).toContain('blockedBy: []');
   });
-  it('stores priority "none" as null in the file, on create and edit', async () => {
+  it('reads and writes the assignee as a name, and lists the names in use', async () => {
+    const t = await tracker();
+    const created = await t.create({ containerId: 'p1', title: 'Owned', assignee: 'Ada Lovelace' });
+    // The contract's person shape, from the name alone: a local issue has no
+    // member list to resolve an id or an avatar from.
+    expect(created.item.assignee).toEqual({ name: 'Ada Lovelace', avatarUrl: null });
+    expect((await t.get('LOCAL-1')).item.assignee).toEqual({ name: 'Ada Lovelace', avatarUrl: null });
+    // The names in use, so the picker offers the spellings already there.
+    expect((await t.list({ state: 'all' })).facets).toEqual({ feature: [], assignee: ['Ada Lovelace'] });
+
+    const reassigned = await t.edit({ id: 'LOCAL-1', assignee: 'Grace' });
+    expect(reassigned.item.assignee).toEqual({ name: 'Grace', avatarUrl: null });
+    const cleared = await t.edit({ id: 'LOCAL-1', assignee: null });
+    expect(cleared.item.assignee).toBeNull();
+    expect((await t.list({ state: 'all' })).facets).toEqual({ feature: [], assignee: [] });
+    // An edit that does not carry the field leaves it alone.
+    await t.edit({ id: 'LOCAL-1', assignee: 'Grace' });
+    expect((await t.edit({ id: 'LOCAL-1', title: 'Renamed' })).item.assignee).toEqual({ name: 'Grace', avatarUrl: null });
+  });
+  it('defaults priority to "low" and normalizes "none" to "low" on create and edit', async () => {
     const t = await tracker();
     const priorityOf = (parsed) => {
       const entry = parsed.fields.find(([key]) => key === 'priority');
       return entry ? entry[1] : null;
     };
     const { item } = await t.create({ containerId: 'p1', title: 'Unprioritized', description: null, priority: 'none', labels: [] });
-    // The neutral summary maps a null priority back to the `none` filter shape.
-    expect(item.priority).toBe('none');
+    expect(item.priority).toBe('low');
     const dir = path.join(root, '.issues');
-    expect(fs.readFileSync(path.join(dir, 'LOCAL-1-unprioritized.md'), 'utf8')).toContain('priority: null');
-    expect(priorityOf(readIssue(dir, 'LOCAL-1-unprioritized.md'))).toBeNull();
-    // A null priority is stored as the key's absence, the scanner's clear
-    // semantics; it still reads back as null.
+    expect(fs.readFileSync(path.join(dir, 'LOCAL-1-unprioritized.md'), 'utf8')).toContain('priority: low');
+    expect(priorityOf(readIssue(dir, 'LOCAL-1-unprioritized.md'))).toBe('low');
+
     await t.edit({ id: 'LOCAL-1', priority: 'none' });
-    expect(priorityOf(readIssue(dir, 'LOCAL-1-unprioritized.md'))).toBeNull();
+    expect(priorityOf(readIssue(dir, 'LOCAL-1-unprioritized.md'))).toBe('low');
+  });
+  it('names a comment author from the source its heading records', async () => {
+    const t = await tracker();
+    await t.create({ containerId: 'p1', title: 'Commented' });
+    const file = path.join(root, '.issues', 'LOCAL-1-commented.md');
+    fs.appendFileSync(file, '\n## Comments\n\n### 2026-11-01T12:00:00Z · session a1b2\n\nhello\n');
+    const { item } = await t.get('LOCAL-1');
+    expect(item.comments).toHaveLength(1);
+    expect(item.comments[0].author).toEqual({ name: 'session a1b2', avatarUrl: null });
   });
   it('collapses newlines in title and labels to single lines', async () => {
     const t = await tracker();
@@ -156,6 +187,49 @@ Body of ${title}.
   it('returns connected:false-shaped UNSUPPORTED errors as user errors', async () => {
     const t = await tracker();
     await expect(t.create({ containerId: 'unknown', title: 'x' })).rejects.toThrow();
+  });
+});
+
+describe('delete', () => {
+  it('removes the file and stops it blocking the issues that waited on it', async () => {
+    const t = await tracker();
+    await t.create({ containerId: 'p1', title: 'Blocker' });
+    await t.create({ containerId: 'p1', title: 'Waiting', blockedBy: ['LOCAL-1'] });
+    expect((await t.get('LOCAL-2')).item.blocked).toBe(true);
+
+    expect(await t.remove({ id: 'LOCAL-1', containerId: 'p1' })).toEqual({ connected: true, removed: true, identifier: 'LOCAL-1' });
+
+    expect(fs.existsSync(path.join(root, '.issues', 'LOCAL-1-blocker.md'))).toBe(false);
+    // Gone from the list, and no longer blocked: a missing file blocks nothing.
+    expect((await t.list({ state: 'all' })).items.map((item) => item.identifier)).toEqual(['LOCAL-2']);
+    expect((await t.get('LOCAL-2')).item.blocked).toBe(false);
+  });
+
+  it('rejects an identifier that is not there', async () => {
+    const t = await tracker();
+    await expect(t.remove({ id: 'LOCAL-9', containerId: 'p1' })).rejects.toThrow('Unknown local issue: LOCAL-9');
+  });
+
+  it('refuses a containerless remove when the number lives in several projects', async () => {
+    const root2 = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-track-del-'));
+    const multiTracker = createLocalTracker({
+      listProjects: async () => [
+        { id: 'p1', path: root, label: 'P1' },
+        { id: 'p2', path: root2, label: 'P2' },
+      ],
+    });
+    await multiTracker.create({ containerId: 'p1', title: 'Issue in P1' });
+    await multiTracker.create({ containerId: 'p2', title: 'Issue in P2' });
+
+    // No guess: the caller names the project, or the delete does not run.
+    await expect(multiTracker.remove({ id: 'LOCAL-1' })).rejects.toThrow('exists in more than one project');
+    expect(fs.existsSync(path.join(root, '.issues', 'LOCAL-1-issue-in-p1.md'))).toBe(true);
+    expect(fs.existsSync(path.join(root2, '.issues', 'LOCAL-1-issue-in-p2.md'))).toBe(true);
+
+    // With the container the right file goes, the other survives.
+    await multiTracker.remove({ id: 'LOCAL-1', containerId: 'p2' });
+    expect(fs.existsSync(path.join(root, '.issues', 'LOCAL-1-issue-in-p1.md'))).toBe(true);
+    expect(fs.existsSync(path.join(root2, '.issues', 'LOCAL-1-issue-in-p2.md'))).toBe(false);
   });
 });
 

@@ -142,11 +142,12 @@ describe('web trackers: the neutral routes', () => {
     trackerServer(() => Response.json({
       connected: true,
       items: [neutralItem],
-      facets: { feature: ['auth', 'billing'] },
+      // The assignee names ride along: the preview's row offers them.
+      facets: { feature: ['auth', 'billing'], assignee: ['ada', 'grace'] },
     }));
     const withFacets = await createWebTrackerAPI({ fetch: fetchMock }).list('local', {});
     if (!withFacets.connected) throw new Error('expected a list');
-    expect(withFacets.facets).toEqual({ feature: ['auth', 'billing'] });
+    expect(withFacets.facets).toEqual({ feature: ['auth', 'billing'], assignee: ['ada', 'grace'] });
 
     // A tracker without facets sends none: the menu then has no grouping group.
     trackerServer(() => Response.json({ connected: true, items: [neutralItem] }));

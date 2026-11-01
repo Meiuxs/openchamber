@@ -73,6 +73,8 @@ export type TrackerPriorityFilter = 'all' | TrackerPriority;
 export type TrackerListFacets = {
   /** Every grouping slug in scope; the values `TrackerListOptions.feature` accepts. */
   feature?: string[];
+  /** Every assignee name in scope, so the board offers the spellings in use. */
+  assignee?: string[];
 };
 
 export type TrackerListOptions = {
@@ -117,6 +119,8 @@ export type TrackerCreateItemInput = {
   description?: string | null;
   priority?: TrackerPriority | null;
   labels?: string[];
+  /** Who it is assigned to, by name; a tracker whose `assignee` capability is off ignores it. */
+  assignee?: string | null;
   /** Grouping slug; a tracker whose `feature` capability is off ignores it. */
   feature?: string | null;
   /** Identifiers of the items this one waits on. */
@@ -140,11 +144,20 @@ export type TrackerEditItemInput = {
   description?: string | null;
   priority?: TrackerPriority | null;
   labels?: string[];
+  /** Who it is assigned to; an explicit `null` unassigns it. */
+  assignee?: string | null;
   /** An explicit `null` clears the slug. */
   feature?: string | null;
   /** Replaces the whole list; `[]` clears it. */
   blockedBy?: string[];
 };
+
+/**
+ * Delete input for `DELETE /api/tracker/:provider/items`. The container is
+ * named for the same reason the edit carries one: identifiers restart per
+ * container.
+ */
+export type TrackerDeleteItemInput = { id: string; containerId?: string };
 
 export type TrackerAuthMethod = 'oauth' | 'token';
 
@@ -167,6 +180,8 @@ export type TrackerDescriptor = {
     feature: boolean;
     /** Items wait on others by identifier (`blockedBy`), so an item can be given blockers and shown them. */
     blockers: boolean;
+    /** Who an item is assigned to can be set, as the name written into `assignee`. */
+    assignee: boolean;
     filters: { people: boolean; priority: boolean };
     /** Container to OpenChamber project mapping (Linear: team). */
     projectMapping: boolean;
@@ -197,6 +212,11 @@ export type TrackerDescriptor = {
     create?: boolean;
     /** UI can edit item fields (POST items/edit); absent on an older server, read as false. */
     edit?: boolean;
+    /**
+     * The item can be deleted (DELETE items), so the edit form offers the
+     * action. Absent on an older server, read as false.
+     */
+    delete?: boolean;
   };
   /** In menu order: `open`, `all`, categories, then provider extras (`inReview`, `duplicate`). */
   stateFilters: string[];

@@ -75,7 +75,7 @@ const LOCAL_CAPABILITIES = {
   multipleAccounts: false, stateUpdate: true, children: false, labels: true, priority: true,
   feature: false, blockers: false, filters: { people: false, priority: false },
   projectMapping: true, sessionComments: false, hostAccess: false,
-  externalUrl: false, translatedStates: true, containersAreProjects: true,
+  externalUrl: false, translatedStates: true, containersAreProjects: true, delete: true,
 };
 let capabilities = LOCAL_CAPABILITIES;
 mock.module('@/lib/trackers/registry', () => ({
@@ -142,10 +142,14 @@ const setValue = async (element: HTMLInputElement | HTMLTextAreaElement, value: 
   });
 };
 
-const clickButton = async (text: string) => {
+const buttonOf = (text: string) => {
   const button = [...host.querySelectorAll('button')].find((node) => node.textContent === text);
   if (!button) throw new Error(`Missing ${text} button`);
-  await act(async () => { button.click(); });
+  return button;
+};
+
+const clickButton = async (text: string) => {
+  await act(async () => { buttonOf(text).click(); });
   // The submit's mocked round trip (fetch, then response.json()) crosses
   // several microtask hops before its state lands.
   await act(async () => {
@@ -175,7 +179,7 @@ describe('TrackerIssueDialog', () => {
       containerId: 'proj-1',
       title: 'New issue',
       description: 'Body text',
-      priority: 'none',
+      priority: 'low',
       labels: ['bug', 'ui'],
     });
     expect(done).toEqual([ITEM]);
@@ -215,14 +219,15 @@ describe('TrackerIssueDialog', () => {
       containerId: 'proj-1',
       title: 'Grouped issue',
       description: null,
-      priority: 'none',
+      priority: 'low',
       labels: [],
       feature: null,
     });
     expect(posted.blockedBy).toBeUndefined();
   });
 
-  test('an edit submit posts the edit route with the item id and the form', async () => {    const done: unknown[] = [];
+  test('an edit submit posts the edit route with the item id and the form', async () => {
+    const done: unknown[] = [];
     await renderDialog({
       mode: 'edit',
       initial: {
@@ -252,5 +257,85 @@ describe('TrackerIssueDialog', () => {
       labels: ['bug', 'ui'],
     });
     expect(done).toEqual([ITEM]);
+  });
+
+  test('an edit submit for a legacy item with no priority defaults to low', async () => {
+    const done: unknown[] = [];
+    await renderDialog({
+      mode: 'edit',
+      initial: {
+        ...ITEM,
+        title: 'Legacy unprioritized',
+        description: 'Old body',
+        priority: 'none',
+        container: { id: 'proj-1', key: null, name: 'alpha' },
+      },
+      onDone: (item) => done.push(item),
+    });
+
+    await clickButton('Edit issue');
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].path).toBe('/api/tracker/local/items/edit');
+    expect(JSON.parse(String(requests[0].init.body))).toMatchObject({
+      id: 'LOCAL-1',
+      priority: 'low',
+    });
+  });
+
+  test('an edit delete asks once more, then deletes the item in its project', async () => {
+    const deleted: string[] = [];
+    let closed = false;
+    nextResponse = Response.json({ connected: true, removed: true });
+    await renderDialog({
+      mode: 'edit',
+      initial: { ...ITEM, container: { id: 'proj-2', key: null, name: 'beta' } },
+      onDeleted: (identifier) => deleted.push(identifier),
+      onClose: () => { closed = true; },
+    });
+
+    await clickButton('Delete issue');
+    // The first click only arms it: nothing was sent, and the item is still
+    // there. Saving is held back too, so the two writes cannot race a slip.
+    expect(requests).toHaveLength(0);
+    expect(deleted).toEqual([]);
+    expect(closed).toBe(false);
+    expect(buttonOf('Edit issue').hasAttribute('disabled')).toBe(true);
+
+    await clickButton('Delete permanently');
+    expect(requests).toHaveLength(1);
+    // Named in the query with its container: the number repeats per project.
+    expect(requests[0].path).toBe('/api/tracker/local/items?id=LOCAL-1&containerId=proj-2');
+    expect(requests[0].init.method).toBe('DELETE');
+    expect(deleted).toEqual(['LOCAL-1']);
+    expect(closed).toBe(true);
+  });
+
+  test('a failed delete says so, and stays open with the item', async () => {
+    let closed = false;
+    nextResponse = Response.json({ error: 'Unknown local issue: LOCAL-1' }, { status: 400 });
+    await renderDialog({
+      mode: 'edit',
+      initial: { ...ITEM, container: { id: 'proj-1', key: null, name: 'alpha' } },
+      onClose: () => { closed = true; },
+    });
+
+    await clickButton('Delete issue');
+    await clickButton('Delete permanently');
+
+    expect(host.textContent).toContain('Deleting the issue failed.');
+    expect(closed).toBe(false);
+    // Back to one click, so a retry arms the delete again instead of firing it.
+    expect(host.textContent).toContain('Delete issue');
+  });
+
+  test('a tracker without the delete capability offers no delete', async () => {
+    capabilities = { ...LOCAL_CAPABILITIES, delete: false };
+    await renderDialog({
+      mode: 'edit',
+      initial: { ...ITEM, container: { id: 'proj-1', key: null, name: 'alpha' } },
+    });
+
+    expect(host.textContent).not.toContain('Delete issue');
   });
 });

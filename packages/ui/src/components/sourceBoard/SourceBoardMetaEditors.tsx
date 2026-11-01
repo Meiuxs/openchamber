@@ -20,6 +20,7 @@ import { useI18n } from '@/lib/i18n';
 import { useSourceControlProvider } from '@/lib/source-control/providers/registry';
 import { editTrackerItem } from '@/lib/trackers/mutations';
 import { SourceBoardChoicePicker, type BoardChoice } from './SourceBoardChoicePicker';
+import { SourceBoardTextChoiceField } from './SourceBoardTextChoiceField';
 import { newMutationKey } from './mutationKey';
 import { blockerCandidates } from './trackerChoices';
 
@@ -255,6 +256,88 @@ export const SourceBoardBlockers: React.FC<{
             <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono">
                 {blockers.map((identifier) => <span key={identifier}>{identifier}</span>)}
             </span>
+        </MetaValue>
+    );
+};
+
+/** No names yet, kept stable so the read below does not restart on every render. */
+const NO_NAMES: readonly string[] = [];
+
+/**
+ * Who an issue is assigned to. A local issue has no member list, so the value
+ * is a name: the project's existing ones are offered, and a new spelling is
+ * still possible — the same rule groupings follow, for the same reason (one
+ * person spelled two ways is two assignees). Assignment is what the
+ * `issue-work` command dispatches on, and it is set here, on the item, rather
+ * than in the create form: an issue is usually written before it is owned.
+ */
+export const SourceBoardAssignee: React.FC<{
+    item: TrackerItemSummary;
+    /** The project the board shows; the names offered are its own. */
+    containerId: string | null;
+    onChanged: () => void;
+}> = ({ item, containerId, onChanged }) => {
+    const { t } = useI18n();
+    const { trackers } = useRuntimeAPIs();
+    const [names, setNames] = React.useState<readonly string[]>(NO_NAMES);
+    const [busy, setBusy] = React.useState(false);
+    const name = item.assignee?.name ?? '';
+
+    // The names already in use, from the list's facets: one read when the row
+    // is shown, and nothing at all without a runtime API to ask.
+    React.useEffect(() => {
+        if (!trackers) return;
+        let live = true;
+        void trackers.list(item.provider, { state: 'all', containerId })
+            .then((listed) => {
+                if (live && listed.connected !== false) setNames(listed.facets?.assignee ?? NO_NAMES);
+            })
+            .catch(() => {
+                // An unreadable list only costs the suggestions: typing a name
+                // still works, so the row stays usable.
+            });
+        return () => { live = false; };
+    }, [trackers, item.provider, containerId]);
+
+    const commit = async (next: string) => {
+        setBusy(true);
+        try {
+            // `null` unassigns: the server drops the key, which reads back as
+            // no assignee.
+            const assignee = next || null;
+            await editTrackerItem(item.provider, containerId
+                ? { id: item.id, containerId, assignee }
+                : { id: item.id, assignee });
+        } catch (error) {
+            toast.error(t('sourceBoard.toast.assigneeFailed', { identifier: item.identifier }), {
+                description: error instanceof Error ? error.message : String(error),
+            });
+        } finally {
+            setBusy(false);
+            onChanged();
+        }
+    };
+
+    return (
+        <MetaValue
+            empty={!name}
+            picker={(
+                <SourceBoardTextChoiceField
+                    trigger="icon"
+                    ariaLabel={t('sourceBoard.assignee.edit')}
+                    value={name}
+                    options={names}
+                    onChange={(next) => void commit(next)}
+                    busy={busy}
+                    placeholder={t('sourceBoard.assignee.placeholder')}
+                    searchPlaceholder={t('sourceBoard.assignee.search')}
+                    emptyText={t('sourceBoard.assignee.empty')}
+                    createLabel={(typed) => t('sourceBoard.assignee.create', { name: typed })}
+                    clearLabel={t('sourceBoard.assignee.clear')}
+                />
+            )}
+        >
+            <span className="truncate">{name}</span>
         </MetaValue>
     );
 };
