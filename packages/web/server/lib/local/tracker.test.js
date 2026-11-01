@@ -124,6 +124,35 @@ Body of ${title}.
     expect(edited.item.title).toBe('Renamed again');
     expect(edited.item.labels.map((l) => l.name)).toEqual(['other label']);
   });
+  it('handles multi-project containers and avoids collisions with container hints', async () => {
+    const root2 = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-track-2-'));
+    const multiTracker = createLocalTracker({
+      listProjects: async () => [
+        { id: 'p1', path: root, label: 'P1' },
+        { id: 'p2', path: root2, label: 'P2' },
+      ],
+    });
+    await multiTracker.create({ containerId: 'p1', title: 'Issue in P1' });
+    await multiTracker.create({ containerId: 'p2', title: 'Issue in P2' });
+
+    // Both projects have LOCAL-1
+    const p1Item = await multiTracker.get('LOCAL-1', 'p1');
+    const p2Item = await multiTracker.get('LOCAL-1', 'p2');
+    expect(p1Item.item.title).toBe('Issue in P1');
+    expect(p2Item.item.title).toBe('Issue in P2');
+
+    // Update state with containerId
+    await multiTracker.updateState({ id: 'LOCAL-1', stateId: 'done', containerId: 'p2' });
+    expect((await multiTracker.get('LOCAL-1', 'p1')).item.state.id).toBe('todo');
+    expect((await multiTracker.get('LOCAL-1', 'p2')).item.state.id).toBe('done');
+
+    // Edit title renames the file in p2
+    const edited = await multiTracker.edit({ id: 'LOCAL-1', title: 'Issue in P2 Renamed', containerId: 'p2' });
+    expect(edited.item.title).toBe('Issue in P2 Renamed');
+    expect(fs.existsSync(path.join(root2, '.issues', 'LOCAL-1-issue-in-p2.md'))).toBe(false);
+    expect(fs.existsSync(path.join(root2, '.issues', 'LOCAL-1-issue-in-p2-renamed.md'))).toBe(true);
+    expect(fs.existsSync(path.join(root, '.issues', 'LOCAL-1-issue-in-p1.md'))).toBe(true);
+  });
   it('returns connected:false-shaped UNSUPPORTED errors as user errors', async () => {
     const t = await tracker();
     await expect(t.create({ containerId: 'unknown', title: 'x' })).rejects.toThrow();

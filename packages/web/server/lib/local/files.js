@@ -48,12 +48,45 @@ function normalizeSource(raw) {
 }
 
 function unquote(value) {
-  if (value.length >= 2
-    && ((value.startsWith("'") && value.endsWith("'"))
-      || (value.startsWith('"') && value.endsWith('"')))) {
-    return value.slice(1, -1);
+  if (value.length >= 2) {
+    if (value.startsWith('"') && value.endsWith('"')) {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value.slice(1, -1).replace(/\\"/g, '"');
+      }
+    }
+    if (value.startsWith("'") && value.endsWith("'")) {
+      return value.slice(1, -1).replace(/''/g, "'");
+    }
   }
   return value;
+}
+
+function splitArrayElements(inner) {
+  const elements = [];
+  let current = '';
+  let inQuotes = null;
+  for (let i = 0; i < inner.length; i++) {
+    const char = inner[i];
+    if ((char === '"' || char === "'") && (i === 0 || inner[i - 1] !== '\\')) {
+      if (!inQuotes) {
+        inQuotes = char;
+      } else if (inQuotes === char) {
+        inQuotes = null;
+      }
+    }
+    if (char === ',' && !inQuotes) {
+      elements.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim().length > 0) {
+    elements.push(current.trim());
+  }
+  return elements;
 }
 
 // Hand-written YAML subset (zero dependencies): `null` literal, `[a, b]`
@@ -68,7 +101,7 @@ function parseFrontmatterValue(raw) {
     if (!inner) {
       return [];
     }
-    return inner.split(',').map((item) => unquote(item.trim())).filter((item) => item.length > 0);
+    return splitArrayElements(inner).map((item) => unquote(item.trim())).filter((item) => item.length > 0);
   }
   return unquote(value);
 }
@@ -78,14 +111,28 @@ function serializeFrontmatterValue(value) {
     return 'null';
   }
   if (Array.isArray(value)) {
-    return `[${value.join(', ')}]`;
+    return `[${value.map((item) => serializeFrontmatterValue(String(item))).join(', ')}]`;
   }
-  // Quote strings that would otherwise reparse as a different type (the
-  // `null` literal or a `[...]` array); the parser strips the surrounding
-  // quotes on read. Quote characters inside the value are not escaped —
-  // out of scope for this minimal wrapper.
-  if (isString(value) && (value === 'null' || (value.startsWith('[') && value.endsWith(']')))) {
-    return `"${value}"`;
+  if (!isString(value)) {
+    return String(value);
+  }
+  const needsQuotes =
+    value === 'null'
+    || value === 'true'
+    || value === 'false'
+    || value.includes(': ')
+    || value.endsWith(':')
+    || value.includes('#')
+    || value.includes('"')
+    || value.includes("'")
+    || value.includes('\n')
+    || value.includes(',')
+    || value.startsWith('[')
+    || value.startsWith('{')
+    || value.trim() !== value;
+
+  if (needsQuotes) {
+    return JSON.stringify(value);
   }
   return value;
 }

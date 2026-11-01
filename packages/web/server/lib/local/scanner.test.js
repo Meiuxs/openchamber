@@ -119,6 +119,26 @@ describe('list', () => {
     expect(found.issue.title).toBe('One');
     expect(found.issue.containerId).toBe('proj-1');
     expect(found.container).toEqual({ id: 'proj-1', name: 'Proj One' });
+
+    // With a project hint, get targets the specific project and avoids cross-project collisions.
+    const foundTwo = await scanner.get('LOCAL-1', 'proj-2');
+    expect(foundTwo.issue.title).toBe('Two');
+    expect(foundTwo.issue.containerId).toBe('proj-2');
+    expect(await scanner.get('LOCAL-1', 'nope')).toBeNull();
+
+    // With a project hint, updateState and edit mutate only the intended project.
+    await scanner.updateState('LOCAL-1', 'done', 'proj-2');
+    expect((await scanner.get('LOCAL-1', 'proj-1')).issue.state).toBe('todo');
+    expect((await scanner.get('LOCAL-1', 'proj-2')).issue.state).toBe('done');
+
+    await scanner.edit('LOCAL-1', { title: 'Two Renamed' }, 'proj-2');
+    expect((await scanner.get('LOCAL-1', 'proj-1')).issue.title).toBe('One');
+    const updatedTwo = await scanner.get('LOCAL-1', 'proj-2');
+    expect(updatedTwo.issue.title).toBe('Two Renamed');
+    expect(updatedTwo.issue.fileName).toBe('LOCAL-1-two-renamed.md');
+    expect(fs.existsSync(path.join(dirTwo, 'LOCAL-1-a.md'))).toBe(false);
+    expect(fs.existsSync(path.join(dirTwo, 'LOCAL-1-two-renamed.md'))).toBe(true);
+    expect(fs.existsSync(path.join(dirOne, 'LOCAL-1-a.md'))).toBe(true);
   });
 });
 
@@ -252,17 +272,27 @@ describe('create', () => {
 });
 
 describe('edit and updateState', () => {
-  it('edits fields and body, bumps updatedAt, preserves unknown keys and comments', async () => {
+  it('edits fields and body, bumps updatedAt, preserves unknown keys and comments, and renames file on title change', async () => {
     const dir = path.join(root, '.issues');
     fs.mkdirSync(dir);
     fs.writeFileSync(path.join(dir, 'LOCAL-1-a.md'), issue(1, 'Old', 'todo', 'custom: keep\n'));
     const scanner = await scannerWith();
     const edited = await scanner.edit('LOCAL-1', { title: 'New', description: 'New body', priority: 'low', labels: ['x'] });
     expect(edited.title).toBe('New');
+    expect(edited.fileName).toBe('LOCAL-1-new.md');
     expect(edited.state).toBe('todo');
-    const raw = fs.readFileSync(path.join(dir, 'LOCAL-1-a.md'), 'utf8');
+    expect(fs.existsSync(path.join(dir, 'LOCAL-1-a.md'))).toBe(false);
+    const raw = fs.readFileSync(path.join(dir, 'LOCAL-1-new.md'), 'utf8');
     expect(raw).toContain('custom: keep');
     expect(raw).toContain('New body');
+  });
+  it('rejects title edit if target file already exists', async () => {
+    const dir = path.join(root, '.issues');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, 'LOCAL-1-old.md'), issue(1, 'Old'));
+    fs.writeFileSync(path.join(dir, 'LOCAL-1-taken.md'), issue(1, 'Taken'));
+    const scanner = await scannerWith();
+    await expect(scanner.edit('LOCAL-1', { title: 'Taken' })).rejects.toThrow(LocalIssueError);
   });
   it('sets and clears the grouping slug and the blockers it waits on', async () => {
     writeIssues([

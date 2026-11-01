@@ -18,7 +18,7 @@ mock.module('@/lib/runtime-fetch', () => ({
 const { createTrackerItem, editTrackerItem } = await import('./mutations');
 
 const ITEM = {
-  id: 'LOCAL-1', identifier: 'LOCAL-1', title: 'First', provider: 'local', url: '', state: null, description: null,
+  id: 'LOCAL-1', identifier: 'LOCAL-1', title: 'First', provider: 'local', url: '', state: null, description: null, feature: null,
 };
 
 beforeEach(() => {

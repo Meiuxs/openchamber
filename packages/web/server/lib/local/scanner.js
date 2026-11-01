@@ -20,6 +20,29 @@ const OPEN_EXCLUDED = new Set(['done', 'canceled']);
 // A blocker in one of these states no longer blocks the issues waiting on it.
 const SETTLED_STATES = new Set(['done', 'canceled']);
 const DEFAULT_STATE = 'triage';
+const ISSUE_IDENTIFIER_PATTERN = /^[A-Za-z][A-Za-z0-9]*-\d+$/;
+
+const normalizeIdentifierAndHint = (first, second) => {
+  if (isString(first) && isString(second)) {
+    if (!ISSUE_IDENTIFIER_PATTERN.test(first) && ISSUE_IDENTIFIER_PATTERN.test(second)) {
+      return { identifier: second, projectHint: first };
+    }
+    return { identifier: first, projectHint: second };
+  }
+  return { identifier: first, projectHint: second || null };
+};
+
+const matchesProject = (project, hint) => {
+  if (!hint || !isString(hint)) return false;
+  const trimmed = hint.trim();
+  if (project.id === trimmed) return true;
+  if (project.path === trimmed) return true;
+  try {
+    return path.resolve(project.path) === path.resolve(trimmed);
+  } catch {
+    return false;
+  }
+};
 
 // Per-project scan cache: parsed files are reused while `mtimeMs`/`size` are
 // unchanged, so only touched files are re-read on every scan. `parsed` is null
@@ -277,30 +300,77 @@ const createLocalScanner = ({ listProjects }) => {
     };
   };
 
-  const get = async (identifier) => {
+  const get = async (first, second) => {
+    const { identifier, projectHint } = normalizeIdentifierAndHint(first, second);
+    if (!identifier) return null;
+    if (projectHint) {
+      const found = await locate(identifier, projectHint);
+      if (found) {
+        return { issue: found.entry.issue, container: containerOf(found.project) };
+      }
+      return null;
+    }
+    const matches = [];
     for (const { project, issues } of await scanAll()) {
       const issue = issues.find((candidate) => candidate.identifier === identifier);
-      if (issue) return { issue, container: containerOf(project) };
+      if (issue) matches.push({ issue, container: containerOf(project) });
+    }
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) {
+      console.warn(`Ambiguous local issue ${identifier} in get(); returning first match`);
+      return matches[0];
     }
     return null;
   };
 
   const states = () => STATES.map((name, position) => ({ id: name, name, category: name, position }));
 
-  const locate = async (identifier) => {
-    for (const { project } of await scanAll()) {
+  const locate = async (first, second) => {
+    const { identifier, projectHint } = normalizeIdentifierAndHint(first, second);
+    if (!identifier) return null;
+
+    if (projectHint) {
+      const projects = await listProjects();
+      const project = projects.find((p) => matchesProject(p, projectHint));
+      if (!project) return null;
+      scanProject(project);
       const cache = caches.get(project.id);
       const entry = cache && cache.issues.get(identifier);
       if (entry) return { project, cache, entry };
+      return null;
     }
-    return null;
+
+    let match = null;
+    for (const { project } of await scanAll()) {
+      const cache = caches.get(project.id);
+      const entry = cache && cache.issues.get(identifier);
+      if (entry) {
+        if (match) {
+          console.warn(`Ambiguous local issue identifier ${identifier} across projects; specify project container`);
+        } else {
+          match = { project, cache, entry };
+        }
+      }
+    }
+    return match;
   };
 
   // Writes a mutated parsed issue back to disk and refreshes the cache so the
   // next scan reuses the fresh parse instead of re-reading the file.
-  const persist = (project, cache, parsed) => {
+  const persist = (project, cache, parsed, previousFileName = null) => {
     const dirPath = path.join(project.path, cache.issuesDir);
     writeIssue(dirPath, parsed);
+    if (previousFileName && previousFileName !== parsed.fileName) {
+      const oldFilePath = path.join(dirPath, previousFileName);
+      if (fs.existsSync(oldFilePath)) {
+        try {
+          fs.unlinkSync(oldFilePath);
+        } catch (err) {
+          console.warn('Failed to remove previous issue file:', oldFilePath, err);
+        }
+      }
+      cache.files.delete(previousFileName);
+    }
     const stat = fs.statSync(path.join(dirPath, parsed.fileName));
     cache.files.set(parsed.fileName, { mtimeMs: stat.mtimeMs, size: stat.size, parsed });
     const issue = toIssueView(project, parsed);
@@ -311,11 +381,11 @@ const createLocalScanner = ({ listProjects }) => {
     return issue;
   };
 
-  const updateState = async (identifier, stateId) => {
+  const updateState = async (identifier, stateId, projectHint = null) => {
     if (!STATES.includes(stateId)) {
       throw new LocalIssueError(`Unknown local issue state: ${stateId}`);
     }
-    const found = await locate(identifier);
+    const found = await locate(identifier, projectHint);
     if (!found) throw new LocalIssueError(`Unknown local issue: ${identifier}`);
     const parsed = found.cache.files.get(found.entry.fileName).parsed;
     return persist(
@@ -338,12 +408,28 @@ const createLocalScanner = ({ listProjects }) => {
     return `${head}${section}`;
   };
 
-  const edit = async (identifier, patch = {}) => {
-    const found = await locate(identifier);
+  const edit = async (identifier, patch = {}, projectHint = null) => {
+    const found = await locate(identifier, projectHint);
     if (!found) throw new LocalIssueError(`Unknown local issue: ${identifier}`);
     const parsed = found.cache.files.get(found.entry.fileName).parsed;
+    const oldFileName = found.entry.fileName;
     const fieldsPatch = {};
-    if (patch.title !== undefined) fieldsPatch.title = patch.title;
+    let nextSlug = parsed.slug;
+    let nextFileName = oldFileName;
+    if (patch.title !== undefined) {
+      const title = isString(patch.title) ? patch.title.trim() : '';
+      if (!title) throw new LocalIssueError('Local issue title is required');
+      fieldsPatch.title = patch.title;
+      nextSlug = sanitizeSlug(title);
+      nextFileName = issueFileName(parsed.number, nextSlug);
+      if (nextFileName !== oldFileName) {
+        const dirPath = path.join(found.project.path, found.cache.issuesDir);
+        const targetPath = path.join(dirPath, nextFileName);
+        if (fs.existsSync(targetPath)) {
+          throw new LocalIssueError(`Target issue file already exists: ${nextFileName}`);
+        }
+      }
+    }
     if (patch.priority !== undefined) fieldsPatch.priority = patch.priority ?? null;
     if (patch.labels !== undefined) fieldsPatch.labels = asStringArray(patch.labels);
     if (patch.feature !== undefined) fieldsPatch.feature = asString(patch.feature);
@@ -352,7 +438,9 @@ const createLocalScanner = ({ listProjects }) => {
     if (patch.description !== undefined) {
       next = { ...next, body: replaceBody(next.body, patch.description) };
     }
-    return persist(found.project, found.cache, setFields(next, { updatedAt: nowIso() }));
+    next.fileName = nextFileName;
+    next.slug = nextSlug;
+    return persist(found.project, found.cache, setFields(next, { updatedAt: nowIso() }), oldFileName);
   };
 
   const create = async (containerId, options = {}) => {
@@ -430,7 +518,7 @@ const createLocalScanner = ({ listProjects }) => {
     return scanned.filter(({ project }) => caches.get(project.id).readable).map(({ project }) => containerOf(project));
   };
 
-  return { list, get, states, updateState, create, edit, liveSummaries, containers };
+  return { list, get, locate, states, updateState, create, edit, liveSummaries, containers };
 };
 
 export { createLocalScanner, issuesDirOf };

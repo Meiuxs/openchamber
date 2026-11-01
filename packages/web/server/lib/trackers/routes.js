@@ -127,7 +127,8 @@ export function registerTrackerRoutes(app, { registry }) {
   app.get('/api/tracker/:provider/items/get', handle('load item', ({ req, tracker }) => {
     const id = queryValue(req, 'id');
     if (!id) throw invalid('id is required');
-    return tracker.get(id);
+    const containerId = queryValue(req, 'containerId') || queryValue(req, 'projectDirectory');
+    return containerId ? tracker.get(id, containerId) : tracker.get(id);
   }));
 
   app.post('/api/tracker/:provider/items/update', parseJsonBody, handle('update item', ({ req, tracker }) => {
@@ -135,7 +136,10 @@ export function registerTrackerRoutes(app, { registry }) {
     const id = readString(body.id);
     const stateId = readString(body.stateId);
     if (!id || !stateId) throw invalid('id and stateId are required');
-    return tracker.updateState({ id, stateId });
+    const containerId = readString(body.containerId) || readString(body.projectDirectory);
+    const input = { id, stateId };
+    if (containerId) input.containerId = containerId;
+    return tracker.updateState(input);
   }, (descriptor) => descriptor.capabilities.stateUpdate));
 
   const hasCreate = (descriptor) => descriptor.capabilities.create === true;
@@ -191,6 +195,8 @@ export function registerTrackerRoutes(app, { registry }) {
     if (body.labels !== undefined) input.labels = readLabels(body.labels);
     if (body.feature !== undefined) input.feature = readString(body.feature) || null;
     if (body.blockedBy !== undefined) input.blockedBy = readIdentifiers(body.blockedBy);
+    const containerId = readString(body.containerId) || readString(body.projectDirectory);
+    if (containerId) input.containerId = containerId;
     return tracker.edit(input);
   }, hasEdit));
 

@@ -90,6 +90,20 @@ describe('readIssue/writeIssue', () => {
     expect(issue.fields).toContainEqual(['title', '[Bug]']);
     expect(issue.fields).toContainEqual(['note', 'null']);
   });
+  it('handles colons, quotes, and array elements with colons or commas losslessly', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-local-'));
+    const fields = [
+      ['identifier', 'LOCAL-4'],
+      ['title', 'Fix: handle "quoted" values: carefully'],
+      ['labels', ['area: auth', 'tag, with, comma', 'simple']],
+      ['summary', 'Note: check this'],
+    ];
+    writeIssue(dir, { fileName: 'LOCAL-4-x.md', number: 4, slug: 'x', identifier: 'LOCAL-4', fields, body: 'Description\n' });
+    const issue = readIssue(dir, 'LOCAL-4-x.md');
+    expect(issue.fields).toContainEqual(['title', 'Fix: handle "quoted" values: carefully']);
+    expect(issue.fields).toContainEqual(['labels', ['area: auth', 'tag, with, comma', 'simple']]);
+    expect(issue.fields).toContainEqual(['summary', 'Note: check this']);
+  });
   it('returns null for an unparseable file', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-local-'));
     write(dir, 'LOCAL-2-bad.md', 'no frontmatter here');
