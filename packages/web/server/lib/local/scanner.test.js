@@ -31,6 +31,18 @@ beforeEach(() => {
 
 const scannerWith = async () => createLocalScanner({ listProjects: async () => [project] });
 
+/** The fixture above with a grouping slug, labels and blockers. */
+const issueWith = (n, title, { state = 'todo', feature = null, labels = [], blockedBy = [] } = {}) => issue(n, title, state)
+  .replace('labels: []', `labels: [${labels.join(', ')}]`)
+  .replace('feature: null', `feature: ${feature ?? 'null'}`)
+  .replace('blockedBy: []', `blockedBy: [${blockedBy.join(', ')}]`);
+
+const writeIssues = (entries) => {
+  const dir = path.join(root, '.issues');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [fileName, text] of entries) fs.writeFileSync(path.join(dir, fileName), text);
+};
+
 describe('list', () => {
   it('reads issues from .issues, filters by state and query, paginates', async () => {
     const dir = path.join(root, '.issues');
@@ -110,6 +122,112 @@ describe('list', () => {
   });
 });
 
+describe('query', () => {
+  it('matches a pasted file name or path to its issue', async () => {
+    writeIssues([
+      ['LOCAL-7-fix-login.md', issue(7, 'Login overflows')],
+      ['LOCAL-8-other.md', issue(8, 'Other')],
+    ]);
+    const scanner = await scannerWith();
+    const ids = async (query) => (await scanner.list({ state: 'all', query })).issues.map((i) => i.identifier);
+    expect(await ids('LOCAL-7-fix-login.md')).toEqual(['LOCAL-7']);
+    expect(await ids('.issues/LOCAL-7-fix-login.md')).toEqual(['LOCAL-7']);
+    expect(await ids('LOCAL-7-fix-login')).toEqual(['LOCAL-7']);
+    expect(await ids('LOCAL-7')).toEqual(['LOCAL-7']);
+    expect(await ids('overflow')).toEqual(['LOCAL-7']);
+    expect(await ids('LOCAL-9-absent.md')).toEqual([]);
+  });
+  it('finds an issue by its grouping slug or a label', async () => {
+    writeIssues([
+      ['LOCAL-1-login.md', issueWith(1, 'Login overflows', { feature: 'auth', labels: ['backend'] })],
+      ['LOCAL-2-other.md', issueWith(2, 'Other', { feature: 'billing', labels: ['frontend'] })],
+    ]);
+    const scanner = await scannerWith();
+    const ids = async (query) => (await scanner.list({ state: 'all', query })).issues.map((i) => i.identifier);
+    expect(await ids('auth')).toEqual(['LOCAL-1']);
+    expect(await ids('backend')).toEqual(['LOCAL-1']);
+    expect(await ids('billing')).toEqual(['LOCAL-2']);
+    expect(await ids('AUTH')).toEqual(['LOCAL-1']);
+  });
+});
+
+describe('feature', () => {
+  it('filters by grouping slug, and shows every issue when absent', async () => {
+    writeIssues([
+      ['LOCAL-1-login.md', issueWith(1, 'Login', { feature: 'login' })],
+      ['LOCAL-2-billing.md', issueWith(2, 'Billing', { feature: 'billing' })],
+      ['LOCAL-3-plain.md', issueWith(3, 'Plain')],
+    ]);
+    const scanner = await scannerWith();
+    const ids = async (options) => (await scanner.list({ state: 'all', ...options })).issues.map((i) => i.identifier);
+    expect(await ids({})).toEqual(['LOCAL-1', 'LOCAL-2', 'LOCAL-3']);
+    expect(await ids({ feature: 'login' })).toEqual(['LOCAL-1']);
+    expect(await ids({ feature: 'absent' })).toEqual([]);
+  });
+  it('reports every slug in the container as a facet, whatever the filters hide', async () => {
+    writeIssues([
+      ['LOCAL-1-login.md', issueWith(1, 'Login', { feature: 'login' })],
+      ['LOCAL-2-billing.md', issueWith(2, 'Billing', { feature: 'billing' })],
+      ['LOCAL-3-plain.md', issueWith(3, 'Plain')],
+      ['LOCAL-4-settled.md', issueWith(4, 'Settled', { state: 'done', feature: 'archived' })],
+    ]);
+    const scanner = await scannerWith();
+    // Facets ignore the filter in force, so switching slugs never needs a reset.
+    expect((await scanner.list({ state: 'all' })).features).toEqual(['archived', 'billing', 'login']);
+    expect((await scanner.list({ state: 'open', feature: 'login' })).features).toEqual(['archived', 'billing', 'login']);
+    expect((await scanner.list({ state: 'all', query: 'login' })).features).toEqual(['archived', 'billing', 'login']);
+    // Scoped like the items: another container's slugs stay out.
+    const other = { id: 'proj-2', path: fs.mkdtempSync(path.join(os.tmpdir(), 'oc-scan-')), label: 'Proj Two' };
+    fs.mkdirSync(path.join(other.path, '.issues'), { recursive: true });
+    fs.writeFileSync(path.join(other.path, '.issues', 'LOCAL-1-elsewhere.md'), issueWith(1, 'Elsewhere', { feature: 'elsewhere' }));
+    const both = await createLocalScanner({ listProjects: async () => [project, other] });
+    expect((await both.list({ state: 'all', containerId: 'proj-1' })).features).toEqual(['archived', 'billing', 'login']);
+    expect((await both.list({ state: 'all' })).features).toEqual(['archived', 'billing', 'elsewhere', 'login']);
+  });
+});
+
+describe('blocked', () => {
+  it('keeps blocking until every blocker is done or canceled', async () => {
+    writeIssues([
+      ['LOCAL-1-open.md', issueWith(1, 'Open blocker')],
+      ['LOCAL-2-done.md', issueWith(2, 'Done blocker', { state: 'done' })],
+      ['LOCAL-3-canceled.md', issueWith(3, 'Canceled blocker', { state: 'canceled' })],
+      ['LOCAL-4-waits-two.md', issueWith(4, 'Waits on two', { blockedBy: ['LOCAL-1', 'LOCAL-2'] })],
+      ['LOCAL-5-waits-settled.md', issueWith(5, 'Waits on settled', { blockedBy: ['LOCAL-2', 'LOCAL-3'] })],
+    ]);
+    const scanner = await scannerWith();
+    const { issues } = await scanner.list({ state: 'all' });
+    expect(Object.fromEntries(issues.map((i) => [i.identifier, i.blocked]))).toEqual({
+      'LOCAL-1': false,
+      'LOCAL-2': false,
+      'LOCAL-3': false,
+      'LOCAL-4': true,
+      'LOCAL-5': false,
+    });
+  });
+  it('blocks nothing for a missing or self-naming blocker', async () => {
+    writeIssues([
+      ['LOCAL-1-orphan.md', issueWith(1, 'Orphan', { blockedBy: ['LOCAL-9'] })],
+      ['LOCAL-2-self.md', issueWith(2, 'Self', { blockedBy: ['LOCAL-2'] })],
+    ]);
+    const scanner = await scannerWith();
+    const { issues } = await scanner.list({ state: 'all' });
+    expect(issues.map((i) => i.blocked)).toEqual([false, false]);
+  });
+  it('unblocks the waiting issue when its last blocker settles', async () => {
+    writeIssues([
+      ['LOCAL-1-blocker.md', issueWith(1, 'Blocker')],
+      ['LOCAL-2-waits.md', issueWith(2, 'Waits', { blockedBy: ['LOCAL-1'] })],
+    ]);
+    const scanner = await scannerWith();
+    const blockedOf = async () => (await scanner.list({ state: 'all' })).issues.find((i) => i.identifier === 'LOCAL-2').blocked;
+    expect(await blockedOf()).toBe(true);
+    const settled = await scanner.updateState('LOCAL-1', 'done');
+    expect(settled.state).toBe('done');
+    expect(await blockedOf()).toBe(false);
+  });
+});
+
 describe('create', () => {
   it('mkdirs a missing dir and allocates max+1, honoring blockedBy/feature fields', async () => {
     const scanner = await scannerWith();
@@ -145,6 +263,22 @@ describe('edit and updateState', () => {
     const raw = fs.readFileSync(path.join(dir, 'LOCAL-1-a.md'), 'utf8');
     expect(raw).toContain('custom: keep');
     expect(raw).toContain('New body');
+  });
+  it('sets and clears the grouping slug and the blockers it waits on', async () => {
+    writeIssues([
+      ['LOCAL-1-blocker.md', issueWith(1, 'Blocker')],
+      ['LOCAL-2-waits.md', issueWith(2, 'Waits')],
+    ]);
+    const scanner = await scannerWith();
+    const blocked = await scanner.edit('LOCAL-2', { feature: 'auth', blockedBy: ['LOCAL-1'] });
+    expect(blocked).toMatchObject({ feature: 'auth', blockedBy: ['LOCAL-1'], blocked: true });
+    // Clearing the list settles the flag in the same write.
+    const freed = await scanner.edit('LOCAL-2', { feature: null, blockedBy: [] });
+    expect(freed).toMatchObject({ feature: null, blockedBy: [], blocked: false });
+    const raw = fs.readFileSync(path.join(root, '.issues', 'LOCAL-2-waits.md'), 'utf8');
+    // A cleared scalar leaves no line behind; an emptied list stays as `[]`.
+    expect(raw).not.toContain('feature:');
+    expect(raw).toContain('blockedBy: []');
   });
   it('moves state and rejects unknown identifier or state', async () => {
     const dir = path.join(root, '.issues');

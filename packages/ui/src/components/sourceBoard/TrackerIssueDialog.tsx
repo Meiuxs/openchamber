@@ -11,11 +11,18 @@ import { Textarea } from '@/components/ui/textarea';
 import type { TrackerItem, TrackerPriority } from '@/lib/api/types';
 import { useI18n } from '@/lib/i18n';
 import { createTrackerItem, editTrackerItem } from '@/lib/trackers/mutations';
+import { useTrackerDescriptor } from '@/lib/trackers/registry';
+import type { TrackerCreateItemInput } from '@/lib/trackers/types';
 
 const PRIORITIES: readonly TrackerPriority[] = ['none', 'urgent', 'high', 'medium', 'low'];
 
 const labelsOf = (value: string): string[] => (
   value.split(',').map((label) => label.trim()).filter(Boolean)
+);
+
+/** Identifiers typed as a comma list, read the way the tracker stores them. */
+const identifiersOf = (value: string): string[] => (
+  [...new Set(labelsOf(value).map((identifier) => identifier.toUpperCase()))]
 );
 
 /**
@@ -36,17 +43,25 @@ export const TrackerIssueDialog: React.FC<{
   onClose: () => void;
 }> = ({ provider, mode, containers, initial, onDone, onClose }) => {
   const { t } = useI18n();
+  const { capabilities } = useTrackerDescriptor(provider);
   const isCreate = mode === 'create';
   const [title, setTitle] = React.useState(initial?.title ?? '');
   const [description, setDescription] = React.useState(initial?.description ?? '');
   const [priority, setPriority] = React.useState<TrackerPriority>(initial?.priority ?? 'none');
   const [containerId, setContainerId] = React.useState(containers[0]?.id ?? '');
   const [labels, setLabels] = React.useState((initial?.labels ?? []).map((label) => label.name).join(', '));
+  const [feature, setFeature] = React.useState(initial?.feature ?? '');
+  const [blockedBy, setBlockedBy] = React.useState((initial?.blockedBy ?? []).join(', '));
   const [submitting, setSubmitting] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
 
   const canSubmit = Boolean(title.trim()) && !submitting
     && (isCreate ? containerId !== '' : Boolean(initial?.id));
+  // Sent only where the tracker has the field: one without it is never handed a
+  // value it would have to drop.
+  const grouping: Pick<TrackerCreateItemInput, 'feature' | 'blockedBy'> = {};
+  if (capabilities.feature) grouping.feature = feature.trim() || null;
+  if (capabilities.blockers) grouping.blockedBy = identifiersOf(blockedBy);
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
@@ -59,6 +74,7 @@ export const TrackerIssueDialog: React.FC<{
           description: description.trim() || null,
           priority,
           labels: labelsOf(labels),
+          ...grouping,
         })
         : await editTrackerItem(provider, {
           id: initial?.id ?? '',
@@ -66,6 +82,7 @@ export const TrackerIssueDialog: React.FC<{
           description: description.trim() || null,
           priority,
           labels: labelsOf(labels),
+          ...grouping,
         });
       onDone(item);
       onClose();
@@ -127,6 +144,16 @@ export const TrackerIssueDialog: React.FC<{
           <SettingsStackedField label={t('references.picker.preview.labels')} controlClassName="max-w-none">
             <Input value={labels} onChange={(event) => setLabels(event.target.value)} />
           </SettingsStackedField>
+          {capabilities.feature ? (
+            <SettingsStackedField label={t('sourceBoard.tracker.form.feature')} controlClassName="max-w-none">
+              <Input value={feature} onChange={(event) => setFeature(event.target.value)} />
+            </SettingsStackedField>
+          ) : null}
+          {capabilities.blockers ? (
+            <SettingsStackedField label={t('sourceBoard.tracker.form.blockedBy')} controlClassName="max-w-none">
+              <Input value={blockedBy} onChange={(event) => setBlockedBy(event.target.value)} />
+            </SettingsStackedField>
+          ) : null}
         </div>
         <DialogFooter>
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">

@@ -16,6 +16,7 @@
 import * as React from 'react';
 
 import type { RepositoryReferencesAcrossSkip } from '@/lib/api/types';
+import type { TrackerListFacets } from '@/lib/trackers/types';
 
 const FRESH_MS = 60_000;
 
@@ -28,7 +29,7 @@ const mergeSkipped = (shown: readonly ListSkip[], next: readonly ListSkip[]): Li
 };
 
 export type ListPage<T> =
-    | { kind: 'page'; items: T[]; cursor: string | null; hasMore: boolean; skipped?: ListSkip[] }
+    | { kind: 'page'; items: T[]; cursor: string | null; hasMore: boolean; skipped?: ListSkip[]; facets?: TrackerListFacets }
     /** The source answered but cannot list: not connected, or no repo. */
     | { kind: 'unavailable'; reason: 'disconnected' | 'no-repo' };
 
@@ -46,6 +47,12 @@ export type CachedList<T> = {
     skipped: ListSkip[];
     /** When each page shown was read, by the index of its first item; empty before any answer. */
     pageReads: PageRead[];
+    /**
+     * The values the source offers as filter options, over everything the list
+     * covers rather than the page it returned: a filter whose options came
+     * from its own result would leave the chosen one as the only option.
+     */
+    facets?: TrackerListFacets;
 };
 
 /**
@@ -227,6 +234,9 @@ export function createListCache<T>(limit = 40, now: () => number = Date.now): Li
                 items: page.items,
                 cursor: page.cursor,
                 hasMore: page.hasMore,
+                // A source that reports no facets keeps none, rather than
+                // inheriting those of the list it replaced.
+                facets: page.facets,
                 refreshing: false,
                 error: null,
                 pageReads: [{ start: 0, read: { at, forced: Boolean(options?.force) } }],
@@ -261,6 +271,9 @@ export function createListCache<T>(limit = 40, now: () => number = Date.now): Li
                 error: null,
                 // A folder left out of an earlier page stays left out of the list.
                 skipped: mergeSkipped(current.skipped, page.skipped ?? []),
+                // Facets cover the whole scope, so a later page answering
+                // without them does not erase what the first one reported.
+                facets: page.facets ?? current.facets,
             });
         });
     };

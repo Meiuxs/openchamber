@@ -123,6 +123,7 @@ export const createWebTrackerAPI = ({
     set('state', options?.state);
     set('people', options?.people);
     set('priority', options?.priority);
+    set('feature', options?.feature);
     set('containerId', options?.containerId);
     const query = params.toString();
     return query ? `?${query}` : '';

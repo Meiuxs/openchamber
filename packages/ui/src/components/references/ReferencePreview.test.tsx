@@ -47,7 +47,13 @@ Object.assign(useSourceControlProviderRegistry.getInitialState(), { ordered: [gi
 const linear = linearLikeTrackerDescriptor();
 Object.assign(useTrackerRegistry.getInitialState(), { ordered: [linear], byId: new Map([[linear.id, linear]]), status: 'ready', holdsList: true });
 
-function renderPreview(item: ReferencePickerItem, pinned: boolean, status: 'ready' | 'loading' | 'error' = 'ready', customFooter = true) {
+function renderPreview(
+    item: ReferencePickerItem,
+    pinned: boolean,
+    status: 'ready' | 'loading' | 'error' = 'ready',
+    customFooter = true,
+    extra: { onOpenTrackerIdentifier?: (identifier: string) => void } = {},
+) {
     const pending = status === 'error' ? { status, error: 'Host unavailable' } as const : { status: 'loading' } as const;
     const github: CachedValue<RepositoryReferenceDetail> = status === 'ready' ? { status, value: repositoryDetail } : pending;
     const tracker: CachedValue<TrackerItem> = status === 'ready' ? { status, value: issue } : pending;
@@ -64,6 +70,7 @@ function renderPreview(item: ReferencePickerItem, pinned: boolean, status: 'read
                     labelsControl={<button>Edit labels</button>}
                     reviewersControl={<button>Edit reviewers</button>}
                     onOpenChecks={() => undefined} onRefresh={async () => undefined}
+                    onOpenTrackerIdentifier={extra.onOpenTrackerIdentifier}
                 />
             </I18nProvider>
         </RuntimeAPIContext.Provider>,
@@ -133,5 +140,32 @@ describe('ReferencePreview layout', () => {
         if (!checkbox) throw new Error('Expected picker diff checkbox');
         expect(checkbox?.closest('.overlay-scrollbar-container')).toBeNull();
         expect(container.lastElementChild?.lastElementChild?.contains(checkbox)).toBe(true);
+    });
+
+    test('a tracker item names its grouping and what it waits on', () => {
+        const waiting: TrackerItem = { ...issue, feature: 'login', blockedBy: ['ENG-3', 'ENG-4'], blocked: true };
+        const container = renderPreview({ source: 'tracker', provider: 'linear', item: waiting }, false);
+        const meta = container.querySelector('dl');
+        expect(meta?.textContent).toContain('login');
+        expect(meta?.textContent).toContain('Blocked by');
+        for (const identifier of ['ENG-3', 'ENG-4']) expect(meta?.textContent).toContain(identifier);
+
+        // An item with neither shows neither row.
+        const plain = renderPreview(items[1], false).querySelector('dl');
+        expect(plain?.textContent).not.toContain('Blocked by');
+        expect(plain?.textContent).not.toContain('Grouping');
+    });
+
+    test('a blocker identifier is a button where the surface can open it, plain text otherwise', () => {
+        const waiting: TrackerItem = { ...issue, feature: null, blockedBy: ['ENG-3'], blocked: true };
+        const item: ReferencePickerItem = { source: 'tracker', provider: 'linear', item: waiting };
+        const withHandler = renderPreview(item, false, 'ready', true, { onOpenTrackerIdentifier: () => undefined });
+        const button = [...withHandler.querySelectorAll('button')].find((candidate) => candidate.textContent === 'ENG-3');
+        expect(button?.getAttribute('type')).toBe('button');
+
+        // Without one it reads like a parent or child the surface cannot open.
+        const plain = renderPreview(item, false);
+        expect([...plain.querySelectorAll('button')].some((candidate) => candidate.textContent === 'ENG-3')).toBe(false);
+        expect(plain.textContent).toContain('ENG-3');
     });
 });

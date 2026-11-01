@@ -48,6 +48,51 @@ describe('list/get/create/edit/updateState', () => {
     const empty = await t.get('LOCAL-99');
     expect(empty).toEqual({ connected: true, item: null });
   });
+  it('carries the feature slug and the derived blocked flag, and filters by feature', async () => {
+    const dir = path.join(root, '.issues');
+    fs.mkdirSync(dir);
+    const raw = (n, title, { state = 'todo', feature = 'null', blockedBy = '[]' } = {}) => `---
+identifier: LOCAL-${n}
+title: ${title}
+state: ${state}
+priority: null
+labels: []
+assignee: null
+createdAt: 2026-11-01T08:00:00Z
+updatedAt: 2026-11-01T08:00:00Z
+feature: ${feature}
+blockedBy: ${blockedBy}
+---
+
+Body of ${title}.
+`;
+    fs.writeFileSync(path.join(dir, 'LOCAL-1-blocker.md'), raw(1, 'Blocker', { state: 'in-progress' }));
+    fs.writeFileSync(path.join(dir, 'LOCAL-2-waits.md'), raw(2, 'Waits', { feature: 'login', blockedBy: '[LOCAL-1]' }));
+    const t = await tracker();
+
+    const { items } = await t.list({ state: 'all' });
+    expect(items.find((i) => i.identifier === 'LOCAL-1')).toMatchObject({ feature: null, blockedBy: [], blocked: false });
+    expect(items.find((i) => i.identifier === 'LOCAL-2')).toMatchObject({ feature: 'login', blockedBy: ['LOCAL-1'], blocked: true });
+    expect((await t.list({ state: 'all', feature: 'login' })).items.map((i) => i.identifier)).toEqual(['LOCAL-2']);
+    // The facets name every slug in the container, so the filter can switch
+    // slugs without first being cleared.
+    expect((await t.list({ state: 'all', feature: 'login' })).facets).toEqual({ feature: ['login'] });
+
+    // Settling the blocker clears the flag on the next read, with no write to the waiting issue.
+    await t.updateState({ id: 'LOCAL-1', stateId: 'done' });
+    expect((await t.list({ state: 'all' })).items.find((i) => i.identifier === 'LOCAL-2').blocked).toBe(false);
+    expect((await t.get('LOCAL-2')).item).toMatchObject({ feature: 'login', blocked: false });
+  });
+  it('writes the grouping slug and blockers from the form input', async () => {
+    const t = await tracker();
+    await t.create({ containerId: 'p1', title: 'Blocker' });
+    const created = await t.create({ containerId: 'p1', title: 'Waits', feature: 'auth', blockedBy: ['LOCAL-1'] });
+    expect(created.item).toMatchObject({ identifier: 'LOCAL-2', feature: 'auth', blockedBy: ['LOCAL-1'], blocked: true });
+    // The form's clear actions: no slug, no blockers, in one write.
+    const edited = await t.edit({ id: 'LOCAL-2', feature: null, blockedBy: [] });
+    expect(edited.item).toMatchObject({ feature: null, blockedBy: [], blocked: false });
+    expect(fs.readFileSync(path.join(root, '.issues', 'LOCAL-2-waits.md'), 'utf8')).toContain('blockedBy: []');
+  });
   it('stores priority "none" as null in the file, on create and edit', async () => {
     const t = await tracker();
     const priorityOf = (parsed) => {

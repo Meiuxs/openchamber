@@ -220,6 +220,12 @@ export const ReferencePickerRow = React.memo(function ReferencePickerRow({
                     {tracker?.priority && tracker.priority !== 'none' && capabilities.priority ? (
                         <span>{t(TRACKER_PRIORITY_KEYS[tracker.priority])}</span>
                     ) : null}
+                    {tracker?.blocked ? (
+                        <span className="inline-flex items-center gap-0.5">
+                            <Icon name="lock" className="size-3.5" />
+                            {t('references.picker.preview.blocked')}
+                        </span>
+                    ) : null}
                     {item.source === 'repository' && (showRepository || item.reference.sourceRepo.source === 'upstream') ? (
                         <span className="rounded bg-[var(--status-info-background)] px-1 typography-micro text-[var(--status-info-text)]">
                             {joinProjectPath(item.reference.sourceRepo.owner, item.reference.sourceRepo.repo)}

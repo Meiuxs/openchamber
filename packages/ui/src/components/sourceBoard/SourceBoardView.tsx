@@ -780,6 +780,7 @@ const SourceBoardBody: React.FC<{
                 </>
             ) : undefined}
             onOpenTrackerItem={(item) => browser.openItem({ source: 'tracker', provider: item.provider, item })}
+            onOpenTrackerIdentifier={browser.openTrackerIdentifier}
             onOpenStackLayer={openStackLayer}
             revisionChoice={latestPull?.revisions ? { revisions: latestPull.revisions, selected: browser.previewRevision, onSelect: browser.selectPreviewRevision } : undefined}
             onOpenChecks={previewPull && context ? () => setChecksOpenFor(previewKey) : undefined}

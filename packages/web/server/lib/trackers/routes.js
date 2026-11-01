@@ -50,6 +50,9 @@ function readListOptions(req, descriptor) {
     state,
     people,
     priority,
+    // No capability gate: a tracker without a grouping slug ignores it, and no
+    // surface offers the filter where nothing carries one.
+    feature: queryValue(req, 'feature') || undefined,
     containerId: queryValue(req, 'containerId') || null,
   };
 }
@@ -139,19 +142,40 @@ export function registerTrackerRoutes(app, { registry }) {
   const hasEdit = (descriptor) => descriptor.capabilities.edit === true;
   const readLabels = (value) => (Array.isArray(value) ? value.filter(isString).map((label) => label.trim()).filter(Boolean) : []);
 
+  // The identifiers a field names: trimmed, deduped, and upper-cased like the
+  // identifiers they point at, so a lower-case `local-2` still blocks.
+  const readIdentifiers = (value) => {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set();
+    const identifiers = [];
+    for (const entry of value) {
+      if (!isString(entry)) continue;
+      const identifier = entry.trim().toUpperCase();
+      if (!identifier || seen.has(identifier)) continue;
+      seen.add(identifier);
+      identifiers.push(identifier);
+    }
+    return identifiers;
+  };
+
   app.post('/api/tracker/:provider/items/create', parseJsonBody, handle('create item', ({ req, tracker }) => {
     const body = readBody(req);
     const title = readString(body.title);
     const containerId = readString(body.containerId);
     if (!title) throw invalid('title is required');
     if (!containerId) throw invalid('containerId is required');
-    return tracker.create({
+    // The grouping and blocker fields ride along only when the body names
+    // them, like the edit route: a tracker without them is handed nothing.
+    const input = {
       containerId,
       title,
       description: readString(body.description) || null,
       priority: readString(body.priority) || null,
       labels: readLabels(body.labels),
-    });
+    };
+    if (body.feature !== undefined) input.feature = readString(body.feature) || null;
+    if (body.blockedBy !== undefined) input.blockedBy = readIdentifiers(body.blockedBy);
+    return tracker.create(input);
   }, hasCreate));
 
   // Only the fields the body carries are forwarded; an absent field means the
@@ -165,6 +189,8 @@ export function registerTrackerRoutes(app, { registry }) {
     if (body.description !== undefined) input.description = readString(body.description) || null;
     if (body.priority !== undefined) input.priority = readString(body.priority) || null;
     if (body.labels !== undefined) input.labels = readLabels(body.labels);
+    if (body.feature !== undefined) input.feature = readString(body.feature) || null;
+    if (body.blockedBy !== undefined) input.blockedBy = readIdentifiers(body.blockedBy);
     return tracker.edit(input);
   }, hasEdit));
 

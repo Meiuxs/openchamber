@@ -219,3 +219,21 @@ test('a folder a list across repositories left out stays left out after the next
         skipped: [{ directory: '/w/b', reason: 'error' }, { directory: '/w/c', reason: 'disconnected' }],
     });
 });
+
+test('the facets a source reports outlive its pages, so a filter can switch options', async () => {
+    const cache = createListCache<string>();
+    const first: ListPage<string> = { kind: 'page', items: ['a'], cursor: 'next', hasMore: true, facets: { feature: ['auth', 'billing'] } };
+    cache.ensure('k', async () => first);
+    await flush();
+    expect(cache.read('k')?.facets).toEqual({ feature: ['auth', 'billing'] });
+
+    // A later page that reports none keeps what the first one said.
+    cache.loadMore('k');
+    await flush();
+    expect(cache.read('k')?.facets).toEqual({ feature: ['auth', 'billing'] });
+
+    // A source without facets keeps none rather than inheriting the last list's.
+    cache.ensure('other', async () => page(['b']));
+    await flush();
+    expect(cache.read('other')?.facets).toBeUndefined();
+});

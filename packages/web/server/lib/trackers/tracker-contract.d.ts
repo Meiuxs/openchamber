@@ -27,6 +27,15 @@ export type TrackerItemSummary = {
   parent?: TrackerItemSummary | null;
   /** Linear: subIssueProgress. Only the first few are counted; `more` says there are others. */
   progress?: { total: number; done: number; more: boolean } | null;
+  /** The identifiers this item waits on (Local: the `blockedBy` frontmatter field). */
+  blockedBy?: string[];
+  /**
+   * At least one identifier in `blockedBy` names an item that is neither done
+   * nor canceled. The provider computes it: only it knows its blockers' states.
+   */
+  blocked?: boolean;
+  /** The provider's grouping slug; Local reads it from the `feature` frontmatter field. */
+  feature?: string | null;
   updatedAt?: string | null;
 };
 
@@ -53,6 +62,17 @@ export type TrackerWorkflowState = { id: string; name: string; category: Tracker
 export type TrackerPeopleFilter = 'any' | 'me' | 'created';
 export type TrackerPriorityFilter = 'all' | TrackerPriority;
 
+/**
+ * The values a list offers as filter options, computed over the whole scope the
+ * list reads (the container) rather than over the page it returns: a filter
+ * whose options came from its own result would leave the chosen one as the only
+ * option. Absent for a tracker with no facets.
+ */
+export type TrackerListFacets = {
+  /** Every grouping slug in scope; the values `TrackerListOptions.feature` accepts. */
+  feature?: string[];
+};
+
 export type TrackerListOptions = {
   query?: string;
   cursor?: string;
@@ -60,6 +80,8 @@ export type TrackerListOptions = {
   state?: string;
   people?: TrackerPeopleFilter;
   priority?: TrackerPriorityFilter;
+  /** One grouping slug's items (Local: `feature`); every item's when absent. */
+  feature?: string;
   containerId?: string | null;
 };
 
@@ -90,6 +112,10 @@ export type TrackerDescriptor = {
     children: boolean;
     labels: boolean;
     priority: boolean;
+    /** Items carry a grouping slug (`feature`), so filters and forms can offer one. */
+    feature: boolean;
+    /** Items wait on others by identifier (`blockedBy`), so a form can offer the field. */
+    blockers: boolean;
     filters: { people: boolean; priority: boolean };
     /** Container to OpenChamber project mapping (Linear: team). */
     projectMapping: boolean;
@@ -141,6 +167,10 @@ export type TrackerCreateItemInput = {
   description?: string | null;
   priority?: TrackerPriority | null;
   labels?: string[];
+  /** Grouping slug; a tracker whose `feature` capability is off ignores it. */
+  feature?: string | null;
+  /** Identifiers of the items this one waits on. */
+  blockedBy?: string[];
 };
 export type TrackerEditItemInput = {
   id: string;
@@ -148,6 +178,10 @@ export type TrackerEditItemInput = {
   description?: string | null;
   priority?: TrackerPriority | null;
   labels?: string[];
+  /** An explicit `null` clears the slug. */
+  feature?: string | null;
+  /** Replaces the whole list; `[]` clears it. */
+  blockedBy?: string[];
 };
 
 /** Server-side implementation a registry entry loads. JSON in, JSON out. */
@@ -159,7 +193,7 @@ export interface TrackerImplementation {
     /** Null when the account is not stored. */
     activate(accountId: string): Promise<TrackerAuthStatus | null>;
   };
-  list(options: TrackerListOptions): Promise<Connected<{ items: TrackerItemSummary[]; cursor: string | null; hasMore: boolean }>>;
+  list(options: TrackerListOptions): Promise<Connected<{ items: TrackerItemSummary[]; cursor: string | null; hasMore: boolean; facets?: TrackerListFacets }>>;
   get(id: string): Promise<Connected<{ item: TrackerItem | null }>>;
   states(containerId: string): Promise<Connected<{ states: TrackerWorkflowState[] }>>;
   updateState(input: { id: string; stateId: string }): Promise<Connected<{ item: TrackerItem | null }>>;

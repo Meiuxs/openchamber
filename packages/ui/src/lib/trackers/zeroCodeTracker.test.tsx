@@ -195,6 +195,24 @@ describe('a tracker no UI code names', () => {
     expect(container.textContent).not.toContain('Linear');
   });
 
+  test('a picker row marks an item that waits on its blockers', async () => {
+    const { ReferencePickerRow } = await import('@/components/references/ReferencePickerRow');
+    await render(
+      <ReferencePickerRow
+        item={{ source: 'tracker', provider: 'plane', item: { ...item, blockedBy: ['PLN-1'], blocked: true } }}
+        pullStatus={null}
+        highlighted={false}
+        checked={null}
+        diffIncluded={false}
+        now={Date.now()}
+        onHighlight={() => {}}
+        onToggle={() => {}}
+        onActivate={() => {}}
+      />,
+    );
+    expect(container.textContent).toContain('Blocked');
+  });
+
   // The board's tracker tab is built inline in `SourceBoardView` (label
   // `descriptor.name`, icon `trackerPresentation(id).icon`) and is not
   // reachable without the whole board; its scope picker is the board surface

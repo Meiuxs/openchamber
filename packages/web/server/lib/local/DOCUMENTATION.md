@@ -17,8 +17,26 @@ Routes answered (through the shared `/api/tracker/local/*` routes, host-only in 
 - **The scan cache is per-file `mtimeMs`+`size`.** Parsed issues are reused while both match the directory stat; any outside writer (the user in an editor, this module's own `writeIssue`) invalidates the file on the next scan. The cache is per project and lives for the server run.
 - **Writes are atomic: tmp file + rename** (`writeIssue`). `writeIssue` does not create the directory — callers guarantee it exists (`scanner.create` does); a caller that does not fails with the rename error rather than silently writing elsewhere.
 - **The `## Comments` section format:** entries are `### <iso> · <source>` headings followed by body lines. The section is rebuilt in normalized form on every comment append; the head (everything above it) is preserved verbatim. `updatedAt` is bumped by the append.
+- **`blockedBy` is stored, `blocked` is derived.** A file records the identifiers it waits on; whether it still waits is computed on every scan from those identifiers' current states, and never written back. A blocker counts while its file exists and its state is neither `done` nor `canceled`; an identifier with no file behind it blocks nothing, and an issue never counts itself. `persist` recomputes the whole project after a write, so a state change settles or revives the issues waiting on it.
+- **`feature` is a free-form grouping slug.** The file format does not validate it, `list` narrows on exact equality, and no derived state depends on it. `list` also reports `facets.feature` — every slug in the container — so a consumer's filter options survive its own filter.
+- **`feature` and `blockedBy` are writable through the API.** `items/create` and `items/edit` forward them when the body carries the key (an absent key leaves the stored value alone, `null`/`[]` clears it), so the board's form and an agent end up in the same place. The descriptor's `feature`/`blockers` bits say which trackers have the fields; `readListOptions` passes `feature` through without a gate.
+- **Search covers what the row shows:** identifier, title, body, file name, the grouping slug and every label, plus the pasted-file-name shortcut.
 
 ## Decisions
+
+### Why `blocked` is derived instead of stored
+
+The frontmatter holds one direction of the relation, `blockedBy`. Storing the blocked flag too would need every writer (the board, an agent, a hand edit) to update the issues that wait whenever a blocker changes state, which is exactly the coordination the file format avoids. Deriving it costs one in-memory pass over a project's parsed issues per scan, and it cannot disagree with the files.
+
+### Why the feature filter has a capability bit and its own facets
+
+`capabilities.feature` says whether a tracker's items carry a grouping slug at all, which is what a form needs to know before offering the field; the values themselves are data, so the filter is offered only when `list` reports at least one slug.
+
+Those options come from `facets`, counted over the whole container rather than the returned page: read off the items that came back, the options would be narrowed by the filter in force, leaving the chosen slug as the only one selectable until the filter was cleared. Counting them costs one more pass over issues already parsed for the list.
+
+### Why the search also matches the file name
+
+FR-4 asks for a pasted file path to reach its issue. A path or file name (`LOCAL-7-fix-login.md`, `.issues/LOCAL-7-fix-login.md`) is recognized by its last path segment and resolved to its identifier, which keeps a pasted name exact; the file name and slug are in the searchable text as well, so a partial name finds the issue too.
 
 ### Why the settings reader is injected instead of imported
 

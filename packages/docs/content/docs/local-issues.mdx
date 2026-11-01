@@ -15,15 +15,26 @@ Issues sit in `.issues/` inside the project by default. A project can use anothe
 
 Open the [Issues and PRs board](/issues-and-prs/) and switch to the **Local** tab to see a project's issues. The tab is per project, like the rest of the board.
 
-The preview shows the description, the priority, the labels and the comments. File paths in a description, such as `src/auth.ts:42`, render as links that open the file at that line.
+The search matches titles, identifiers, descriptions, the grouping slug and labels. Pasting an issue file name or path, such as `.issues/LOCAL-7-fix-login.md`, opens that issue. The filter beside the search narrows the list by state and priority, and by grouping slug where the issues carry one: the menu lists every slug in the project, not only those of the issues already shown, so you can switch from one grouping to another without clearing the filter first.
+
+The preview shows the description, the priority, the labels and the comments. File paths in a description, such as `src/auth.ts:42`, render as links that open the file at that line. An issue with a `feature` value shows it, and one whose `blockedBy` still holds an open blocker shows **Blocked by** with the identifiers it waits on, each opening that issue; the list marks such a row **Blocked**.
 
 From the preview you can:
 
-- **Create an issue** with a title, a description, a priority and labels. The board picks the next free `LOCAL-<n>` number and creates the file.
-- **Edit** the title, description, priority and labels of an issue.
+- **Create an issue** with a title, a description, a priority, labels, a grouping slug and the issues it waits on. The board picks the next free `LOCAL-<n>` number and creates the file.
+- **Edit** the title, description, priority, labels, grouping slug and blockers of an issue.
 - **Change the state** from the status pill. The six states are `triage`, `backlog`, `todo`, `in-progress`, `done` and `canceled`.
 
 Every change the board makes lands in the file right away, and a file you edit in your own editor shows up on the board on the next scan.
+
+## Grouping and blockers
+
+Two optional frontmatter fields group issues and order the work:
+
+- `feature: login` puts an issue under a grouping slug. The board filters by the slugs its issues carry, offers them in the filter menu, and shows the slug in the preview.
+- `blockedBy: [LOCAL-4, LOCAL-6]` names the issues this one waits on. The issue counts as blocked while any of them is neither `done` nor `canceled`, and stops being blocked by itself when the last one settles; nothing is written to the waiting issue.
+
+An identifier with no file behind it blocks nothing, and an issue never blocks itself. Both fields can be set and cleared from the board's create and edit dialogs, and by an agent editing the file.
 
 ## Session comments
 

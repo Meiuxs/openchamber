@@ -11,6 +11,7 @@ import * as React from 'react';
 import { handleDropdownNavigationKey } from '@/components/ui/dropdown-navigation';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useMinuteTickerNow } from '@/hooks/useDurationTicker';
+import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import type { ChangeRequestListStatus, RepositoryReference, RepositoryReferenceKind, RepositoryReferenceFilter } from '@/lib/api/types';
 import { isIMECompositionEvent } from '@/lib/ime';
 import { useSourceControlProvider, useSourceControlProviderRegistry } from '@/lib/source-control/providers/registry';
@@ -53,6 +54,7 @@ const NO_DIRECTORIES: readonly string[] = [];
 const NO_ACROSS_ITEMS: AcrossReference[] = [];
 const NO_ITEMS: ReadonlyMap<string, ReferencePickerItem> = new Map();
 const NO_FOLLOWED: TrackedItem[] = [];
+const NO_FEATURES: readonly string[] = [];
 const SEARCH_DEBOUNCE_MS = 300;
 const DETAIL_DEBOUNCE_MS = 250;
 
@@ -94,6 +96,7 @@ export function useReferenceBrowser({
     onScreen = true,
 }: ReferenceBrowserOptions) {
     const [chosenRepositoryKind, setRepositoryKind] = React.useState<RepositoryReferenceKind>(initialGitHubKind ?? lastRepositoryKind);
+    const { trackers } = useRuntimeAPIs();
     const [chosenRepositoryFilter, setRepositoryFilter] = React.useState<RepositoryReferenceFilter>(lastRepositoryFilter.get(initialGitHubKind ?? lastRepositoryKind) ?? DEFAULT_REPOSITORY_FILTER);
     const tracker = trackerOfSource(source);
     const trackerDescriptor = useTrackerDescriptor(tracker);
@@ -106,6 +109,7 @@ export function useReferenceBrowser({
         state: trackerDescriptor.stateFilters.includes(rememberedFilter.state) ? rememberedFilter.state : DEFAULT_TRACKER_FILTER.state,
         people: trackerDescriptor.capabilities.filters.people ? rememberedFilter.people : DEFAULT_TRACKER_FILTER.people,
         priority: trackerDescriptor.capabilities.filters.priority ? rememberedFilter.priority : DEFAULT_TRACKER_FILTER.priority,
+        feature: rememberedFilter.feature ?? DEFAULT_TRACKER_FILTER.feature,
     }), [rememberedFilter, trackerDescriptor]);
     const [query, setQueryState] = React.useState('');
     const debouncedQuery = useDebouncedValue(query, SEARCH_DEBOUNCE_MS);
@@ -195,6 +199,10 @@ export function useReferenceBrowser({
         if (across) return acrossList.items.map((reference) => ({ source: 'repository', reference, directory: reference.directory }));
         return repositoryList.items.map((reference) => ({ source: 'repository', reference }));
     }, [across, acrossList.items, repositoryList.items, trackerList.items, tracker]);
+    // The slugs the feature filter offers come from the source, which counts
+    // them over the whole container: taken from the rows on screen they would
+    // narrow to the slug in force, leaving no way to switch without a reset.
+    const trackerFeatures = trackerList.facets?.feature ?? NO_FEATURES;
 
     // An item opened from the preview (a tracker item's parent or child): it can be
     // highlighted while the list does not hold it, like a pinned one.
@@ -300,6 +308,28 @@ export function useReferenceBrowser({
         showItem(referencePickerItemKey(item));
     };
 
+    /**
+     * Previews an item named only by its identifier, as a blocker is. A row the
+     * list holds opens at once; one the filter hides is read from the tracker,
+     * and when the tracker cannot resolve it either the search is set to the
+     * identifier, which is what the user would have typed.
+     */
+    const openTrackerIdentifier = async (identifier: string) => {
+        if (!tracker) return;
+        const wanted = identifier.trim().toLowerCase();
+        const shown = trackerList.items.find((item) => item.identifier.toLowerCase() === wanted);
+        if (shown) {
+            openItem({ source: 'tracker', provider: tracker, item: shown });
+            return;
+        }
+        const read = await trackers?.get(tracker, identifier.trim()).catch(() => null);
+        if (read && read.connected && read.item) {
+            openItem({ source: 'tracker', provider: tracker, item: read.item });
+            return;
+        }
+        setQuery(identifier);
+    };
+
     return {
         source,
         directory,
@@ -318,6 +348,8 @@ export function useReferenceBrowser({
         tracker,
         trackerDescriptor,
         trackerFilter,
+        /** Every grouping slug the tracker's container holds; empty when it groups nothing. */
+        trackerFeatures,
         query,
         debouncedQuery,
         setQuery,
@@ -344,6 +376,8 @@ export function useReferenceBrowser({
         handleNavigationKey,
         showItem,
         openItem,
+        /** Opens an item named by identifier only (a blocker), reading it when the list does not hold it. */
+        openTrackerIdentifier,
     };
 }
 

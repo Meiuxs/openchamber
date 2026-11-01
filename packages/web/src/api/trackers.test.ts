@@ -111,15 +111,48 @@ describe('web trackers: the neutral routes', () => {
   it('names the tracker in every path and sends the list filters as asked', async () => {
     trackerServer(() => Response.json({ connected: true, items: [neutralItem, { id: 'broken' }], cursor: 'c2', hasMore: true }));
     const api = createWebTrackerAPI({ fetch: fetchMock });
-    const result = await api.list('linear', { query: ' login ', state: 'in-progress', people: 'me', priority: 'high', containerId: 'team-eng' });
-    expect(lastPath()).toBe('/api/tracker/linear/items/list?query=login&state=in-progress&people=me&priority=high&containerId=team-eng');
+    const result = await api.list('linear', { query: ' login ', state: 'in-progress', people: 'me', priority: 'high', feature: 'auth', containerId: 'team-eng' });
+    expect(lastPath()).toBe('/api/tracker/linear/items/list?query=login&state=in-progress&people=me&priority=high&feature=auth&containerId=team-eng');
     // One malformed item is dropped, never the list; label colours read as `#rrggbb`.
     expect(result).toEqual({
       connected: true,
-      items: [{ ...neutralItem, labels: [{ id: 'l1', name: 'Bug', color: '#eb5757' }] }],
+      // A tracker that sends no slug reads as "no grouping", not as a missing field.
+      items: [{ ...neutralItem, feature: null, labels: [{ id: 'l1', name: 'Bug', color: '#eb5757' }] }],
       cursor: 'c2',
       hasMore: true,
     });
+  });
+
+  it('keeps the grouping slug and the derived blocked flag the tracker reports', async () => {
+    trackerServer(() => Response.json({
+      connected: true,
+      items: [{ ...neutralItem, feature: 'auth', blockedBy: ['LOCAL-2'], blocked: true }, { ...neutralItem, feature: null }],
+    }));
+    const result = await createWebTrackerAPI({ fetch: fetchMock }).list('local', {});
+    if (!result.connected) throw new Error('expected a list');
+    expect(result.items[0]).toMatchObject({ feature: 'auth', blockedBy: ['LOCAL-2'], blocked: true });
+    // A `null` slug reads as "no grouping"; a tracker that has no blockers and no
+    // flag sends neither, so the board's badge stays off rather than reading `[]`.
+    expect(result.items[1].feature).toBeNull();
+    expect(result.items[1].blockedBy).toBeUndefined();
+    expect(result.items[1].blocked).toBeUndefined();
+  });
+
+  it('keeps the filter facets the tracker reports, and none where it reports none', async () => {
+    trackerServer(() => Response.json({
+      connected: true,
+      items: [neutralItem],
+      facets: { feature: ['auth', 'billing'] },
+    }));
+    const withFacets = await createWebTrackerAPI({ fetch: fetchMock }).list('local', {});
+    if (!withFacets.connected) throw new Error('expected a list');
+    expect(withFacets.facets).toEqual({ feature: ['auth', 'billing'] });
+
+    // A tracker without facets sends none: the menu then has no grouping group.
+    trackerServer(() => Response.json({ connected: true, items: [neutralItem] }));
+    const withoutFacets = await createWebTrackerAPI({ fetch: fetchMock }).list('linear', {});
+    if (!withoutFacets.connected) throw new Error('expected a list');
+    expect(withoutFacets.facets).toBeUndefined();
   });
 
   it('reads an item with its comments and children', async () => {

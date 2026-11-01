@@ -14,3 +14,4 @@ Rules:
 4. Code references: when a session fixed something, append the touched file paths (with `:line` when useful) to the issue body so the UI can link them.
 5. Never rename files: the identifier in the name is permanent.
 6. Comments: the board appends entries under a `## Comments` heading as `### <ISO> · <source>` sections. When you edit an issue body, keep that heading and every entry under it unchanged.
+7. Grouping and blockers: `feature` is a slug shared by related issues (`login`), `blockedBy` lists the identifiers an issue waits on. Set them when the work needs them and keep the existing values when you edit anything else. The board decides whether an issue is still blocked from the states of the issues it names, so settling a blocker needs no change to the issues waiting on it.

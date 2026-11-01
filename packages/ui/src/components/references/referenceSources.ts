@@ -399,9 +399,9 @@ export function useTrackerReferenceList(options: {
     const account = useTrackerAccount(provider);
     const containerId = options.containerId ?? null;
     const text = query.trim();
-    const { state, people, priority } = filter;
+    const { state, people, priority, feature } = filter;
     const key = enabled && trackers && provider
-        ? JSON.stringify([getRuntimeKey(), provider, account, state, people, priority, text, containerId])
+        ? JSON.stringify([getRuntimeKey(), provider, account, state, people, priority, feature, text, containerId])
         : null;
     const fetchPage = React.useCallback(async (cursor: string | null): Promise<ListPage<TrackerItemSummary>> => {
         if (!trackers || !provider) return { kind: 'unavailable', reason: 'disconnected' };
@@ -412,11 +412,12 @@ export function useTrackerReferenceList(options: {
             // A filter left at its default is not sent, so a tracker without it still lists.
             people: people === 'any' ? undefined : people,
             priority: priority === 'all' ? undefined : priority,
+            feature: feature ?? undefined,
             containerId,
         });
         if (result.connected === false) return { kind: 'unavailable', reason: 'disconnected' };
-        return { kind: 'page', items: result.items, cursor: result.cursor, hasMore: result.hasMore };
-    }, [containerId, people, priority, provider, state, text, trackers]);
+        return { kind: 'page', items: result.items, cursor: result.cursor, hasMore: result.hasMore, facets: result.facets };
+    }, [containerId, feature, people, priority, provider, state, text, trackers]);
     const list = useCachedList(trackerLists, key, fetchPage);
     const live = useLiveTrackerItems(list.items, list.pageReads);
     return { ...list, items: live.items, followed: live.followed };

@@ -295,6 +295,19 @@ describe('tracker routes', () => {
     await request(full).post('/api/tracker/full/items/edit').send({ id: 'ENG-12', title: 'Renamed' }).expect(200);
     expect(tracker.edit).toHaveBeenLastCalledWith({ id: 'ENG-12', title: 'Renamed' });
 
+    // The grouping slug and blockers are forwarded when named, identifiers
+    // normalized: trimmed, upper-cased and deduped like the items they point at.
+    await request(full)
+      .post('/api/tracker/full/items/create')
+      .send({ title: 'Blocked', containerId: 'team-1', feature: ' auth ', blockedBy: ['local-2', ' LOCAL-2 ', 'LOCAL-3', 7] })
+      .expect(200);
+    expect(tracker.create).toHaveBeenLastCalledWith({
+      containerId: 'team-1', title: 'Blocked', description: null, priority: null, labels: [],
+      feature: 'auth', blockedBy: ['LOCAL-2', 'LOCAL-3'],
+    });
+    await request(full).post('/api/tracker/full/items/edit').send({ id: 'ENG-12', feature: null, blockedBy: [] }).expect(200);
+    expect(tracker.edit).toHaveBeenLastCalledWith({ id: 'ENG-12', feature: null, blockedBy: [] });
+
     const gatedTracker = fakeTracker();
     const gated = createApp([{ descriptor: descriptorFor('gated'), load: async () => gatedTracker }]);
     await request(gated).post('/api/tracker/gated/items/create').send({ title: 'x', containerId: 't' }).expect(404);

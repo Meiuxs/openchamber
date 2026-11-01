@@ -33,6 +33,9 @@ export const LINEAR_TRACKER_DESCRIPTOR = Object.freeze({
     children: true,
     labels: true,
     priority: true,
+    // Linear projects group items, but not by a per-item slug.
+    feature: false,
+    blockers: false,
     filters: Object.freeze({ people: true, priority: true }),
     projectMapping: true,
     sessionComments: true,

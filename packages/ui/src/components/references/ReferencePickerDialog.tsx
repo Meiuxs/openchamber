@@ -181,6 +181,7 @@ function ReferencePickerSurface({
             }}
             now={browser.now}
             onOpenTrackerItem={(item) => browser.openItem({ source: 'tracker', provider: item.provider, item })}
+            onOpenTrackerIdentifier={browser.openTrackerIdentifier}
         />
     );
 

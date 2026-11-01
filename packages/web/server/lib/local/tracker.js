@@ -67,6 +67,9 @@ export const LOCAL_TRACKER_DESCRIPTOR = Object.freeze({
     children: false,
     labels: true,
     priority: true,
+    // The grouping slug a `feature` filter and the create/edit form work on.
+    feature: true,
+    blockers: true,
     filters: Object.freeze({ people: false, priority: true }),
     projectMapping: false,
     sessionComments: true,
@@ -91,7 +94,7 @@ const URL_PATTERNS = LOCAL_TRACKER_DESCRIPTOR.urlPatterns.map((pattern) => ({
  * as the descriptor's `urlPatterns`: an http(s) URL whose host (without
  * `www.`) is the pattern's host and whose path matches.
  */
-export function matchLocalUrl(value) {
+function matchLocalUrl(value) {
   const raw = isString(value) ? value.trim() : '';
   if (!raw || !URL.canParse(raw)) return null;
   const url = new URL(raw);
@@ -126,6 +129,11 @@ function toTrackerItemSummary(issue, container) {
     labels: issue.labels.map((name, index) => ({ id: `label-${index}`, name, color: null })),
     assignee: null,
     container: toContainer(container),
+    // The grouping slug and the blockers the file records, plus the derived
+    // flag: a consumer cannot resolve a blocker's state on its own.
+    feature: issue.feature ?? null,
+    blockedBy: issue.blockedBy,
+    blocked: issue.blocked === true,
     updatedAt: issue.updatedAt ?? null,
   };
 }
@@ -291,6 +299,9 @@ export function createLocalTracker({ listProjects }) {
         items: result.issues.map((issue) => toTrackerItemSummary(issue, result.containerByIssue.get(issue.containerId))),
         cursor: result.cursor,
         hasMore: result.hasMore,
+        // Every slug in the container, not only those the page holds: the
+        // filter offers these as options, so they must survive the filter.
+        facets: { feature: result.features },
       };
     },
 
@@ -306,17 +317,19 @@ export function createLocalTracker({ listProjects }) {
       return { connected: true, item: toTrackerItemSummary(issue, await containerOfIssue(issue)) };
     },
 
-    create: async ({ containerId, title, description, priority, labels }) => {
+    create: async ({ containerId, title, description, priority, labels, feature, blockedBy }) => {
       const issue = await scanner.create(containerId, {
         title: toSingleLine(title),
         description,
         priority: normalizePriority(priority),
         labels: toSingleLineLabels(labels),
+        feature: toSingleLine(feature),
+        blockedBy: toSingleLineLabels(blockedBy),
       });
       return { connected: true, item: toTrackerItemSummary(issue, await containerOfIssue(issue)) };
     },
 
-    edit: async ({ id, title, description, priority, labels }) => {
+    edit: async ({ id, title, description, priority, labels, feature, blockedBy }) => {
       // Only the fields the caller carries are forwarded; an absent field
       // leaves the stored value alone, an explicit value replaces it.
       const patch = {};
@@ -324,6 +337,8 @@ export function createLocalTracker({ listProjects }) {
       if (description !== undefined) patch.description = description;
       if (priority !== undefined) patch.priority = normalizePriority(priority);
       if (labels !== undefined) patch.labels = toSingleLineLabels(labels);
+      if (feature !== undefined) patch.feature = toSingleLine(feature);
+      if (blockedBy !== undefined) patch.blockedBy = toSingleLineLabels(blockedBy);
       const issue = await scanner.edit(id, patch);
       return { connected: true, item: toTrackerItemSummary(issue, await containerOfIssue(issue)) };
     },

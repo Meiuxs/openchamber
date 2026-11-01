@@ -43,14 +43,16 @@ export type ReferencePickerSelection =
     | { source: 'repository'; reference: RepositoryReference; includeDiff: boolean }
     | { source: 'tracker'; provider: string; item: TrackerItemSummary };
 
-/** Tracker lists combine a state filter (one of the descriptor's), whose items, and a priority. */
+/** Tracker lists combine a state filter (one of the descriptor's), whose items, a priority, and one grouping slug. */
 export type TrackerReferenceFilter = {
     state: string;
     people: TrackerPeopleFilter;
     priority: TrackerPriorityFilter;
+    /** A feature slug the list narrows to; null shows every one. */
+    feature: string | null;
 };
 
-export const DEFAULT_TRACKER_FILTER: TrackerReferenceFilter = { state: 'open', people: 'any', priority: 'all' };
+export const DEFAULT_TRACKER_FILTER: TrackerReferenceFilter = { state: 'open', people: 'any', priority: 'all', feature: null };
 
 /** How the item's provider writes its number: `#12` for an issue, a discussion or a pull request, `!12` for a merge request. */
 export const referenceNumberLabel = (reference: RepositoryReference, descriptor: SourceControlProviderDescriptor): string => (

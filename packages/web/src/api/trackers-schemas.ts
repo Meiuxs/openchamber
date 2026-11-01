@@ -101,6 +101,12 @@ const summaryObject = z.object({
   labels: listOf(z.object({ id: text, name: text, color: labelColor })).optional(),
   parent: relatedSchema.nullish().catch(null),
   progress: progressSchema.optional(),
+  // A tracker with no grouping reads as `null`, the value the board treats as
+  // "no slug"; blockers and the derived flag stay absent for a tracker that has
+  // neither, and a malformed one reads as absent instead of dropping the item.
+  feature: optionalText.optional(),
+  blockedBy: listOf(text).optional(),
+  blocked: z.boolean().nullish().catch(null).transform((value) => value ?? undefined),
 });
 const summarySchema: z.ZodType<TrackerItemSummary> = summaryObject;
 
@@ -120,6 +126,12 @@ const itemSchema: z.ZodType<TrackerItem> = summaryObject.extend({
 
 export const disconnected = z.object({ connected: z.literal(false) }).transform(() => ({ connected: false as const }));
 
+// A tracker with no facets sends none: absent stays absent, so its filter menu
+// has no group rather than an empty one.
+const facetsSchema = z.object({
+  feature: listOf(text).nullish().catch(null).transform((value) => value ?? undefined),
+}).nullish().catch(null).transform((value) => value ?? undefined);
+
 export const listResultSchema: z.ZodType<TrackerListResult> = z.union([
   disconnected,
   z.object({
@@ -127,6 +139,7 @@ export const listResultSchema: z.ZodType<TrackerListResult> = z.union([
     items: listOf(summarySchema),
     cursor: optionalText,
     hasMore: z.boolean().catch(false),
+    facets: facetsSchema,
   }),
 ]);
 

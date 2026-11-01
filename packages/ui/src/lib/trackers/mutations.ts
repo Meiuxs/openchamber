@@ -37,6 +37,10 @@ const itemSchema = z.object({
     .nullish()
     .catch(undefined)
     .transform((labels) => labels ?? undefined),
+  // Kept so a surface that lists the item straight from the answer shows the
+  // grouping and the blockers it just wrote, before its next read.
+  feature: optionalText,
+  blockedBy: z.array(text).nullish().catch(null).transform((identifiers) => identifiers ?? undefined),
 }) satisfies z.ZodType<TrackerItem>;
 
 const errorSchema = z.object({ error: z.string() });

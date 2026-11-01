@@ -38,6 +38,12 @@ export type TrackerItemSummary = {
   container?: TrackerContainer | null;
   parent?: TrackerItemSummary | null;
   progress?: TrackerProgress | null;
+  /** The identifiers this item waits on (Local: the `blockedBy` frontmatter field). */
+  blockedBy?: string[];
+  /** At least one blocker is neither done nor canceled; the provider computes it. */
+  blocked?: boolean;
+  /** The provider's grouping slug; Local reads it from the `feature` frontmatter field. */
+  feature?: string | null;
   updatedAt?: string | null;
 };
 
@@ -59,6 +65,16 @@ export type TrackerWorkflowState = { id: string; name: string; category: Tracker
 export type TrackerPeopleFilter = 'any' | 'me' | 'created';
 export type TrackerPriorityFilter = 'all' | TrackerPriority;
 
+/**
+ * The values a list offers as filter options, computed over the whole scope the
+ * list reads rather than over the page it returns: options narrowed by the
+ * filter in force would leave the chosen one as the only one pickable.
+ */
+export type TrackerListFacets = {
+  /** Every grouping slug in scope; the values `TrackerListOptions.feature` accepts. */
+  feature?: string[];
+};
+
 export type TrackerListOptions = {
   query?: string;
   cursor?: string;
@@ -66,6 +82,8 @@ export type TrackerListOptions = {
   state?: string;
   people?: TrackerPeopleFilter;
   priority?: TrackerPriorityFilter;
+  /** One grouping slug's items (Local: `feature`); every item's when absent. */
+  feature?: string;
   /** One container's items (a Linear team); every container's when absent. */
   containerId?: string | null;
 };
@@ -87,7 +105,7 @@ export type TrackerAuthStart = { authorizationUrl: string; expiresIn: number };
 
 type Connected<T> = { connected: false } | ({ connected: true } & T);
 
-export type TrackerListResult = Connected<{ items: TrackerItemSummary[]; cursor: string | null; hasMore: boolean }>;
+export type TrackerListResult = Connected<{ items: TrackerItemSummary[]; cursor: string | null; hasMore: boolean; facets?: TrackerListFacets }>;
 export type TrackerItemResult = Connected<{ item: TrackerItem | null }>;
 export type TrackerStatesResult = Connected<{ states: TrackerWorkflowState[] }>;
 export type TrackerStateUpdateInput = { id: string; stateId: string };
@@ -99,6 +117,10 @@ export type TrackerCreateItemInput = {
   description?: string | null;
   priority?: TrackerPriority | null;
   labels?: string[];
+  /** Grouping slug; a tracker whose `feature` capability is off ignores it. */
+  feature?: string | null;
+  /** Identifiers of the items this one waits on. */
+  blockedBy?: string[];
 };
 
 /**
@@ -112,6 +134,10 @@ export type TrackerEditItemInput = {
   description?: string | null;
   priority?: TrackerPriority | null;
   labels?: string[];
+  /** An explicit `null` clears the slug. */
+  feature?: string | null;
+  /** Replaces the whole list; `[]` clears it. */
+  blockedBy?: string[];
 };
 
 export type TrackerAuthMethod = 'oauth' | 'token';
@@ -131,6 +157,10 @@ export type TrackerDescriptor = {
     children: boolean;
     labels: boolean;
     priority: boolean;
+    /** Items carry a grouping slug (`feature`), so filters and forms can offer one. */
+    feature: boolean;
+    /** Items wait on others by identifier (`blockedBy`), so a form can offer the field. */
+    blockers: boolean;
     filters: { people: boolean; priority: boolean };
     /** Container to OpenChamber project mapping (Linear: team). */
     projectMapping: boolean;

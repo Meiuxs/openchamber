@@ -728,6 +728,30 @@ const RelatedTrackerItem: React.FC<{
     );
 };
 
+/**
+ * The identifiers an item waits on, each opening its blocker where the surface
+ * can preview one; plain text otherwise, like a parent or child.
+ */
+const BlockerIdentifiers: React.FC<{
+    identifiers: readonly string[];
+    onOpen?: (identifier: string) => void;
+}> = ({ identifiers, onOpen }) => (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        {identifiers.map((identifier) => (onOpen ? (
+            <button
+                key={identifier}
+                type="button"
+                onClick={() => onOpen(identifier)}
+                className="rounded-sm font-mono outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            >
+                {identifier}
+            </button>
+        ) : (
+            <span key={identifier} className="font-mono">{identifier}</span>
+        )))}
+    </span>
+);
+
 /** A tracker item's children, finished of all, in the tracker's order. */
 const SubIssuesSection: React.FC<{
     issue: TrackerItem;
@@ -775,7 +799,9 @@ const TrackerPreview: React.FC<{
     footer?: React.ReactNode;
     stateControl?: React.ReactNode;
     onOpenIssue?: (issue: TrackerItemSummary) => void;
-}> = ({ issue, detail, purpose, pinned, now, footer: footerOverride, stateControl, onOpenIssue }) => {
+    /** Opens a blocker by identifier; without it blockers are plain text. */
+    onOpenIdentifier?: (identifier: string) => void;
+}> = ({ issue, detail, purpose, pinned, now, footer: footerOverride, stateControl, onOpenIssue, onOpenIdentifier }) => {
     const { t } = useI18n();
     const relative = useRelative(now);
     const descriptor = useTrackerDescriptor(issue.provider);
@@ -845,6 +871,14 @@ const TrackerPreview: React.FC<{
                     {capabilities.priority && issue.priority && issue.priority !== 'none' ? (
                         <MetaRow label={t('references.picker.preview.priority')}>{t(TRACKER_PRIORITY_KEYS[issue.priority])}</MetaRow>
                     ) : null}
+                    {issue.feature ? (
+                        <MetaRow label={t('references.picker.preview.feature')}>{issue.feature}</MetaRow>
+                    ) : null}
+                    {issue.blocked ? (
+                        <MetaRow label={t('references.picker.preview.blockedBy')}>
+                            <BlockerIdentifiers identifiers={issue.blockedBy ?? []} onOpen={onOpenIdentifier} />
+                        </MetaRow>
+                    ) : null}
                     {updated ? <MetaRow label={t('references.picker.preview.updated')}>{updated}</MetaRow> : null}
                     {labels.length > 0 ? (
                         <MetaRow label={t('references.picker.preview.labels')}><ReferenceLabelChips labels={labels} /></MetaRow>
@@ -906,6 +940,8 @@ export const ReferencePreview: React.FC<{
     stateMenu?: React.ReactNode;
     /** Previews a tracker item's parent or child; without it they are plain text. */
     onOpenTrackerItem?: (item: TrackerItemSummary) => void;
+    /** Opens a blocker named only by its identifier; without it blockers are plain text. */
+    onOpenTrackerIdentifier?: (identifier: string) => void;
     /** Reads an issue or PR again from its host, past every cached answer; settles when the reads are asked. */
     onRefresh?: () => Promise<void>;
     /** Answer and resolve a PR's review threads, or answer a discussion's comments and choose its answer; without it they are read only. */
@@ -914,7 +950,7 @@ export const ReferencePreview: React.FC<{
     onOpenStackLayer?: (layer: PullRequestStackLayer) => void;
     /** A change's revisions to pick the shown one from, where the host keeps revisions. */
     revisionChoice?: RevisionChoice;
-}> = ({ item, directory, pullStatus, trackerDetail, repositoryDetail, purpose, pinned, includeDiff, onIncludeDiffChange, now, footer, pullLinks, trackerStateControl, reply, labelsControl, reviewersControl, onOpenChecks, commentAttachments, stateMenu, onOpenTrackerItem, onRefresh, threadActions, onOpenStackLayer, revisionChoice }) => {
+}> = ({ item, directory, pullStatus, trackerDetail, repositoryDetail, purpose, pinned, includeDiff, onIncludeDiffChange, now, footer, pullLinks, trackerStateControl, reply, labelsControl, reviewersControl, onOpenChecks, commentAttachments, stateMenu, onOpenTrackerItem, onOpenTrackerIdentifier, onRefresh, threadActions, onOpenStackLayer, revisionChoice }) => {
     const { t } = useI18n();
     const rewriteMarkdown = useProjectUploadRewrite(directory, item?.source === 'repository' ? item.reference : null);
     const links = useReferenceLinks(directory, item?.source === 'repository' ? item.reference : null);
@@ -926,7 +962,7 @@ export const ReferencePreview: React.FC<{
         );
     }
     if (item.source === 'tracker') {
-        return <TrackerPreview issue={item.item} detail={trackerDetail} purpose={purpose} pinned={pinned} now={now} footer={footer} stateControl={trackerStateControl} onOpenIssue={onOpenTrackerItem} />;
+        return <TrackerPreview issue={item.item} detail={trackerDetail} purpose={purpose} pinned={pinned} now={now} footer={footer} stateControl={trackerStateControl} onOpenIssue={onOpenTrackerItem} onOpenIdentifier={onOpenTrackerIdentifier} />;
     }
     return (
         <ReferenceMarkdownRewriteContext.Provider value={rewriteMarkdown}>

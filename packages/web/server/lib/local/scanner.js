@@ -17,6 +17,8 @@ const PAGE_SIZE = 100;
 const CREATE_MAX_RETRIES = 3;
 const DEFAULT_ISSUES_DIR = '.issues';
 const OPEN_EXCLUDED = new Set(['done', 'canceled']);
+// A blocker in one of these states no longer blocks the issues waiting on it.
+const SETTLED_STATES = new Set(['done', 'canceled']);
 const DEFAULT_STATE = 'triage';
 
 // Per-project scan cache: parsed files are reused while `mtimeMs`/`size` are
@@ -136,6 +138,7 @@ const scanProject = (project) => {
     seen.add(identifier);
     issues.set(identifier, { issue: toIssueView(project, parsed), fileName });
   }
+  applyBlocked(issues);
   cache.issues = issues;
   return [...issues.values()]
     .sort((a, b) => a.issue.number - b.issue.number)
@@ -171,9 +174,57 @@ const matchesPriority = (issuePriority, filter) => {
   return issuePriority === filter;
 };
 
+// A `feature` filter narrows to that grouping slug; absent matches every issue.
+const matchesFeature = (issueFeature, filter) => !filter || issueFeature === filter;
+
+// A blocker keeps blocking while its file exists and its state is neither done
+// nor canceled. An identifier with no file behind it (deleted, renamed, a typo
+// in the frontmatter) blocks nothing, and an issue never blocks itself: either
+// would leave the issue blocked with nothing left to settle.
+const blocks = (identifier, issues) => {
+  const blocker = issues.get(identifier);
+  return Boolean(blocker) && !SETTLED_STATES.has(blocker.issue.state);
+};
+
+// `blocked` is derived on every scan from the project's own files and never
+// stored: the frontmatter keeps `blockedBy`, the blockers' states decide
+// whether it still counts, and one write to a blocker settles every issue
+// waiting on it without touching their files.
+const applyBlocked = (issues) => {
+  for (const { issue } of issues.values()) {
+    issue.blocked = issue.blockedBy.some((identifier) => (
+      identifier !== issue.identifier && blocks(identifier, issues)
+    ));
+  }
+};
+
+// A pasted file name or path (`LOCAL-7-fix-login.md`,
+// `.issues/LOCAL-7-fix-login.md`) names one issue: its last path segment
+// carries the identifier that the searchable text only holds as `local-7 ...`.
+const PASTED_FILE_NAME = /(?:^|[\\/])LOCAL-(\d{1,6})[^\\/]*\.md$/i;
+
+const pastedIdentifier = (query) => {
+  const match = PASTED_FILE_NAME.exec(query);
+  return match ? `local-${Number.parseInt(match[1], 10)}` : null;
+};
+
+// Everything an issue says about itself is searchable, including the grouping
+// slug and the labels: they are shown on the row, so a search that ignored
+// them would return nothing for text the list visibly holds.
+const searchableText = (issue) => [
+  issue.identifier,
+  issue.title,
+  issue.body,
+  issue.fileName,
+  issue.feature ?? '',
+  ...issue.labels,
+].join(' ').toLowerCase();
+
 const matchesQuery = (issue, query) => {
   if (!query) return true;
-  return `${issue.identifier} ${issue.title} ${issue.body}`.toLowerCase().includes(query);
+  const pasted = pastedIdentifier(query);
+  if (pasted) return issue.identifier.toLowerCase() === pasted;
+  return searchableText(issue).includes(query);
 };
 
 const createLocalScanner = ({ listProjects }) => {
@@ -185,6 +236,7 @@ const createLocalScanner = ({ listProjects }) => {
   const list = async (options = {}) => {
     const stateFilter = isString(options.state) ? options.state : null;
     const priorityFilter = isString(options.priority) ? options.priority : null;
+    const featureFilter = isString(options.feature) && options.feature ? options.feature : null;
     const query = isString(options.query) && options.query.trim() ? options.query.trim().toLowerCase() : null;
     const containerId = isString(options.containerId) && options.containerId ? options.containerId : null;
 
@@ -194,13 +246,19 @@ const createLocalScanner = ({ listProjects }) => {
     // container via `containerByIssue.get(issue.containerId)`.
     const containerByIssue = new Map();
     const filtered = [];
+    // Slugs the feature filter offers: gathered from every issue of the
+    // container, not from the filtered page, since options narrowed by the
+    // filter in force would leave the chosen slug as the only one pickable.
+    const features = new Set();
     for (const { project, issues } of await scanAll()) {
       if (containerId && project.id !== containerId) continue;
       const container = containerOf(project);
       containerByIssue.set(project.id, container);
       for (const issue of issues) {
+        if (issue.feature) features.add(issue.feature);
         if (!matchesState(issue.state, stateFilter)) continue;
         if (!matchesPriority(issue.priority, priorityFilter)) continue;
+        if (!matchesFeature(issue.feature, featureFilter)) continue;
         if (!matchesQuery(issue, query)) continue;
         filtered.push(issue);
       }
@@ -211,6 +269,7 @@ const createLocalScanner = ({ listProjects }) => {
     return {
       issues: filtered.slice(offset, offset + PAGE_SIZE),
       containerByIssue,
+      features: [...features].sort((a, b) => a.localeCompare(b)),
       cursor: hasMore
         ? Buffer.from(JSON.stringify({ offset: offset + PAGE_SIZE })).toString('base64')
         : null,
@@ -246,6 +305,9 @@ const createLocalScanner = ({ listProjects }) => {
     cache.files.set(parsed.fileName, { mtimeMs: stat.mtimeMs, size: stat.size, parsed });
     const issue = toIssueView(project, parsed);
     cache.issues.set(parsed.identifier, { issue, fileName: parsed.fileName });
+    // A state write settles or revives the issues waiting on this one, so the
+    // whole project's derived flags are recomputed, not just this issue's.
+    applyBlocked(cache.issues);
     return issue;
   };
 
@@ -284,6 +346,8 @@ const createLocalScanner = ({ listProjects }) => {
     if (patch.title !== undefined) fieldsPatch.title = patch.title;
     if (patch.priority !== undefined) fieldsPatch.priority = patch.priority ?? null;
     if (patch.labels !== undefined) fieldsPatch.labels = asStringArray(patch.labels);
+    if (patch.feature !== undefined) fieldsPatch.feature = asString(patch.feature);
+    if (patch.blockedBy !== undefined) fieldsPatch.blockedBy = asStringArray(patch.blockedBy);
     let next = setFields(parsed, fieldsPatch);
     if (patch.description !== undefined) {
       next = { ...next, body: replaceBody(next.body, patch.description) };

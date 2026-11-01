@@ -110,6 +110,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': 'Creating the issue failed.',
     'sourceBoard.tracker.edit': 'Edit issue',
     'sourceBoard.tracker.edit.failed': 'Saving the issue failed.',
+    'sourceBoard.tracker.form.feature': 'Grouping',
+    'sourceBoard.tracker.form.blockedBy': 'Blocked by',
   },
   de: {
     'sourceBoard.reply.startThread': 'Thread starten',
@@ -221,6 +223,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': 'Das Issue konnte nicht erstellt werden.',
     'sourceBoard.tracker.edit': 'Issue bearbeiten',
     'sourceBoard.tracker.edit.failed': 'Das Issue konnte nicht gespeichert werden.',
+    'sourceBoard.tracker.form.feature': 'Gruppierung',
+    'sourceBoard.tracker.form.blockedBy': 'Blockiert von',
   },
   fr: {
     'sourceBoard.reply.startThread': 'Démarrer un fil',
@@ -332,6 +336,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': 'La création de l’issue a échoué.',
     'sourceBoard.tracker.edit': 'Modifier l’issue',
     'sourceBoard.tracker.edit.failed': 'L’enregistrement de l’issue a échoué.',
+    'sourceBoard.tracker.form.feature': 'Regroupement',
+    'sourceBoard.tracker.form.blockedBy': 'Bloqué par',
   },
   nl: {
     'sourceBoard.reply.startThread': 'Thread starten',
@@ -443,6 +449,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': 'Het maken van het issue is mislukt.',
     'sourceBoard.tracker.edit': 'Issue bewerken',
     'sourceBoard.tracker.edit.failed': 'Het opslaan van het issue is mislukt.',
+    'sourceBoard.tracker.form.feature': 'Groepering',
+    'sourceBoard.tracker.form.blockedBy': 'Geblokkeerd door',
   },
   es: {
     'sourceBoard.reply.startThread': 'Iniciar hilo',
@@ -554,6 +562,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': 'No se pudo crear el issue.',
     'sourceBoard.tracker.edit': 'Editar issue',
     'sourceBoard.tracker.edit.failed': 'No se pudo guardar el issue.',
+    'sourceBoard.tracker.form.feature': 'Agrupación',
+    'sourceBoard.tracker.form.blockedBy': 'Bloqueado por',
   },
   ja: {
     'sourceBoard.reply.startThread': 'スレッドを開始',
@@ -665,6 +675,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': 'Issue を作成できませんでした。',
     'sourceBoard.tracker.edit': 'Issue を編集',
     'sourceBoard.tracker.edit.failed': 'Issue を保存できませんでした。',
+    'sourceBoard.tracker.form.feature': 'グループ',
+    'sourceBoard.tracker.form.blockedBy': 'ブロック元',
   },
   'pt-BR': {
     'sourceBoard.reply.startThread': 'Iniciar thread',
@@ -776,6 +788,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': 'Não foi possível criar a issue.',
     'sourceBoard.tracker.edit': 'Editar issue',
     'sourceBoard.tracker.edit.failed': 'Não foi possível salvar a issue.',
+    'sourceBoard.tracker.form.feature': 'Agrupamento',
+    'sourceBoard.tracker.form.blockedBy': 'Bloqueado por',
   },
   uk: {
     'sourceBoard.reply.startThread': 'Почати тред',
@@ -887,6 +901,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': 'Не вдалося створити issue.',
     'sourceBoard.tracker.edit': 'Редагувати issue',
     'sourceBoard.tracker.edit.failed': 'Не вдалося зберегти issue.',
+    'sourceBoard.tracker.form.feature': 'Групування',
+    'sourceBoard.tracker.form.blockedBy': 'Блокується через',
   },
   ko: {
     'sourceBoard.reply.startThread': '스레드 시작',
@@ -998,6 +1014,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': '이슈를 생성하지 못했습니다.',
     'sourceBoard.tracker.edit': '이슈 편집',
     'sourceBoard.tracker.edit.failed': '이슈를 저장하지 못했습니다.',
+    'sourceBoard.tracker.form.feature': '그룹',
+    'sourceBoard.tracker.form.blockedBy': '차단 원인',
   },
   pl: {
     'sourceBoard.reply.startThread': 'Rozpocznij wątek',
@@ -1109,6 +1127,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': 'Nie udało się utworzyć issue.',
     'sourceBoard.tracker.edit': 'Edytuj issue',
     'sourceBoard.tracker.edit.failed': 'Nie udało się zapisać issue.',
+    'sourceBoard.tracker.form.feature': 'Grupowanie',
+    'sourceBoard.tracker.form.blockedBy': 'Blokowane przez',
   },
   'zh-CN': {
     'sourceBoard.reply.startThread': '发起讨论串',
@@ -1220,6 +1240,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': '创建议题失败。',
     'sourceBoard.tracker.edit': '编辑议题',
     'sourceBoard.tracker.edit.failed': '保存议题失败。',
+    'sourceBoard.tracker.form.feature': '分组',
+    'sourceBoard.tracker.form.blockedBy': '被阻塞于',
   },
   'zh-TW': {
     'sourceBoard.reply.startThread': '開始討論串',
@@ -1331,6 +1353,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': '建立議題失敗。',
     'sourceBoard.tracker.edit': '編輯議題',
     'sourceBoard.tracker.edit.failed': '儲存議題失敗。',
+    'sourceBoard.tracker.form.feature': '分組',
+    'sourceBoard.tracker.form.blockedBy': '被阻塞於',
   },
   tr: {
     'sourceBoard.reply.startThread': 'Konu başlat',
@@ -1442,6 +1466,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': 'Issue oluşturulamadı.',
     'sourceBoard.tracker.edit': 'Issue’yu düzenle',
     'sourceBoard.tracker.edit.failed': 'Issue kaydedilemedi.',
+    'sourceBoard.tracker.form.feature': 'Gruplama',
+    'sourceBoard.tracker.form.blockedBy': 'Engelleyen',
   },
   ar: {
     'sourceBoard.reply.startThread': 'بدء نقاش',
@@ -1553,6 +1579,8 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': 'تعذّر إنشاء المشكلة.',
     'sourceBoard.tracker.edit': 'تعديل المشكلة',
     'sourceBoard.tracker.edit.failed': 'تعذّر حفظ المشكلة.',
+    'sourceBoard.tracker.form.feature': 'التجميع',
+    'sourceBoard.tracker.form.blockedBy': 'محظور بواسطة',
   },
   he: {
     'sourceBoard.reply.startThread': 'פתח שרשור',
@@ -1664,5 +1692,7 @@ export const sourceBoardI18n = {
     'sourceBoard.tracker.create.failed': 'לא ניתן היה ליצור את הבעיה.',
     'sourceBoard.tracker.edit': 'ערוך בעיה',
     'sourceBoard.tracker.edit.failed': 'לא ניתן היה לשמור את הבעיה.',
+    'sourceBoard.tracker.form.feature': 'קיבוץ',
+    'sourceBoard.tracker.form.blockedBy': 'חסום על ידי',
   },
 } as const;

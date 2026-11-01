@@ -63,17 +63,33 @@ export const ReferenceBrowserTabs: React.FC<{ browser: ReferenceBrowser }> = ({ 
     );
 };
 
+/** The menu's own value for "no feature filter"; a slug never contains `*`. */
+const ALL_FEATURES = '*';
+
 /**
  * Which items the list shows. Picking stays in the menu, so a tracker's parts
- * combine. A tracker offers its descriptor's state filters, and people and
- * priority where its `filters` capabilities say so.
+ * combine. A tracker offers its descriptor's state filters, people and
+ * priority where its `filters` capabilities say so, and the grouping slugs its
+ * source reports for the whole container.
  */
 const ReferenceFilterMenu: React.FC<{ browser: ReferenceBrowser }> = ({ browser }) => {
     const { t } = useI18n();
     const { source, trackerDescriptor } = browser;
-    const { state, people, priority } = browser.trackerFilter;
+    const { state, people, priority, feature } = browser.trackerFilter;
     const { filters } = trackerDescriptor.capabilities;
     const repository = browser.repositoryFilter;
+    // Slugs come from the source, which counts them over the whole container:
+    // read off the rows on screen they would narrow to the slug in force, so
+    // switching to another one would need a reset first. The chosen slug stays
+    // listed even after its last issue loses it, so the way back stays open.
+    const features = React.useMemo(() => {
+        const slugs = new Set<string>(browser.trackerFeatures);
+        if (feature) slugs.add(feature);
+        return [...slugs].sort((a, b) => a.localeCompare(b));
+    }, [browser.trackerFeatures, feature]);
+    // The summary names the slug only where the menu offers it, so the button
+    // and the menu can never disagree about which filters are in play.
+    const featureOffered = trackerDescriptor.capabilities.feature && features.length > 0;
     const summary = source === 'repository'
         ? [
             t(REPOSITORY_STATE_LABEL_KEYS[repository.state]),
@@ -83,6 +99,7 @@ const ReferenceFilterMenu: React.FC<{ browser: ReferenceBrowser }> = ({ browser 
             trackerStateFilterLabel(state, t),
             people === 'any' ? null : t(TRACKER_PEOPLE_LABEL_KEYS[people]),
             priority === 'all' ? null : t(TRACKER_PRIORITY_LABEL_KEYS[priority]),
+            featureOffered ? feature : null,
         ].filter(Boolean).join(' · ');
 
     const group = <T extends string>(
@@ -142,6 +159,18 @@ const ReferenceFilterMenu: React.FC<{ browser: ReferenceBrowser }> = ({ browser 
                             <>
                                 <DropdownMenuSeparator />
                                 {group(t('references.picker.filter.group.priority'), priority, TRACKER_PRIORITY_FILTERS, (option) => t(TRACKER_PRIORITY_LABEL_KEYS[option]), (option) => browser.selectTrackerFilter({ priority: option }))}
+                            </>
+                        ) : null}
+                        {featureOffered ? (
+                            <>
+                                <DropdownMenuSeparator />
+                                {group(
+                                    t('references.picker.filter.group.feature'),
+                                    feature ?? ALL_FEATURES,
+                                    [ALL_FEATURES, ...features],
+                                    (option) => (option === ALL_FEATURES ? t('references.picker.filter.tracker.feature.all') : option),
+                                    (option) => browser.selectTrackerFilter({ feature: option === ALL_FEATURES ? null : option }),
+                                )}
                             </>
                         ) : null}
                     </>

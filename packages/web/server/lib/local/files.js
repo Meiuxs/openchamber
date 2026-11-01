@@ -6,8 +6,6 @@ import { isString } from '../shared/guards.js';
 // a later milestone and never produced by the writer.
 export const STATES = ['triage', 'backlog', 'todo', 'in-progress', 'done', 'canceled'];
 
-export const PRIORITIES = ['urgent', 'high', 'medium', 'low'];
-
 export const ISSUE_FILE_PATTERN = /^LOCAL-(\d{1,6})-([a-z0-9-]*)\.md$/;
 
 const COMMENTS_HEADING = '## Comments';
@@ -45,7 +43,7 @@ export function issueFileName(number, slug) {
   return `LOCAL-${number}-${slug}.md`;
 }
 
-export function normalizeSource(raw) {
+function normalizeSource(raw) {
   return raw.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
 }
 
@@ -148,7 +146,7 @@ export function parseIssueFile(raw, fileName) {
   return { fileName, number, slug, identifier, fields, body };
 }
 
-export function serializeIssue(issue) {
+function serializeIssue(issue) {
   const frontmatter = issue.fields
     .map(([key, value]) => `${key}: ${serializeFrontmatterValue(value)}`)
     .join('\n');
