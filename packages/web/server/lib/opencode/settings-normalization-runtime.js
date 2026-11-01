@@ -295,6 +295,12 @@ export const createSettingsNormalizationRuntime = (dependencies) => {
         project.issuesDir = issuesDir && !issuesDirEscapesProject(issuesDir) ? issuesDir : null;
       }
 
+      // The issue auto-dispatch watcher runs only on projects explicitly
+      // switched on; the flag is stored only when true.
+      if (candidate.autoDispatchIssues === true) {
+        project.autoDispatchIssues = true;
+      }
+
       result.push(project);
     }
 

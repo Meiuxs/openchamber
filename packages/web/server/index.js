@@ -99,6 +99,7 @@ import { createContextObligatoryRuntime } from './lib/context-obligatory/runtime
 import { createSessionWarmingRuntime } from './lib/session-warming/runtime.js';
 import { createTrackerRegistry } from './lib/trackers/registry.js';
 import { configureLocalTracker } from './lib/local/index.js';
+import { createIssueDispatcher } from './lib/local/dispatcher.js';
 import { createTrackerSessionStatus } from './lib/trackers/session-status.js';
 import { sourceControlProviderDescriptors } from './lib/source-control/provider-descriptors.js';
 import { createSessionKnowledgeRuntime } from './lib/session-knowledge/runtime.js';
@@ -1932,6 +1933,23 @@ const emitSessionCreatedEvent = (event) => {
     }
   }
 };
+// The issue auto-dispatch watcher (`lib/local/dispatcher.js`): turns assigned
+// auto-fix-eligible local issues into managed sessions on projects the user
+// switched on. The tracker comes through the registry, so the `started` post
+// lands on the same shared instance the session-status runtime uses.
+const issueDispatcher = createIssueDispatcher({
+  listProjects: async () => sanitizeProjects((await readSettingsFromDiskMigrated())?.projects || []),
+  getTracker: () => trackerRegistry.implementation('local'),
+  createClient: ({ directory }) => createOpenCodeClient({
+    baseUrl: buildOpenCodeUrl('/', '').replace(/\/$/, ''),
+    headers: getOpenCodeAuthHeaders(),
+    directory,
+  }),
+  waitForOpenCodeReady,
+  onSessionCreated: (event) => emitSessionCreatedEvent(event),
+  logger: console,
+});
+issueDispatcher.start();
 /**
  * Maps a session directory onto the project whose memory it belongs to, so a
  * session running in a worktree writes to the project the panel shows.

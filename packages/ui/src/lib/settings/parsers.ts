@@ -437,6 +437,7 @@ const projectEntrySchema = z.object({
   defaultModel: nonEmptyTrimmed.optional().catch(undefined),
   defaultAgent: nonEmptyTrimmed.optional().catch(undefined),
   defaultVariant: nonEmptyTrimmed.optional().catch(undefined),
+  autoDispatchIssues: z.literal(true).optional().catch(undefined),
 });
 
 export const parseProjects = fromSchema(
@@ -467,6 +468,7 @@ export const parseProjects = fromSchema(
       if (parsed.data.defaultAgent) project.defaultAgent = parsed.data.defaultAgent;
       if (parsed.data.defaultVariant) project.defaultVariant = parsed.data.defaultVariant;
       if (parsed.data.sidebarCollapsed !== undefined) project.sidebarCollapsed = parsed.data.sidebarCollapsed;
+      if (parsed.data.autoDispatchIssues === true) project.autoDispatchIssues = true;
       result.push(project);
     }
     return result;

@@ -1483,6 +1483,8 @@ export interface ProjectEntry {
   sidebarCollapsed?: boolean;
   /** Directory (relative to the project) holding the local issues files; null/absent uses the default. */
   issuesDir?: string | null;
+  /** The issue auto-dispatch watcher runs for this project; absent means off. */
+  autoDispatchIssues?: boolean;
 }
 
 /**

@@ -164,6 +164,23 @@ describe('settings normalization runtime - symlink resolution', () => {
       expect(result[1].issuesDir).toBe(undefined);
     });
 
+    it('stores autoDispatchIssues only when true and round-trips it', () => {
+      const runtime = createTestRuntime();
+
+      const result = runtime.sanitizeProjects([
+        { id: 'proj1', path: '/a', autoDispatchIssues: true },
+        { id: 'proj2', path: '/b', autoDispatchIssues: false },
+        { id: 'proj3', path: '/c', autoDispatchIssues: 'yes' },
+        { id: 'proj4', path: '/d' },
+      ]);
+
+      expect(result[0].autoDispatchIssues).toBe(true);
+      expect(result[1].autoDispatchIssues).toBe(undefined);
+      expect(result[2].autoDispatchIssues).toBe(undefined);
+      expect(result[3].autoDispatchIssues).toBe(undefined);
+      expect(runtime.sanitizeProjects(JSON.parse(JSON.stringify(result)))).toEqual(result);
+    });
+
     it('nulls an absolute project issuesDir on either separator family', () => {
       const runtime = createTestRuntime();
 

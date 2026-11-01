@@ -74,6 +74,7 @@ interface ProjectsStore {
     defaultAgent?: string | null;
     defaultModel?: string | null;
     defaultVariant?: string | null;
+    autoDispatchIssues?: boolean;
   }) => void;
   uploadProjectIcon: (id: string, file: File) => Promise<{ ok: boolean; error?: string }>;
   removeProjectIcon: (id: string) => Promise<{ ok: boolean; error?: string }>;
@@ -349,6 +350,9 @@ const sanitizeProjects = (value: unknown): ProjectEntry[] => {
     if (candidate.issuesDir !== undefined) {
       const issuesDir = parseNonEmptyTrimmedString(candidate.issuesDir, {});
       project.issuesDir = issuesDir && !issuesDirEscapesProject(issuesDir) ? issuesDir : null;
+    }
+    if (candidate.autoDispatchIssues === true) {
+      project.autoDispatchIssues = true;
     }
     result.push(project);
   }
@@ -925,6 +929,7 @@ export const useProjectsStore = create<ProjectsStore>()(
       defaultAgent?: string | null;
       defaultModel?: string | null;
       defaultVariant?: string | null;
+      autoDispatchIssues?: boolean;
     }) => {
       if (isVSCodeProjectsRuntime) {
         return;
@@ -973,6 +978,13 @@ export const useProjectsStore = create<ProjectsStore>()(
         // just been cleared in this same update.
         if (!updated.defaultModel) {
           delete updated.defaultVariant;
+        }
+        if (meta.autoDispatchIssues !== undefined) {
+          if (meta.autoDispatchIssues) {
+            updated.autoDispatchIssues = true;
+          } else {
+            delete updated.autoDispatchIssues;
+          }
         }
         return updated;
       });

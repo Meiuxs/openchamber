@@ -17,4 +17,16 @@ describe('parseProjects', () => {
     ]);
     expect(parseProjects(parsed, { projects: parsed })).toEqual(parsed);
   });
+
+  test('keeps autoDispatchIssues across a settings round trip', () => {
+    const projects = [
+      { path: '/repo/app', autoDispatchIssues: true },
+      { path: '/repo/lib' },
+      { path: '/repo/bad', autoDispatchIssues: false },
+    ];
+    const parsed = parseProjects(projects, { projects });
+
+    expect(parsed?.map((project) => project.autoDispatchIssues)).toEqual([true, undefined, undefined]);
+    expect(parseProjects(parsed, { projects: parsed })).toEqual(parsed);
+  });
 });

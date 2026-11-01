@@ -6,6 +6,7 @@ import { ModelSelector } from '@/components/sections/agents/ModelSelector';
 import { AgentSelector } from '@/components/sections/commands/AgentSelector';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
+  SettingsCheckboxRow,
   SettingsFieldRow,
   SettingsSection,
   SETTINGS_CUSTOM_TRIGGER_CLASS,
@@ -13,6 +14,7 @@ import {
   SETTINGS_SELECT_ROW_TRIGGER_CLASS,
 } from '@/components/sections/shared/SettingsSection';
 import { selectProvidersForDirectory, useConfigStore } from '@/stores/useConfigStore';
+import { useProjectsStore } from '@/stores/useProjectsStore';
 import { modelVariantNames } from '@/lib/modelVariants';
 import { isPrimaryMode } from '@/components/chat/mobileControlsUtils';
 import { updateSharedProjectSetup, type ProjectRef } from '@/lib/openchamberConfig';
@@ -20,6 +22,7 @@ import { ensureSharedSetupTrusted, resetSharedSetupTrust } from '@/lib/sharedTru
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icon/Icon';
+import type { ProjectEntry } from '@/lib/api/types';
 import type { useProjectIdentityForm } from './useProjectIdentityForm';
 import type { ProjectSetupState } from './useProjectSetup';
 import { ProjectSetupUnavailable } from './ProjectSettingsBits';
@@ -93,6 +96,30 @@ const ChatDefaultsSection: React.FC<{ form: ProjectIdentityFormState }> = ({ for
           </Select>
         </SettingsFieldRow>
       ) : null}
+    </SettingsSection>
+  );
+};
+
+/**
+ * The project's local-issue automation: whether the server may start a fix
+ * session on its own for an assigned issue whose root cause is documented.
+ */
+const LocalIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) => {
+  const { t } = useI18n();
+  const updateProjectMeta = useProjectsStore((state) => state.updateProjectMeta);
+
+  return (
+    <SettingsSection
+      title={t('settings.projects.page.section.localIssues')}
+      contentClassName="space-y-0"
+    >
+      <SettingsCheckboxRow
+        settingsItem="projects.auto-dispatch"
+        checked={project.autoDispatchIssues === true}
+        onChange={(checked) => updateProjectMeta(project.id, { autoDispatchIssues: checked })}
+        label={t('settings.projects.page.field.autoDispatch')}
+        info={t('settings.projects.page.field.autoDispatchInfo')}
+      />
     </SettingsSection>
   );
 };
@@ -229,6 +256,7 @@ export const ProjectGeneralTab: React.FC<{
 }> = ({ form, projectRef, setupState }) => (
   <>
     <ChatDefaultsSection form={form} />
+    {form.project ? <LocalIssuesSection project={form.project} /> : null}
     <TeamFileSection projectRef={projectRef} setupState={setupState} />
   </>
 );

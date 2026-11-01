@@ -1089,6 +1089,13 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     keywords: ['thinking', 'variant', 'reasoning', 'effort', 'model', 'project metadata'],
   },
   {
+    id: 'projects.auto-dispatch',
+    page: 'projects',
+    titleKey: 'settings.projects.page.field.autoDispatch',
+    descriptionKey: 'settings.projects.page.field.autoDispatchInfo',
+    keywords: ['issues', 'auto-fix', 'dispatch', 'local issues', 'automation', 'project metadata'],
+  },
+  {
     id: 'projects.icon',
     page: 'projects',
     titleKey: 'settings.projects.page.field.projectIcon',
