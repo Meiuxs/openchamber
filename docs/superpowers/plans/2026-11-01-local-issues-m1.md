@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node ESM (server, plain JS + JSDoc), vitest (server), isolated vitest (UI), React + i18n messages, zero new dependencies.
 
-**Spec:** `issue-local-spec/本地Issue管理需求与设计方案.md` (v2.1). The plan argues from the spec; executors read both.
+**Spec:** `issue-local-spec/本地Issue管理需求与设计方案.md` (v2.2). The plan argues from the spec; executors read both.
 
 ## Global Constraints
 
@@ -32,6 +32,22 @@ Inputs the spec implies but task tests must pin:
 3. A copied file producing a duplicate identifier must be ignored (first file name in sort order wins) with a console warning, never shown twice (Task 3).
 4. A user-mangled `## Comments` section must not crash comment append; the append recreates the section from its entries and preserves everything above it (Task 2).
 5. Creating the first issue when `issuesDir` does not exist must mkdir it and still allocate number 1 after a lost race retries (Task 3).
+
+## As-built addendum (2026-11-01)
+
+The task steps above are the historical execution record and are left untouched. The shipped implementation deviated from the written steps in the following ways; the commit that landed each deviation is noted.
+
+- Contract capabilities: the UI zod schema parses `create`/`edit` with the codebase's `flag` convention (`z.boolean().catch(false)`), not the `optional()` Task 1 wrote. A descriptor from an older server that omits the keys parses with the bits off; consumers test `=== true` → contract bits b27137bc, flag parsing 1b6b66c0, served-descriptor mirror 25873296
+- Wire contract: create/edit over the API take `{containerId,title,description,priority,labels}` and `{id,title,description,priority,labels}`; `feature`/`blockedBy` stay file-format-level only (scanner.create accepts them, routes and UI do not send them), an M2 candidate → ca1288a7
+- Scanner identity: the container lookup map is keyed by projectId (every project's first issue is LOCAL-1, so identifier keying collides across projects); each returned issue carries a `containerId` field → b709e4fe
+- issuesDir validation: the `..` rejection uses the per-segment predicate `segment === '..' || /^\.\.\s[\s.]*$/`, which also catches Windows-normalizable variants (`.. `, `.. .`) while a dots-only name (`....`) stays a legal directory; mirrored with tests in settings normalization, the UI projects store and the scanner fallback → 59f55177, Windows variants fbc6fa48
+- File format hardening: the serializer quotes any scalar that would reparse as a non-string (`[...]`-wrapped or the literal `null`) → 0f287dc0; titles and labels arriving over the API collapse to single lines (whitespace runs to single spaces) before reaching the file, because the frontmatter is single-line `key: value` and a wrapped line makes `parseIssueFile` reject the whole file permanently, while `description` stays multiline; API priority `'none'` normalizes to null at the tracker boundary (create writes `priority: null`, edit drops the key and it reads back null) → c0e69609
+- Priority filter: implemented in the scanner list exactly as the spec designed (`all` or absent matches any, `none` matches null priority, otherwise equality) → c0e69609
+- Session comments: the session-link and posted-status maps are in memory only (a restart loses links, documented as an M1 limitation in `local/DOCUMENTATION.md`); the posted-status set is FIFO-capped at 500 with in-flight promise dedupe; `sessionComments` defaults to true; the comment heading is `### <iso> · session <id>`; appending preserves everything above the `## Comments` section and rebuilds the section in normalized form; a hand-edited literal `priority: none` string is a known parked edge that self-heals on the next UI edit → runtime and maps 7081ab0e, cap and dedupe 275b1920
+- Server wiring: the tracker reads its projects through a `configureLocalTracker({ readSettings })` dependency-injection seam, called once in `server/index.js` before the tracker registry builds; a lazy `load()` throws loudly if unconfigured, preserving lazy loading → c110b9b7
+- Code references: the parser (`lib/trackers/codeReferences.ts`) plus a remark plugin (`chat/markdown/remarkCodeReferences.ts`) applied to the issue preview body across all preview surfaces; links open files via store actions; out-of-folder containment is checked at link-build time; references resolve against the panel's current project (accepted, documented in comments) → 71677dd9
+- Docs and UI extras: the docs page is registered in `packages/docs/sidebar.config.json` with 11 translations → e4eac905; the agent command template has 6 rules, rule 6 preserving the `## Comments` section → 23d9a56a; the Settings card falls back to `account?.name` before the "Unknown user" copy → 75b8cf61; the create button is gated on `capabilities.create === true` and the edit action independently on `capabilities.edit === true` → 5a290a28, edit-only gating 17ce998c, no-auth settings card d6f9860c
+- i18n: locale dictionaries for 15 locales (en, nl, de, fr, es, ja, ko, pl, uk, tr, ar, he, pt-BR, zh-CN, zh-TW), parity-tested, widening the plan's 12-locale constraint → 7d0ca45f
 
 ---
 
