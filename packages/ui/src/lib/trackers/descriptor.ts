@@ -62,6 +62,7 @@ const descriptorSchema = z.object({
     create: flag,
     edit: flag,
     delete: flag,
+    itemComments: flag,
   }),
   stateFilters: z.array(z.string().min(1).max(32)).max(32),
   // A pattern that does not compile is dropped; the tracker still lists.

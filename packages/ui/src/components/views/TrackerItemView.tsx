@@ -314,6 +314,7 @@ const TrackerWorkItem: React.FC<{
             now={now}
             footer={<SourceBoardActions item={item} project={null} context={null} onStartWorktree={() => undefined} onChanged={() => void refresh()} worktreeAvailable={false} />}
             trackerStateControl={<SourceBoardTrackerStatus item={detail.value} onChanged={() => void refresh()} />}
+            onRefresh={refresh}
             // A parent or child opens as a tab of its own.
             onOpenTrackerItem={(child) => { showTrackerItem(child.url, null); }}
         />

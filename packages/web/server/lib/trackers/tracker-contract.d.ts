@@ -158,6 +158,8 @@ export type TrackerDescriptor = {
      * the action. False when the tracker has no way to delete one.
      */
     delete: boolean;
+    /** UI can post a comment on an item (POST items/comment). */
+    itemComments: boolean;
   };
   /** In menu order: `open`, `all`, categories, then provider extras (`inReview`, `duplicate`). */
   stateFilters: string[];
@@ -218,6 +220,9 @@ export type TrackerEditItemInput = {
 /** The item to delete, and the container it is in when identifiers repeat. */
 export type TrackerDeleteItemInput = { id: string; containerId?: string };
 
+/** A comment to append to an item, and the container it is in when identifiers repeat. */
+export type TrackerCommentInput = { id: string; body: string; containerId?: string };
+
 /** Server-side implementation a registry entry loads. JSON in, JSON out. */
 export interface TrackerImplementation {
   auth: {
@@ -239,6 +244,12 @@ export interface TrackerImplementation {
    * UNSUPPORTED before reaching here.
    */
   remove?(input: TrackerDeleteItemInput): Promise<Connected<{ removed: boolean }>>;
+  /**
+   * Appends a comment to the item as the viewer wrote it. Optional: a tracker
+   * without user comments has no `comment`, and its `itemComments` capability
+   * is false, so the route answers UNSUPPORTED before reaching here.
+   */
+  comment?(input: TrackerCommentInput): Promise<Connected<{ item: TrackerItem | null }>>;
   liveSummaries(identifiers: string[]): Promise<Connected<{ items: TrackerLiveSummaryWire[] }>>;
   matchUrl(url: string): string | null;
   mapping?: {

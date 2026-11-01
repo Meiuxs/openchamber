@@ -215,6 +215,19 @@ export function registerTrackerRoutes(app, { registry }) {
     return tracker.remove(input);
   }, hasDelete));
 
+  const hasComments = (descriptor, tracker) => descriptor.capabilities.itemComments === true && Boolean(tracker.comment);
+  app.post('/api/tracker/:provider/items/comment', parseJsonBody, handle('post comment', ({ req, tracker }) => {
+    const body = readBody(req);
+    const id = readString(body.id);
+    const text = readString(body.body);
+    if (!id) throw invalid('id is required');
+    if (!text) throw invalid('body is required');
+    const input = { id, body: text };
+    const containerId = readString(body.containerId) || readString(body.projectDirectory);
+    if (containerId) input.containerId = containerId;
+    return tracker.comment(input);
+  }, hasComments));
+
   app.get('/api/tracker/:provider/states', handle('load workflow states', ({ req, tracker }) => {
     const containerId = queryValue(req, 'containerId');
     if (!containerId) throw invalid('containerId is required');

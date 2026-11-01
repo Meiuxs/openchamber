@@ -94,6 +94,16 @@ export const editTrackerItem = (provider: TrackerProviderId, input: TrackerEditI
 );
 
 /**
+ * Posts a viewer comment on an item, under the descriptor's `itemComments`
+ * capability. The comment is not editable afterwards; a failed post changes
+ * nothing on the item.
+ */
+export const commentTrackerItem = (
+  provider: TrackerProviderId,
+  input: { id: string; body: string; containerId?: string },
+): Promise<TrackerItem> => postItem(provider, '/items/comment', input, 'Failed to post the comment');
+
+/**
  * Deletes an item for good, under the descriptor's `delete` capability. The
  * item is named in the query, the container with it, so the tracker deletes
  * the one in the project the board is showing rather than the first item

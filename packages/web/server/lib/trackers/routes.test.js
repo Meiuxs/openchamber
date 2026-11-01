@@ -31,6 +31,7 @@ const fakeTracker = () => ({
   create: vi.fn(async () => ({ connected: true, item })),
   edit: vi.fn(async () => ({ connected: true, item })),
   remove: vi.fn(async () => ({ connected: true, removed: true })),
+  comment: vi.fn(async () => ({ connected: true, item })),
   liveSummaries: vi.fn(),
   matchUrl: () => null,
   mapping: {
@@ -85,6 +86,7 @@ describe('tracker routes', () => {
       request(app).post('/api/tracker/nope/items/create').send({ title: 'x', containerId: 't' }),
       request(app).post('/api/tracker/nope/items/edit').send({ id: 'ENG-12' }),
       request(app).delete('/api/tracker/nope/items?id=ENG-12'),
+      request(app).post('/api/tracker/nope/items/comment').send({ id: 'ENG-12', body: 'x' }),
       request(app).get('/api/tracker/nope/states?containerId=t'),
       request(app).get('/api/tracker/nope/mapping'),
       request(app).put('/api/tracker/nope/mapping').send({}),
@@ -228,16 +230,32 @@ describe('tracker routes', () => {
     expect(tracker.sessionStatus.post).toHaveBeenLastCalledWith({ kind: 'completed', sessionId: 's' });
   });
 
+  it('posts a comment behind the itemComments capability', async () => {
+    const full = createApp([{
+      descriptor: descriptorFor('full', { itemComments: true }),
+      load: async () => tracker,
+    }]);
+
+    await request(full).post('/api/tracker/full/items/comment').send({}).expect(400);
+    await request(full).post('/api/tracker/full/items/comment').send({ id: 'ENG-12' }).expect(400);
+    await request(full)
+      .post('/api/tracker/full/items/comment')
+      .send({ id: 'ENG-12', body: ' Looks good to me ', containerId: 'team-1' })
+      .expect(200);
+    expect(tracker.comment).toHaveBeenLastCalledWith({ id: 'ENG-12', body: 'Looks good to me', containerId: 'team-1' });
+  });
+
   it('answers 404 UNSUPPORTED for actions the capabilities leave out', async () => {
     const bare = {
       ...fakeTracker(),
       mapping: undefined,
       preferences: undefined,
       sessionStatus: undefined,
+      comment: undefined,
     };
     const limited = createApp([
       {
-        descriptor: descriptorFor('limited', { multipleAccounts: false, stateUpdate: false, projectMapping: false, sessionComments: false, create: false, edit: false, delete: false }),
+        descriptor: descriptorFor('limited', { multipleAccounts: false, stateUpdate: false, projectMapping: false, sessionComments: false, create: false, edit: false, delete: false, itemComments: false }),
         load: async () => tracker,
       },
       // Capabilities claim more than the implementation carries.
@@ -249,8 +267,11 @@ describe('tracker routes', () => {
       request(limited).post('/api/tracker/limited/items/create').send({ title: 'x', containerId: 't' }),
       request(limited).post('/api/tracker/limited/items/edit').send({ id: 'ENG-12' }),
       request(limited).delete('/api/tracker/limited/items?id=ENG-12'),
+      request(limited).post('/api/tracker/limited/items/comment').send({ id: 'ENG-12', body: 'x' }),
       // The capability says yes, the implementation carries no `remove`.
       request(limited).delete('/api/tracker/bare/items?id=ENG-12'),
+      // The capability says yes, the implementation carries no `comment`.
+      request(limited).post('/api/tracker/bare/items/comment').send({ id: 'ENG-12', body: 'x' }),
       request(limited).get('/api/tracker/limited/states?containerId=t'),
       request(limited).get('/api/tracker/limited/mapping'),
       request(limited).put('/api/tracker/limited/mapping').send({}),

@@ -78,3 +78,7 @@ Older bundled phone UIs read Linear's `state.type` from tracked-item states. The
 ### Why capability-gated routes answer 404 `UNSUPPORTED` instead of not existing
 
 An unregistered path under `/api` falls through to the generic OpenCode proxy. An explicit answer keeps the request here and lets a client tell "this tracker cannot" from "this server is older".
+
+### Why viewer comments ride the same gate (`itemComments`)
+
+`POST /api/tracker/:provider/items/comment` is behind a descriptor capability of its own rather than reusing `sessionComments`: that bit means started/completed/failure markers a session posts, not a person typing. A tracker that cannot hold a viewer comment (Linear) keeps the route answering `UNSUPPORTED`, and an older UI reads the missing bit as off.

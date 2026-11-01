@@ -15,6 +15,9 @@ import { useI18n, type I18nKey } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { referenceLinkHref } from '@/lib/router';
 import { parseCodeReferences } from '@/lib/trackers/codeReferences';
+import { commentTrackerItem } from '@/lib/trackers/mutations';
+import { isIMECompositionEvent } from '@/lib/ime';
+import { Textarea } from '@/components/ui/textarea';
 
 import type { CachedValue } from './referenceCache';
 import { ReferenceMarkdownRewriteContext, useProjectUploadRewrite } from './projectUploads';
@@ -807,7 +810,9 @@ const TrackerPreview: React.FC<{
     onOpenIssue?: (issue: TrackerItemSummary) => void;
     /** Opens a blocker by identifier; without it blockers are plain text. */
     onOpenIdentifier?: (identifier: string) => void;
-}> = ({ issue, detail, purpose, pinned, now, footer: footerOverride, stateControl, blockersControl, assigneeControl, onOpenIssue, onOpenIdentifier }) => {
+    /** Posts the typed text as a viewer comment; true when the tracker has it. */
+    onComment?: (body: string) => Promise<boolean>;
+}> = ({ issue, detail, purpose, pinned, now, footer: footerOverride, stateControl, blockersControl, assigneeControl, onOpenIssue, onOpenIdentifier, onComment }) => {
     const { t } = useI18n();
     const relative = useRelative(now);
     const descriptor = useTrackerDescriptor(issue.provider);
@@ -842,6 +847,24 @@ const TrackerPreview: React.FC<{
         }))),
         [detail],
     );
+
+    const composer = capabilities.itemComments === true && onComment !== undefined && detail.status === 'ready';
+    const [commentText, setCommentText] = React.useState('');
+    const [postingComment, setPostingComment] = React.useState(false);
+    const [commentError, setCommentError] = React.useState<string | null>(null);
+    const sendComment = async () => {
+        const body = commentText.trim();
+        if (!onComment || !body || postingComment) return;
+        setPostingComment(true);
+        setCommentError(null);
+        try {
+            if (await onComment(body)) setCommentText('');
+        } catch (error) {
+            setCommentError(error instanceof Error && error.message ? error.message : String(error));
+        } finally {
+            setPostingComment(false);
+        }
+    };
 
     const footer = footerOverride ?? (
         <p className="typography-meta text-muted-foreground">
@@ -928,6 +951,32 @@ const TrackerPreview: React.FC<{
 
             {full && capabilities.children ? <SubIssuesSection issue={full} onOpen={onOpenIssue} /> : null}
             {detail.status === 'ready' ? <CommentsSection state={comments} total={null} now={now} /> : null}
+            {composer ? (
+                <div className="flex flex-col gap-2 border-t border-edge pt-3">
+                    <Textarea
+                        value={commentText}
+                        onChange={(event) => setCommentText(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (isIMECompositionEvent(event)) return;
+                            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                                event.preventDefault();
+                                void sendComment();
+                            }
+                        }}
+                        placeholder={t('references.picker.preview.commentPlaceholder')}
+                        aria-label={t('references.picker.preview.commentPlaceholder')}
+                        rows={2}
+                        disabled={postingComment}
+                    />
+                    <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate typography-meta text-[var(--status-error-text)]">{commentError}</span>
+                        <Button size="sm" onClick={() => void sendComment()} disabled={postingComment || !commentText.trim()}>
+                            {postingComment ? <Icon name="loader-4" className="size-3.5 animate-spin" /> : null}
+                            {t('references.picker.preview.commentSend')}
+                        </Button>
+                    </div>
+                </div>
+            ) : null}
         </PreviewFrame>
     );
 };
@@ -991,7 +1040,21 @@ export const ReferencePreview: React.FC<{
         );
     }
     if (item.source === 'tracker') {
-        return <TrackerPreview issue={item.item} detail={trackerDetail} purpose={purpose} pinned={pinned} now={now} footer={footer} stateControl={trackerStateControl} blockersControl={blockersControl} assigneeControl={assigneeControl} onOpenIssue={onOpenTrackerItem} onOpenIdentifier={onOpenTrackerIdentifier} />;
+        // The refresh the surface hands in doubles as the signal that comments
+        // may be posted here: a write only shows up once the item is read
+        // again, and a caller without a read has nothing to show it with.
+        const onComment = onRefresh
+            ? async (body: string) => {
+                await commentTrackerItem(item.item.provider, {
+                    id: item.item.id,
+                    body,
+                    containerId: item.item.container?.id ?? undefined,
+                });
+                await onRefresh();
+                return true;
+            }
+            : undefined;
+        return <TrackerPreview issue={item.item} detail={trackerDetail} purpose={purpose} pinned={pinned} now={now} footer={footer} stateControl={trackerStateControl} blockersControl={blockersControl} assigneeControl={assigneeControl} onOpenIssue={onOpenTrackerItem} onOpenIdentifier={onOpenTrackerIdentifier} onComment={onComment} />;
     }
     return (
         <ReferenceMarkdownRewriteContext.Provider value={rewriteMarkdown}>

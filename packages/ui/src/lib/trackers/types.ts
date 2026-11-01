@@ -217,6 +217,11 @@ export type TrackerDescriptor = {
      * action. Absent on an older server, read as false.
      */
     delete?: boolean;
+    /**
+     * A viewer can post a comment on the item (POST items/comment), so the
+     * preview shows a composer. Absent on an older server, read as false.
+     */
+    itemComments?: boolean;
   };
   /** In menu order: `open`, `all`, categories, then provider extras (`inReview`, `duplicate`). */
   stateFilters: string[];

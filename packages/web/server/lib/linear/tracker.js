@@ -53,6 +53,9 @@ export const LINEAR_TRACKER_DESCRIPTOR = Object.freeze({
     edit: false,
     // Deleting goes through Linear's own trash, not something these routes do.
     delete: false,
+    // Comments the server itself writes (session status) exist; the routes
+    // have no way to post one on the viewer's behalf.
+    itemComments: false,
   }),
   // The order is the filter menu's. `inReview` and `duplicate` are Linear's
   // own name-based filters; Linear has no triage list filter.

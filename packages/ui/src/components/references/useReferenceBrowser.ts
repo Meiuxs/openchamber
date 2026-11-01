@@ -230,7 +230,7 @@ export function useReferenceBrowser({
     const settledPreviewItem = useDebouncedValue(previewItem, DETAIL_DEBOUNCE_MS);
     const previewSettled = Boolean(settledPreviewItem && previewItem
         && referencePickerItemKey(settledPreviewItem) === referencePickerItemKey(previewItem));
-    const { detail: trackerDetail } = useTrackerItemDetail(
+    const { detail: trackerDetail, refresh: refreshTrackerDetail } = useTrackerItemDetail(
         previewItem?.source === 'tracker'
             ? { provider: previewItem.provider, id: previewItem.item.id, containerId: previewItem.item.container?.id ?? null }
             : null,
@@ -368,6 +368,7 @@ export function useReferenceBrowser({
         mobilePreviewKey,
         closeMobilePreview: () => setMobilePreviewKey(null),
         trackerDetail,
+        refreshTrackerDetail,
         repositoryDetail,
         repositoryLatestDetail,
         refreshRepositoryDetail,

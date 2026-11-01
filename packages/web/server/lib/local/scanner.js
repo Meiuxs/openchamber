@@ -5,6 +5,7 @@ import {
   ISSUE_FILE_PATTERN,
   LocalIssueError,
   STATES,
+  appendComment,
   issueFileName,
   readIssue,
   sanitizeSlug,
@@ -402,6 +403,19 @@ const createLocalScanner = ({ listProjects }) => {
     );
   };
 
+  // Appends one `### <ISO> · user` comment entry. The viewer has no identity
+  // beyond the shared UI password, so every user comment carries the same
+  // source, unlike a session's `session <short id>` heading.
+  const comment = async (identifier, text, projectHint = null) => {
+    if (!isString(text) || !text.trim()) {
+      throw new LocalIssueError('Local issue comment is required');
+    }
+    const found = await locate(identifier, projectHint);
+    if (!found) throw new LocalIssueError(`Unknown local issue: ${identifier}`);
+    const parsed = found.cache.files.get(found.entry.fileName).parsed;
+    return persist(found.project, found.cache, appendComment(parsed, { iso: nowIso(), source: 'user', text: text.trim() }));
+  };
+
   // Replaces the description (head) while keeping any existing comment
   // entries, so an edit never silently drops the `## Comments` section.
   const replaceBody = (currentBody, description) => {
@@ -560,7 +574,7 @@ const createLocalScanner = ({ listProjects }) => {
     return scanned.filter(({ project }) => caches.get(project.id).readable).map(({ project }) => containerOf(project));
   };
 
-  return { list, get, locate, states, updateState, create, edit, remove, liveSummaries, containers };
+  return { list, get, locate, states, updateState, comment, create, edit, remove, liveSummaries, containers };
 };
 
 export { createLocalScanner, issuesDirOf };

@@ -816,7 +816,9 @@ const SourceBoardBody: React.FC<{
             onOpenStackLayer={openStackLayer}
             revisionChoice={latestPull?.revisions ? { revisions: latestPull.revisions, selected: browser.previewRevision, onSelect: browser.selectPreviewRevision } : undefined}
             onOpenChecks={previewPull && context ? () => setChecksOpenFor(previewKey) : undefined}
-            onRefresh={previewItem?.source === 'repository' && context ? refreshFromHost : undefined}
+            onRefresh={previewItem?.source === 'repository' && context
+                ? refreshFromHost
+                : previewItem?.source === 'tracker' ? browser.refreshTrackerDetail : undefined}
             threadActions={threadActions}
             stateMenu={previewItem?.source === 'repository' && previewItem.reference.state !== 'merged' && context
                 && (previewItem.reference.kind !== 'discussion' || canChangeDiscussionState(previewItem.reference, previewDiscussion)) ? (

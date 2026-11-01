@@ -93,6 +93,9 @@ export const LOCAL_TRACKER_DESCRIPTOR = Object.freeze({
     edit: true,
     // A file can be unlinked, which is all a delete is here.
     delete: true,
+    // A comment is an appended `### <ISO> · user` entry in the file's
+    // `## Comments` section, written through the same persist path.
+    itemComments: true,
   }),
   stateFilters: Object.freeze(['open', 'all', 'triage', 'backlog', 'todo', 'in-progress', 'done', 'canceled']),
   urlPatterns: Object.freeze([
@@ -329,6 +332,11 @@ export function createLocalTracker({ listProjects }) {
     },
 
     states: async () => ({ connected: true, states: await scanner.states() }),
+
+    comment: async ({ id, body, containerId, projectDirectory }) => {
+      const issue = await scanner.comment(id, body, containerId || projectDirectory);
+      return { connected: true, item: toTrackerItem(issue, await containerOfIssue(issue)) };
+    },
 
     updateState: async ({ id, stateId, containerId, projectDirectory }) => {
       const issue = await scanner.updateState(id, stateId, containerId || projectDirectory);

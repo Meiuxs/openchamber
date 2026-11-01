@@ -141,6 +141,22 @@ Body of ${title}.
     expect(item.comments).toHaveLength(1);
     expect(item.comments[0].author).toEqual({ name: 'session a1b2', avatarUrl: null });
   });
+
+  it('posts a user comment onto the issue file and returns the item carrying it', async () => {
+    const t = await tracker();
+    const before = (await t.create({ containerId: 'p1', title: 'Needs a comment', updatedAt: '2026-11-01T08:00:00Z' })).item;
+    const { item } = await t.comment({ id: 'LOCAL-1', body: '  Reproduced on my machine.  ', containerId: 'p1' });
+    expect(item.comments).toHaveLength(1);
+    expect(item.comments[0]).toMatchObject({ body: 'Reproduced on my machine.', author: { name: 'user', avatarUrl: null } });
+    expect(item.updatedAt > before.updatedAt).toBe(true);
+    // The next read sees the same file content, so the comment is not a
+    // one-off of the answer.
+    const reread = await t.get('LOCAL-1');
+    expect(reread.item.comments).toHaveLength(1);
+    expect(reread.item.comments[0].body).toBe('Reproduced on my machine.');
+    await expect(t.comment({ id: 'LOCAL-99', body: 'x' })).rejects.toThrow('Unknown local issue');
+    await expect(t.comment({ id: 'LOCAL-1', body: '   ' })).rejects.toThrow('comment is required');
+  });
   it('collapses newlines in title and labels to single lines', async () => {
     const t = await tracker();
     const { item } = await t.create({ containerId: 'p1', title: 'Broken\ntitle', description: 'Body', priority: null, labels: ['multi\nline'] });
