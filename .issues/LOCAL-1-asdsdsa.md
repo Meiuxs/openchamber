@@ -2,7 +2,7 @@
 identifier: LOCAL-1
 title: asdsdsa
 state: canceled
-priority: null
+priority: low
 labels: [asdas]
 assignee: null
 feature: null

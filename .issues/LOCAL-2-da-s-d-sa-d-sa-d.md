@@ -2,7 +2,7 @@
 identifier: LOCAL-2
 title: "da's'd'sa'd'sa'd"
 state: canceled
-priority: null
+priority: low
 labels: [萨德的]
 assignee: null
 feature: 阿萨德撒的
