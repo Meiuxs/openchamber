@@ -17,13 +17,15 @@ Open the [Issues and PRs board](/issues-and-prs/) and switch to the **Local** ta
 
 The search matches titles, identifiers, descriptions, the grouping slug and labels. Pasting an issue file name or path, such as `.issues/LOCAL-7-fix-login.md`, opens that issue. The filter beside the search narrows the list by state and priority, and by grouping slug where the issues carry one: the menu lists every slug in the project, not only those of the issues already shown, so you can switch from one grouping to another without clearing the filter first.
 
-The preview shows the description, the priority, the labels and the comments. File paths in a description, such as `src/auth.ts:42`, render as links that open the file at that line. An issue with a `feature` value shows it, and **Blocked by** lists the issues it waits on — each opening that issue — and is where that list is changed: open it to pick from this project's unfinished issues, and unpick one to stop waiting on it. The list marks a row whose blockers still hold as **Blocked**.
+The preview shows the description, the priority, the labels and the comments. File paths in a description, such as `src/auth.ts:42`, render as links that open the file at that line. An issue with a `feature` value shows it, and **Blocked by** lists the issues it waits on — each opening that issue — and is where that list is changed: open it to pick from this project's unfinished issues, and unpick one to stop waiting on it. The list marks a row whose blockers still hold as **Blocked**. **Assignee** shows who owns the issue, and is where that is set too: pick a name the project already uses or type a new one, and unpick it to leave the issue unassigned. A local project has no member list, so the value is a plain name, not an account.
 
 From the preview you can:
 
-- **Create an issue** with a title, a description, a priority, labels and a grouping slug — picked from the slugs already in use, or typed as a new one. The board picks the next free `LOCAL-<n>` number and creates the file.
+- **Create an issue** with a title, a description, a priority, labels and a grouping slug — picked from the slugs already in use, or typed as a new one. The board picks the next free `LOCAL-<n>` number and creates the file. A local issue always has a priority: the form starts at `low` and offers no “none”, and a file written with `priority: null` (an older one, or by hand) reads back as `low` and is saved that way the next time it is edited.
 - **Edit** the title, description, priority, labels and grouping slug of an issue, and change which issues it waits on from the **Blocked by** row, which offers this project's unfinished issues instead of asking for a number.
+- **Delete** an issue from the edit dialog's **Delete issue** button: it asks once more, then removes the file from `.issues/`. Anything that waited on it stops being blocked, and git can bring the file back if the delete was a mistake.
 - **Change the state** from the status pill. The six states are `triage`, `backlog`, `todo`, `in-progress`, `done` and `canceled`; the board shows them in your interface language, while the file always stores the slug.
+- **Assign an issue** from the **Assignee** row: the names the project already uses are offered, and a new one can be typed. Clearing it removes the field from the file, so an unassigned issue is one whose file says nothing about an owner.
 
 Every change the board makes lands in the file right away, and a file you edit in your own editor shows up on the board on the next scan.
 

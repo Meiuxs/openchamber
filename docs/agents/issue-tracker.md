@@ -12,6 +12,9 @@ assume this page; the storage format itself is specified in
   otherwise.
 - File name `LOCAL-<n>-<slug>.md`. The identifier in the name is permanent:
   never rename an issue file, and never reuse a number of a deleted one.
+- Deleting removes the file itself, with no trash: once the board deletes an
+  issue, the only way back is this repository's git history, and only if the
+  file was committed. Never delete a file just to recreate it.
 - A number is `max + 1` over the directory. The board retries a lost race by
   allocating again; an agent checks that the target name is free before it
   writes, and bumps once if not.
@@ -26,7 +29,7 @@ Frontmatter, in this order, is the whole record:
 identifier: LOCAL-7
 title: Login page overflows on narrow screens
 state: todo            # triage | backlog | todo | in-progress | done | canceled
-priority: high         # urgent | high | medium | low | null
+priority: high         # urgent | high | medium | low; never null
 labels: [bug, ui]
 assignee: null
 createdAt: 2026-11-01T08:00:00Z
@@ -50,6 +53,9 @@ edit keeps the heading and its entries unchanged.
 `triage` (not looked at yet) → `backlog` (accepted, not scheduled) → `todo`
 (ready to be worked) → `in-progress` (claimed) → `done`. `canceled` leaves the
 open list from any state. The six are fixed; there are no custom states.
+
+Every issue has a priority. `low` is the default and what a file with no
+`priority` line (or a legacy `null`) reads as; there is no "none".
 
 ## Grouping and blockers
 

@@ -1,6 +1,6 @@
 # OpenChamber 本地 Issue 管理 · 需求与设计方案（统一版）
 
-> 版本：v2.6 · 日期：2026-11-01
+> 版本：v2.8 · 日期：2026-11-01
 > 本文件是唯一现行版本，取代《本地Issue管理需求规格.md》《本地Issue管理设计方案.md》（v1，server 级 JSON 存储，已废弃）与《本地Issue管理设计方案-v2-markdown.md》。
 > v2.2 按已落地的实现（as-built）重写相关章节：v2.1 写于实现之前，本版与 shipped 代码一致，仍是唯一现行文档。
 > v2.3 补齐 FR-12/FR-13 的**消费层**：分组筛选项改由服务端 `facets` 提供（不再从已加载条目推导）、`blocked` 成为派生只读位并在 board 展示且阻塞来源可跳转、create/edit 载荷与建单/编辑表单接入 `feature`/`blockedBy`；§12 为这两条补上验收标准，§9 的约定文档 `docs/agents/issue-tracker.md` 已落库。
@@ -8,6 +8,8 @@
 > 产品决策已于 2026-10-31/11-01 与维护者在会话中逐节确认；关键决策记录见 §3。
 > v2.5 修两处作用域与展示：状态名改由 UI 按 id 翻译（新增 `capabilities.translatedStates`，此前下拉把 `triage/backlog/…` 这些 slug 直接显示给用户）；board 的本地页签强制单项目作用域（新增 `capabilities.containersAreProjects`，此前 list 不带 containerId，把**所有项目**的 issue 混在一张表里，两个项目各有一个 `LOCAL-1` 会同时出现）。同时把 item 详情读取带上 container，避免跨项目同名 identifier 读到别人的 issue（FR-18、§8、§12 第 10/11 条）。
 > v2.6 改两个字段的**输入方式**，概念与数据格式不变：分组从自由文本框改为「可选已有 + 可新建」的组合框（候选来自 `facets.feature`，此前拼错或大小写不同会被 scanner 当成两个分组）；`blockedBy` 从建单/编辑表单移出，改为在预览的「被阻塞于」一行里勾选同项目的未完成 issue（此前要用户背出 `LOCAL-3` 再手打进逗号分隔框），该行也改为恒显，「无阻塞」时可直接添加（FR-1/FR-2/FR-13、§8、§12 第 7 条）。
+> v2.7 补上 `assignee` 的读写与显示：这个字段原先只由 scanner 在建单时硬写 `null`，编辑路径不接、`toTrackerItemSummary` 也恒返回 `null`，于是「`state: todo` + `assignee` 非空」这条派工信号在应用里既设不了也看不见。现按名字读写（新增 `capabilities.assignee`，Local 报 true、Linear 报 false），预览的「指派给」一行可改，`facets.assignee` 汇总容器内的名字（决策 26、FR-19、§8、§12 第 12 条）。
+> v2.8 定两件事：**本地 issue 永远有优先级**（默认 `low`，下拉不再提供「无」，服务端把 `none`/缺失都归一为 `low`；筛选里的「无优先级」保留，只用来捞历史文件，决策 27、FR-1/FR-3、§12 第 13 条）；**本地 issue 可以删除**（新增 `capabilities.delete` 与 `DELETE items`，删除在编辑弹窗内二次确认，删掉的是文件本身，决策 28、FR-20、§12 第 14 条）。同时修正 `.opencode/commands/local-issues.md` 建单规则里仍允许 `priority: null` 的旧约定。
 
 ## 1. 背景
 
@@ -18,7 +20,7 @@
 ## 2. 现状要点（代码证据）
 
 1. **Tracker 契约 provider-neutral**（`packages/web/server/lib/trackers/tracker-contract.d.ts`），能力位开放；新增 tracker 按文档路径 `server/lib/<id>/` + registry 一行注册，UI 主干零改动。
-2. **契约的 create/edit 已随一期落地**（capabilities 与 `TrackerCreateItemInput`/`TrackerEditItemInput` 见 `tracker-contract.d.ts`）；Linear descriptor 显式声明 `create: false, edit: false`，扩展见 §7。
+2. **契约的 create/edit/delete 已随一期落地**（capabilities 与 `TrackerCreateItemInput`/`TrackerEditItemInput`/`TrackerDeleteItemInput` 见 `tracker-contract.d.ts`）；Linear descriptor 显式声明 `create: false, edit: false, delete: false`，扩展见 §7。
 3. **tracker id `local` 可用**：命名规则 `^[a-z][a-z0-9-]{0,31}$`（`tracker-contract.d.ts:5`），保留 id 与内建 id 均不占用。
 4. **server 没有项目根文件 watcher**（已验证 lib 内无 `fs.watch`/chokidar），索引走按需扫描。
 5. **项目路径来源**：settings 的 `projects` 数组（`packages/web/server/index.js:2529-2532`，`sanitizeProjects` 清洗）。
@@ -52,7 +54,10 @@
 | 22 | **`url` 是标识不是地址**：`https://openchamber.local/tracker/local/<ID>` 只用于贴回识别（`matchUrl`/`urlPatterns`/会话链接），不提供任何页面；新增 `capabilities.externalUrl`，本地报 `false`，UI 复制「本应用地址 + `?reference=<url>`」并在应用内打开该 issue，不再把浏览器送向该域名。深链参数只在应用内消费一次即从地址栏移除 | 11-01 |
 | 23 | **状态名是 slug，展示名归 UI**：本地 `states()` 返回的 `name` 是 `STATES` 里的取值（`triage`…），不是人写的文案；新增 `capabilities.translatedStates`，为真时 UI 按 state id 查既有 `references.picker.filter.tracker.state.*` 翻译，未知 id 回退 `name`；Linear 报 `false`，其状态名是团队自己写的，永不翻译 | 11-01 |
 | 24 | **本地容器就是项目**：新增 `capabilities.containersAreProjects`，为真时 board 用当前项目 id 作为 `containerId`（项目选择器即作用域选择器，与 GitHub 项目/仓库选择器同位置），不再出现「全部项目」；项目内编号各自从 `LOCAL-1` 起，跨项目同名靠作用域而非改名区分。item 详情读取同时带上 `containerId`，避免同号读到别的项目 | 11-01 |
-| 25 | **两个字段各给一个对的输入方式，概念与格式都不变**：`feature` 从裸文本框改为「列已有 slug + 可输入新建」的组合框（`SourceBoardFeatureField`），候选取 `facets.feature`，大小写不同视为同一个 slug——此前 `auth` 与 `Auth` 会被 scanner 按字符串精确比较拆成两个分组；`blockedBy` 从建单/编辑表单移出，改为预览「被阻塞于」一行里的多选（`SourceBoardBlockers`，复用标签/评审人那套弹层），候选是同项目未完成的 issue 且排除自身，勾选即保存。该行改为恒显（无阻塞时值显示「无」），否则空阻塞没有添加入口。阻塞仍只写 identifier，`blocked` 仍是派生 | 11-01 |
+| 25 | **两个字段各给一个对的输入方式，概念与格式都不变**：`feature` 从裸文本框改为「列已有 slug + 可输入新建」的组合框（`SourceBoardTextChoiceField`），候选取 `facets.feature`，大小写不同视为同一个 slug——此前 `auth` 与 `Auth` 会被 scanner 按字符串精确比较拆成两个分组；`blockedBy` 从建单/编辑表单移出，改为预览「被阻塞于」一行里的多选（`SourceBoardBlockers`，复用标签/评审人那套弹层），候选是同项目未完成的 issue 且排除自身，勾选即保存。该行改为恒显（无阻塞时值显示「无」），否则空阻塞没有添加入口。阻塞仍只写 identifier，`blocked` 仍是派生 | 11-01 |
+| 26 | **`assignee` 是一个名字，由 board 写**：新增 `capabilities.assignee`（Local true / Linear false）。这个字段原先只由 scanner 在建单时硬写 `null`，编辑路径不接，`toTrackerItemSummary` 也恒返回 `null`，于是「`state: todo` + `assignee` 非空」这条派工信号在应用里既设不了也看不见。现改为：scanner 解析 frontmatter、create/edit 都接受该字段、list 的 `facets.assignee` 汇总容器内出现过的名字，UI 在预览「指派给」行编辑（列已有名字 + 可新建 + 可取消）。建单/编辑表单仍不加该字段——指派通常是写完之后的事，理由同决策 25。值只写名字，不给 `assignee` 加语义（决策 3 见《自动修复决策方案》）| 11-01 |
+| 27 | **本地 issue 永远有优先级**：新建默认 `low`，优先级下拉只列 `urgent/high/medium/low`，不再有「无」。服务端 `normalizePriority` 把 `'none'` 与缺失一律归一成 `low`，create 与 edit 都过这一层，scanner 落盘缺省也是 `low`；读取仍兜底（`issue.priority ?? 'low'`），所以本次改动前落盘 `priority: null` 的旧文件显示为 `low`，下次保存即写成 `low`。**筛选里的「无优先级」保留**：它是 Linear 共用的筛档，也是捞旧文件的唯一入口，与「新建能不能不给优先级」是两件事 | 11-01 |
+| 28 | **本地 issue 可以删除**：新增 `capabilities.delete`（Local true / Linear false——Linear 的删除走它自己的回收站，本路由不做）与 `TrackerImplementation.remove(input)`（可选方法，能力位为真但实现没有时路由仍答 UNSUPPORTED）。路由是 `DELETE /api/tracker/:provider/items?id=&containerId=`：item 名放 query 与 `items/get` 一致，identifier 不必转义，且能带上容器——每项目编号都从 `LOCAL-1` 起，**不带容器的删除在编号命中多个项目时直接报错**（删除不可逆，不像编辑那样取第一个同号文件后仅告警；编辑/读取仍保留旧语义，收紧只发生在删除上）。删除只做一件事：unlink 项目 `.issues/` 里的那个文件，并重算本项目派生 `blocked`（被删的阻塞者不再阻塞任何人）。UI 只在编辑弹窗里给入口（建单表单没有可删的东西），一次点击变「确认删除」，二次才执行；确认期间保存按钮禁用，两个写操作不会因手滑并行。文件无回收站，恢复只能靠仓库 git 历史（且以文件已提交为前提） | 11-01 |
 
 ## 4. 功能需求
 
@@ -60,9 +65,9 @@
 
 | 编号 | 需求 | 说明 | 优先级 |
 |---|---|---|---|
-| FR-1 | UI 建单 | board New issue 按钮；title 必填，description/labels/priority 可选，`feature` 在能力位为真时可选（组合框，候选为已有 slug 且可新建）；自动分配 `LOCAL-<n>`，n 为目录内 max+1。建单表单不含 `blockedBy`：新建的 issue 还没有值得阻塞的关系，等有了在预览里加（决策 25） | P0 |
+| FR-1 | UI 建单 | board New issue 按钮；title 必填，description/labels/priority 可选，`feature` 在能力位为真时可选（组合框，候选为已有 slug 且可新建）；自动分配 `LOCAL-<n>`，n 为目录内 max+1。优先级默认 `low` 且不可留空（决策 27）。建单表单不含 `blockedBy`：新建的 issue 还没有值得阻塞的关系，等有了在预览里加（决策 25） | P0 |
 | FR-2 | UI 编辑 | 编辑 title/description/labels/priority 与 `feature`；`blockedBy` 不在编辑表单里，由预览的「被阻塞于」一行增删（同样走 edit 载荷）；契约能力位 `edit`、`feature`、`blockers` | P0 |
-| FR-3 | 列表与筛选 | 复用 `GET items/list`；筛选：状态（open/all/六分类）、优先级（`all`/缺省任意，`none` 为无优先级，其余按值相等）、分组 `feature`（精确匹配一个 slug）；分组选项取自 list 返回的 `facets.feature` | P0 |
+| FR-3 | 列表与筛选 | 复用 `GET items/list`；筛选：状态（open/all/六分类）、优先级（`all`/缺省任意，`none` 为无优先级，其余按值相等）、分组 `feature`（精确匹配一个 slug）；分组选项取自 list 返回的 `facets.feature`。`none` 只筛历史文件（现在新建必带优先级），不是可选的空状态（决策 27） | P0 |
 | FR-4 | 搜索与直达 | 按 title、identifier、描述、分组 slug、labels、文件名匹配；粘贴编号或文件路径（`.issues/LOCAL-7-x.md`）直达该条 | P0 |
 | FR-5 | 详情预览 | description、labels、comments、分组与阻塞来源；沿用现有 board 预览布局 | P0 |
 | FR-6 | 状态流转 | 六分类 triage/backlog/todo/in-progress/done/canceled；点状态 pill 切换 | P0 |
@@ -78,6 +83,8 @@
 | FR-16 | 自定义状态、导出 JSON | | P2 |
 | FR-17 | 分享链接 | 预览「复制应用内链接」产出 `<当前应用地址>?reference=<issue url>`；打开该链接在应用内定位到该 issue（桌面/网页开 Tracker 面板 tab，手机开 board 并聚焦该条），消费后从地址栏移除该参数；`capabilities.externalUrl` 为假时不渲染指向 `openchamber.local` 的外链，无法展示时也不回退到系统浏览器 | P1 |
 | FR-18 | 状态名展示 | 状态胶囊、状态下拉、行状态、会话侧栏状态行统一走 `trackerStateLabel`：`capabilities.translatedStates` 为真按 id 翻译六态，为假原样显示 tracker 的 `name`；未知 id 回退 `name`。board 的本地页签按项目作用域列表，项目选择器与 GitHub 同位置；item 详情读取携带 `containerId` | P1 |
+| FR-19 | 指派 | 预览「指派给」一行：`capabilities.assignee` 为真时可编辑（候选为 `facets.assignee`，可输入新名字，可取消指派），值落盘为 frontmatter 的 `assignee`；为假时只读展示 tracker 返回的名字。建单/编辑表单不含该字段 | P1 |
+| FR-20 | 删除 | `capabilities.delete` 为真时，编辑弹窗底部提供「删除议题」：第一次点击把它变成「确认删除」，第二次才发送 `DELETE items`（带 `containerId`）；成功后关闭弹窗并刷新列表，失败就地报错且退回一次点击的状态。删除即删掉 `.issues/` 里的文件，被它阻塞的 issue 随即解除阻塞。建单表单没有删除入口；`capabilities.delete` 为假的 tracker 不出现该按钮 | P1 |
 
 ## 5. 存储与文件格式
 
@@ -150,10 +157,11 @@ completed in 12m
 
 ## 7. 契约扩展与路由
 
-- `tracker-contract.d.ts`：capabilities 新增 `create`、`edit`、`feature`、`blockers` 布尔位；`TrackerImplementation` 新增 `create(input)`、`edit(input)`；`TrackerListOptions` 新增 `feature`，list 结果新增可选 `facets: TrackerListFacets`。
+- `tracker-contract.d.ts`：capabilities 新增 `create`、`edit`、`delete`、`feature`、`blockers` 布尔位；`TrackerImplementation` 新增 `create(input)`、`edit(input)` 与可选的 `remove(input)`（`TrackerDeleteItemInput = { id, containerId? }`）；`TrackerListOptions` 新增 `feature`，list 结果新增可选 `facets: TrackerListFacets`。
 - UI 端 descriptor 用 `z.boolean().catch(false)`（仓库 `flag` 约定）解析能力位，不是 optional：老 server 描述符缺键即解析为 off；消费方判 `=== true`。
 - `trackers/routes.js`：新增 `POST /api/tracker/:provider/items/create`、`POST .../items/edit`，走现有 `handle()` 能力位门禁，未声明即 404 `UNSUPPORTED`；Linear 与扩展 tracker 零感知。线上载荷为 `{containerId,title,description,priority,labels}` / `{id,title,description,priority,labels}`，并**按需**携带 `feature`（字符串或 null）与 `blockedBy`（identifier 数组）：只有 body 里出现该键才透传，`blockedBy` 在路由层归一（trim、大写、去重）。能力位 `feature`/`blockers` 为 false 的 tracker 由 UI 端不发送、服务端忽略。
 - `feature` 筛选走 `readListOptions`，无能力位门禁（拿不到 slug 的 tracker 收到也只会返回全量）。
+- `trackers/routes.js` 还有 `DELETE /api/tracker/:provider/items?id=&containerId=`（也接受 `projectDirectory` 作为容器提示），门禁是 `capabilities.delete === true` **且** 实现带 `remove`，任一不满足即 404 `UNSUPPORTED`；回答 `{connected: true, removed: true, identifier}`。
 - local descriptor：
 
 ```js
@@ -164,11 +172,12 @@ completed in 12m
   capabilities: {
     multipleAccounts: false, stateUpdate: true, children: false,
     labels: true, priority: true, feature: true, blockers: true,
+    assignee: true,
     filters: { people: false, priority: true },
     projectMapping: false, sessionComments: true, hostAccess: false,
     externalUrl: false,
     translatedStates: true, containersAreProjects: true,
-    create: true, edit: true,
+    create: true, edit: true, delete: true,
   },
   stateFilters: ['open', 'all', 'triage', 'backlog', 'todo', 'in-progress', 'done', 'canceled'],
   urlPatterns: [{ host: 'openchamber.local', path: '^/tracker/local/([A-Za-z][A-Za-z0-9]*-\\d+)(?:/|$)' }],
@@ -180,15 +189,19 @@ completed in 12m
 - `externalUrl: false` 标记「`url` 不是可导航页面」：本地 issue 的 url 只是命名空间，UI 依此改为应用内打开/复制（FR-17）。缺省读作 `false`（旧 server 未声明），把陈旧客户端推向应用内链接而不是死链。
 - `translatedStates: true` 标记「`state.name` 是生成值不是文案」：UI 按 state id 翻译；缺省读作 `false`，宁可本地状态暂时留英文，也不翻译 Linear 里团队自己写的状态名。
 - `containersAreProjects: true` 标记「容器 = 项目文件夹」：board 以当前项目 id 作为 `containerId`，不再有「全部项目」；缺省读作 `false`，保持 tracker 自带容器的旧行为。
+- `assignee: true` 标记「指派值是一个名字，board 可以写」：`.issues/` 没有成员目录，`assignee` 落盘就是字符串，接口映射成契约的 `TrackerPerson { name, avatarUrl: null }`；Linear 报 `false`（它的指派要按 id 选团队成员），预览那一行退回只读。
+- `delete: true` 标记「这一条能被真删掉」：本地就是 unlink 那个文件；Linear 报 `false`（删除在它自己的回收站里），编辑弹窗因此不出现删除按钮。缺省读作 `false`。
 - **老客户端兼容**（照搬既有 tracker 决策）：会话链接写入 `kind: 'tracker'`；`liveSummaries` 返回的 state 附带 `type` 字段（老手机 UI alias 窗口期）。
 
 ## 8. UI
 
 - `packages/ui/src/lib/trackers/presentation.ts` 加 `local` 条目（icon、copy、branchName、settingsSearch）；board 页签、picker、状态颜色由 descriptor 自动绘制。
 - board 以 `capabilities.create === true` 条件渲染 New issue，编辑入口独立以 `capabilities.edit === true` 门禁（server 两路由各自校验，一个 tracker 可只许编辑）；New issue 对话框带项目（container）下拉，默认当前 UI 上下文的项目。
-- 建单/编辑对话框：title、description、priority、labels 之外，`capabilities.feature` 为真时显示「分组」组合框（`SourceBoardFeatureField`：列出 `facets.feature` 的已有值并可按输入新建，输入与已有值仅大小写/空格不同时不给「新建」项）；`capabilities.blockers` 为真时**不再**在表单里给 `blockedBy` 字段，改由预览的「被阻塞于」一行提供多选（决策 25）。能力位为假时字段不渲染、也不进载荷。
+- 建单/编辑对话框：title、description、priority、labels 之外，`capabilities.feature` 为真时显示「分组」组合框（`SourceBoardTextChoiceField`：列出 `facets.feature` 的已有值并可按输入新建，输入与已有值仅大小写/空格不同时不给「新建」项）；`capabilities.blockers` 为真时**不再**在表单里给 `blockedBy` 字段，改由预览的「被阻塞于」一行提供多选（决策 25）。能力位为假时字段不渲染、也不进载荷。优先级下拉只有四档，默认 `low`，读取时遇到 `none`（旧数据或超前的服务端）也显示为 `low`。
+- **删除**：`capabilities.delete` 为真时，编辑弹窗 footer 左侧多一个 destructive 文字按钮「删除议题」；点一次变成「确认删除」并配一个取消，再点一次才发 `DELETE`。删除成功后走 `onDeleted` 刷新列表（被删的行不在列表里了，高亮自动落到第一行，预览随之换条），失败则就地显示「删除议题失败。」并退回一次点击的状态。建单模式没有这个按钮，`capabilities.delete` 为假的 tracker（Linear）也没有。
 - 筛选菜单：状态、people/priority（按 `capabilities.filters` 门禁）之外，`capabilities.feature` 且服务端返回了 `facets.feature` 时提供「分组」组，选项为 facets ∪ 当前选中的 slug，选「全部分组」清空；摘要只在菜单确实提供该组时显示 slug，避免按钮与菜单不一致。
 - 有 `blocked` 的行显示「已阻塞」徽标（lock 图标）；预览 meta 的「分组」一行展示 slug，「被阻塞于」一行在 `capabilities.blockers` 为真时**恒显**（没有阻塞时值显示「无」，行尾按钮打开多选弹层，候选是同项目未完成的 issue 且排除自身，勾选即写回），无该能力位时退回只读：有 `blocked` 才显示，identifier 可点击跳到该 issue（列表里没有该行时按 identifier 向 tracker 读取，读不到则回退为用 identifier 搜索）。
+- **指派**：预览 meta 的「指派给」一行在 `capabilities.assignee` 为真时恒显（未指派时值为「无」），行尾铅笔打开 `SourceBoardTextChoiceField`（`trigger="icon"`，与分组组合框同一个组件）：候选是同容器出现过的名字，输入新名字给「指派给「x」」，另有「取消指派」。取消时写 `null`，服务端删掉该键而不是留 `assignee: null`。Linear 无该能力位，只显示它返回的名字。
 - container（即项目本身，见 §6）在预览 meta 与 board 范围选择器里一律显示为「项目 / Project」，不再叫「分组」：否则与分组行同译，中文界面会出现两行都叫「分组」。Linear 的 container 是 team，文案仍为「团队」。
 - **状态名**：状态胶囊、状态下拉项、行状态、会话侧栏状态行都经 `lib/trackers/stateLook.ts` 的 `trackerStateLabel(state, t, translatedStates)`。`capabilities.translatedStates` 为假时返回 `name`（Linear 的团队自定义状态原样显示）；为真时按 state id 取 `references.picker.filter.tracker.state.*`，id 缺失退回 `category`，仍未命中则回退 `name`。
 - **本地页签的作用域**：`capabilities.containersAreProjects` 为真时，`trackerScopeOf()` 直接返回当前项目 id，board 工具栏显示应用的项目选择器（与 GitHub 的项目/仓库选择器同位置、同交互），**不提供「全部项目」**；切项目时保持在本页签，不再跳回仓库页签。Linear 仍用自己的 team 选择器（`projectMapping`）。
@@ -199,7 +212,7 @@ completed in 12m
 
 ## 9. agent 会话命令
 
-- 命令文件 `.opencode/commands/local-issues.md`，frontmatter 仅 `description`，正文含 `$ARGUMENTS`：按 §5.2 模板建单（编号 max+1）、按 identifier 查单、改 `state`、把改动涉及的代码位置写进正文。模板共 7 条规则，第 6 条要求编辑正文时保留 `## Comments` 节及其条目不变，第 7 条说明 `feature`/`blockedBy` 的写法与「解除阻塞无需改等待者文件」。
+- 命令文件 `.opencode/commands/local-issues.md`，frontmatter 仅 `description`，正文含 `$ARGUMENTS`：按 §5.2 模板建单（编号 max+1）、按 identifier 查单、改 `state`、把改动涉及的代码位置写进正文。模板共 9 条规则：第 6 条说明删除（删文件即删 issue，只在被要求时做）、第 7 条要求编辑正文时保留 `## Comments` 节及其条目不变、第 8 条说明 `feature`/`blockedBy` 的写法与「解除阻塞无需改等待者文件」，第 9 条是正文模板。第 1 条的 `priority` 枚举只到 `low`，不写 `null`。
 - agent 直接用自己的文件工具读写，不经 server API。
 - **发现约束**：OpenChamber 自身仓库的命令对用户会话不可见。模板随 `packages/docs` 提供，文档引导复制到自己项目的 `.opencode/commands/`；server 不写用户目录。
 - 约定文档 `docs/agents/issue-tracker.md`（本仓库内，随 v2.3 落库）与本方案同一套格式，是命令模板与 triage 的可执行依据：triage 五角色映射（needs-triage→`state: triage`、needs-info→`labels: [needs-info]` 保持原状态、ready-for-agent→`todo`、ready-for-human→`backlog`、wontfix→`canceled` + `labels: [wontfix]`）；wayfinder 的 map（`<slug>-map.md`）/spec（`<slug>-spec.md`）/child（暂以 `feature` 分组表达，FR-14 前不建层级）/blockedBy/frontier（`todo` 且未阻塞）/claim（移入 `in-progress` + 会话评论）/resolve（写代码引用后置 `done`，一次写入即解除后继阻塞）语义按该文档执行。`/triage-issues` 命令指向该文档的本地映射表。
@@ -209,13 +222,13 @@ completed in 12m
 | 层 | 内容 |
 |---|---|
 | `files.test.js` | frontmatter 往返、原子写、Comments 追加不丢正文、解析失败跳过 |
-| `scanner.test.js` | 扫描、逐文件 mtime+size 缓存命中与失效、编号 max+1 与重号顺延、非法文件名跳过；`blocked` 派生与解除、`feature` 筛选与 `facets`（含 container 隔离、不受筛选影响）、搜索命中 `feature`/labels/文件名、edit 写入与清空 `feature`/`blockedBy` |
-| `tracker.test.js` | descriptor 冻结与能力位、neutral 映射（含 `feature`/`blockedBy`/`blocked`/`facets`）、create/edit/updateState 落盘、matchUrl fixture |
+| `scanner.test.js`（含 assignee 解析、facets 汇总、创建与清除） | 扫描、逐文件 mtime+size 缓存命中与失效、编号 max+1 与重号顺延、非法文件名跳过；`blocked` 派生与解除、`feature` 筛选与 `facets`（含 container 隔离、不受筛选影响）、搜索命中 `feature`/labels/文件名、edit 写入与清空 `feature`/`blockedBy` |
+| `tracker.test.js` | descriptor 冻结与能力位（含 `assignee`、`delete`）、neutral 映射（含 `feature`/`blockedBy`/`blocked`/`facets`）、assignee 名字往返与 `facets.assignee`、优先级默认 `low` 与 `none` 归一（create/edit 落盘断言）、create/edit/updateState/remove 落盘与删文件、删除后等待者解除阻塞、matchUrl fixture |
 | `status-runtime.test.js` | started/completed/failure → Comments 落盘；preferences 关闭跳过 |
-| routes | create/edit 能力位门禁（未声明 404 UNSUPPORTED）；`feature`/`blockedBy` 按需透传、identifier 归一（trim/大写/去重） |
+| routes | create/edit/delete 能力位门禁（未声明 404 UNSUPPORTED，能力位为真但实现无 `remove` 也 404）；`feature`/`blockedBy` 按需透传、identifier 归一（trim/大写/去重）、`assignee` 名字 trim 与 `null` 清除；delete 的 `id` 必填、`containerId`/`projectDirectory` 二选一透传 |
 | registry | `local` 注册与校验 |
 | web api | `facets` 与 `feature`/`blockedBy`/`blocked` 的 zod 解析（缺省保持缺省，`null` 读作无分组）；`feature` 进入 list query string |
-| UI | presentation `local` 夹具、行徽标与预览 meta、阻塞来源可点击、筛选菜单分组选项与摘要一致、代码引用识别、i18n parity（15 locale，含 `sourceBoard.tracker.form.*` 与 `sourceBoard.blockers.*`）；状态名翻译（`stateLook.test.ts`：六态、未知 id 回退、Linear 不翻）、作用域判定（`scope.test.ts`：项目作用域 / 自带容器 / 容器消失）、字段候选（`trackerChoices.test.ts`：分组匹配与「新建」判定、阻塞候选排除自身）、建单载荷（`TrackerIssueDialog.test.tsx`：能力位为真时发 `feature`、任何情况都不发 `blockedBy`） |
+| UI | presentation `local` 夹具、行徽标与预览 meta、阻塞来源可点击、筛选菜单分组选项与摘要一致、代码引用识别、i18n parity（15 locale，含 `sourceBoard.tracker.form.*`、`sourceBoard.blockers.*`、`sourceBoard.assignee.*` 与 `sourceBoard.tracker.delete*`）；状态名翻译（`stateLook.test.ts`：六态、未知 id 回退、Linear 不翻）、作用域判定（`scope.test.ts`：项目作用域 / 自带容器 / 容器消失）、字段候选（`trackerChoices.test.ts`：分组匹配与「新建」判定、阻塞候选排除自身）、建单载荷（`TrackerIssueDialog.test.tsx`：能力位为真时发 `feature`、任何情况都不发 `blockedBy`、默认发 `priority: low`、旧数据 `none` 编辑后写 `low`）、删除（同一文件：首击不发请求、二击发 `DELETE` 且带 `containerId`、失败留窗并退回一次点击、无能力位不渲染按钮） |
 | 路由/深链 | `parseRoute` 只接受 http(s) 的 `reference`；`referenceLinkHref` 保留 origin/端口/参数、替换已有 `reference`、非 http(s) 页面（`openchamber-ui://`、`file://`）返回 null；`externalUrl` 缺省读作 false；`ReferencePreview` 对本地 issue 不渲染外链、复制按钮文案切换 |
 | 全局 | `bun run check:changed` 通过 |
 
@@ -239,6 +252,9 @@ completed in 12m
 9. **FR-17 分享链接**：本地 issue 预览复制出的链接形如 `<应用地址>?reference=<encode 后的 issue url>`；在浏览器打开该链接，应用定位到该 issue（桌面/网页为 Tracker 面板 tab，手机为 board 聚焦），地址栏随后不再带 `reference`；界面与预览中不存在指向 `openchamber.local` 的可点击外链；`externalUrl: true` 的 tracker（Linear）仍复制其自身地址并保留外链图标。
 10. **FR-18 状态名**：本地 issue 的状态胶囊、状态下拉、行状态与会话侧栏状态行显示「分诊 / 待办池 / 待办 / 进行中 / 已完成 / 已取消」，不出现 `triage`、`in-progress` 等 slug；Linear 的 `In Progress` 等自定义状态名保持原样；未知 state id 回退显示其 `name`。
 11. **FR-18 作用域**：本地页签的 list 请求带 `containerId=<当前项目 id>`，只列出该项目 `.issues/` 的 issue；工具栏出现项目选择器，切换项目后列表随之变化且停留在本地页签；两个项目各有一个 `LOCAL-1` 时不会出现在同一张表里；预览与「附加到会话」读取详情同样带 `containerId`。
+12. **FR-19 指派**：在预览里给一条 issue 指定名字后，文件出现 `assignee: <名字>`，列表与预览都显示它；取消指派后该键从文件消失；`facets.assignee` 随后不再包含这个没人用的名字（别的 issue 仍在用则保留）；同一容器里的名字大小写不同视为两个值。Linear 的预览只显示名字，没有编辑按钮。
+13. **决策 27 优先级**：新建弹窗打开时优先级已是「低」，下拉里没有「无」；直接提交后文件里是 `priority: low` 而不是 `null`。把一条旧数据（`priority: null`）打开编辑并保存，文件变成 `priority: low`；列表里它显示为「低」，筛选选「无优先级」只能捞到尚未重新保存过的旧文件。手工/agent 按 `.opencode/commands/local-issues.md` 建的单也不再写 `null`。
+14. **FR-20 删除**：在本地 issue 的编辑弹窗点「删除议题」只变成「确认删除」，文件仍在；再点一次后文件从 `.issues/` 消失、弹窗关闭、列表不再有该行、预览换到别的条目；若该 issue 曾是别人的阻塞者，等待者的「已阻塞」随即消失且其文件未被改写。Linear 的编辑弹窗没有删除按钮，直接请求 `DELETE items` 得到 404 `UNSUPPORTED` 而不是删掉任何东西。
 
 ## 13. 备选方案否决记录
 
@@ -260,6 +276,7 @@ completed in 12m
 | 会话链接与去重映射仅存内存，重启丢失 | issue 文件上的 `started` 评论已为人持久化链接；映射随下次 `started` 重建；去重 FIFO 上限 500；若实践中出现重复评论，持久化留作 M2 决策（`local/DOCUMENTATION.md` 记录） |
 | `blocked` 与 `facets` 每次列表都按项目全量计算 | 两者都是已解析 issue 上的对象遍历，不额外读盘；文件内容未变时仍走 `mtime+size` 缓存，千级 issue 仍是毫秒级 |
 | 引用了一个被删除 issue 的 `blockedBy` 条目成为死边 | 视为不阻塞（不会永久卡住等待者），文档与命令模板说明；清理死边留给 agent 或手工编辑 |
+| 误删本地 issue（文件被 unlink） | 删除需二次确认；文件随项目 git 走，`git checkout` 可恢复；不在磁盘上留副本（与本方案「数据即仓库文件」一致） |
 
 ## 15. 范围外
 
