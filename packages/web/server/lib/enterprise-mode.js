@@ -104,6 +104,22 @@ import { z } from 'zod';
  * trust never becomes the user's move.
  * `allowedInsecureGitOrigins()` resolves both for the consumers that check it.
  *
+ * The file can also pin where the model catalog is read from
+ * (`modelsDevUrl`, a models.dev `api.json` format address), with or without
+ * enterprise mode, for networks that cannot reach models.dev. The consumers
+ * validate it at use (`readPinnedModelsDevUrl`, `opencode/models-metadata.js`)
+ * and treat a malformed value as unset: only plain `http(s)` without
+ * credentials counts. `publicEnterprisePolicy` carries the boolean
+ * `modelsDevUrlPinned` and never the address, and the browser drops its
+ * models.dev fallback while the flag is set (`useConfigStore`).
+ *
+ * The file can also replace the built-in skill catalogs entirely
+ * (`skillsCatalogSources`, Git sources the organization serves), with or
+ * without enterprise mode; the replacement list wins over
+ * `hideBuiltinSkillCatalogs` (`skills-catalog/curated-sources.js`,
+ * `skills-catalog/source.js`). An entry the schema cannot read makes the
+ * whole file invalid, which fails closed: no catalog at all.
+ *
  * The VS Code extension host, which runs no OpenChamber server, reads the
  * same policy through this module for the parts it has (provider connection,
  * update checks).
@@ -151,6 +167,10 @@ const policyFileSchema = z.object({
   // networks that cannot reach models.dev. Consumers validate it at use
   // (`readPinnedModelsDevUrl`) and treat a malformed value as unset.
   modelsDevUrl: optionalText,
+  // The npm registry for plugin metadata and version checks, for networks
+  // where registry.npmjs.org is unreachable or mirrored. Validated at use by
+  // `readNpmRegistry`; a malformed value counts as unset.
+  npmRegistry: optionalText,
   // Replaces the built-in skill catalogs. An entry the schema cannot read
   // makes the whole file invalid, which fails closed (no catalog at all).
   skillsCatalogSources: z.array(z.object({
@@ -181,7 +201,7 @@ const parsePolicyFile = (text) => {
     const field = issue.path.length > 0 ? `"${issue.path.join('.')}": ` : '';
     throw new Error(`${field}${issue.message}`);
   }
-  const { enterpriseMode, organization, relayUrl, allowNetworkAccess, allowedExtensions, allowLocalExtensions, jev, opencodeBinary, hideBuiltinSkillCatalogs, allowedInsecureGitOrigins, modelsDevUrl, skillsCatalogSources } = parsed.data;
+  const { enterpriseMode, organization, relayUrl, allowNetworkAccess, allowedExtensions, allowLocalExtensions, jev, opencodeBinary, hideBuiltinSkillCatalogs, allowedInsecureGitOrigins, modelsDevUrl, npmRegistry, skillsCatalogSources } = parsed.data;
   return {
     enterpriseMode: enterpriseMode === true,
     organization: organization ?? null,
@@ -194,6 +214,7 @@ const parsePolicyFile = (text) => {
     hideBuiltinSkillCatalogs: hideBuiltinSkillCatalogs === true,
     allowedInsecureGitOrigins: allowedInsecureGitOrigins ?? [],
     modelsDevUrl: modelsDevUrl ?? null,
+    npmRegistry: npmRegistry ?? null,
     skillsCatalogSources: skillsCatalogSources ?? [],
   };
 };
@@ -272,6 +293,7 @@ export const readEnterprisePolicy = (options = {}) => {
       // Fails closed like the rest: a broken policy pins no endpoint and offers no catalog it might have replaced.
       modelsDevUrl: null,
       skillsCatalogSources: [],
+      npmRegistry: null,
     };
   }
 
@@ -312,6 +334,10 @@ export const readEnterprisePolicy = (options = {}) => {
     allowedInsecureGitOrigins: fromFile?.allowedInsecureGitOrigins ?? [],
     // File only, in or out of enterprise mode, for the same reason.
     modelsDevUrl: fromFile?.modelsDevUrl ?? null,
+    // The file's value wins; the environment's fills the gap, unless the file
+    // turned enterprise mode on (the environment is the user's to edit).
+    npmRegistry: fromFile?.npmRegistry
+      ?? (fileGoverns ? null : envString(env, 'OPENCHAMBER_NPM_REGISTRY')),
     skillsCatalogSources: fromFile?.skillsCatalogSources ?? [],
   };
 };
@@ -333,6 +359,50 @@ export const readPinnedModelsDevUrl = (options) => {
 };
 
 export const isEnterpriseMode = (options) => readEnterprisePolicy(options).enterpriseMode;
+
+/**
+ * The npm registry this OpenChamber serves plugin metadata and version checks
+ * from, or null. Priority: the policy file, the environment
+ * (`OPENCHAMBER_NPM_REGISTRY`), then, while enterprise mode is off, the user's
+ * `npmRegistry` setting in `preferences.json` (Settings → npm, read the same
+ * way `readProfileInsecureGitOrigins` reads profile settings). Whatever wins is
+ * validated the same way `npm-registry-config.js` validates a registry URL, and
+ * a malformed value counts as unset. Read at every use, like the policy: a
+ * changed file or setting applies without a restart.
+ */
+export const readNpmRegistry = (options = {}) => {
+  const policy = readEnterprisePolicy(options);
+  const raw = policy.npmRegistry
+    ?? (policy.enterpriseMode ? null : readProfileNpmRegistry(options));
+  if (!raw) return null;
+  try {
+    const registry = new URL(raw);
+    if (!['http:', 'https:'].includes(registry.protocol) || registry.search || registry.hash) return null;
+    if (registry.username || registry.password) return null;
+    return `${registry.protocol}//${registry.host}${registry.pathname.replace(/\/+$/, '')}/`;
+  } catch {
+    return null;
+  }
+};
+
+const readProfileNpmRegistry = ({ env = process.env, readFile = defaultReadFile } = {}) => {
+  const dir = env.OPENCHAMBER_DATA_DIR
+    ? path.resolve(env.OPENCHAMBER_DATA_DIR)
+    : path.join(os.homedir(), '.config', 'openchamber');
+  let text;
+  try {
+    text = readFile(path.join(dir, 'preferences.json'));
+  } catch {
+    return null;
+  }
+  try {
+    const fields = JSON.parse(text.replace(/^\uFEFF/, ''))?.fields;
+    const parsed = z.string().safeParse(fields?.npmRegistry?.value);
+    return parsed.success ? parsed.data.trim() || null : null;
+  } catch {
+    return null;
+  }
+};
 
 /**
  * The user's own plain-HTTP Git origins: the `allowedInsecureGitOrigins`

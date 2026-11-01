@@ -11,6 +11,7 @@ import {
   policyFilePaths,
   publicEnterprisePolicy,
   readEnterprisePolicy,
+  readNpmRegistry,
   readPinnedModelsDevUrl,
 } from './enterprise-mode.js';
 
@@ -53,6 +54,7 @@ describe('enterprise policy', () => {
       hideBuiltinSkillCatalogs: false,
       allowedInsecureGitOrigins: [],
       modelsDevUrl: null,
+      npmRegistry: null,
       skillsCatalogSources: [],
     });
   });
@@ -87,6 +89,7 @@ describe('enterprise policy', () => {
       hideBuiltinSkillCatalogs: false,
       allowedInsecureGitOrigins: ['http://gitlab.acme.test'],
       modelsDevUrl: null,
+      npmRegistry: null,
       skillsCatalogSources: [],
     });
   });
@@ -114,6 +117,34 @@ describe('enterprise policy', () => {
       const options = machine({ [LINUX_POLICY]: '{"modelsDevUrl": 42}' });
       expect(readEnterprisePolicy(options).modelsDevUrl).toBeNull();
       expect(readPinnedModelsDevUrl(options)).toBeNull();
+    });
+  });
+
+  describe('npm registry', () => {
+    it('comes from the file first, with or without enterprise mode', () => {
+      expect(readNpmRegistry(machine({ [LINUX_POLICY]: '{"npmRegistry": " https://npm.corp.test/registry "} ' })))
+        .toBe('https://npm.corp.test/registry/');
+      expect(readNpmRegistry(machine({ [LINUX_POLICY]: '{"enterpriseMode": true, "npmRegistry": "http://npm.corp.test:8080"}' })))
+        .toBe('http://npm.corp.test:8080/');
+    });
+
+    it('fills the gap from the environment, but never while the file governs', () => {
+      expect(readNpmRegistry(machine({}, { env: { OPENCHAMBER_NPM_REGISTRY: 'https://npm.corp.test' } }))).toBe('https://npm.corp.test/');
+      expect(readNpmRegistry(machine({ [LINUX_POLICY]: '{"enterpriseMode": true}' }, { env: { OPENCHAMBER_NPM_REGISTRY: 'https://env-npm.corp.test' } }))).toBeNull();
+    });
+
+    it('reads the user setting while enterprise mode is off, and never while it is on', () => {
+      const prefs = { [PREFERENCES_FILE]: JSON.stringify({ fields: { npmRegistry: { value: 'https://profile-npm.corp.test', updatedAt: 0 } } }) };
+      expect(readNpmRegistry(machine(prefs, { env: { OPENCHAMBER_DATA_DIR: DATA_DIR } }))).toBe('https://profile-npm.corp.test/');
+      expect(readNpmRegistry(machine(prefs, { env: { OPENCHAMBER_ENTERPRISE_MODE: '1', OPENCHAMBER_DATA_DIR: DATA_DIR } }))).toBeNull();
+      expect(readNpmRegistry(machine(prefs, { env: { OPENCHAMBER_DATA_DIR: DATA_DIR, OPENCHAMBER_NPM_REGISTRY: 'https://env-npm.corp.test' } }))).toBe('https://env-npm.corp.test/');
+    });
+
+    it('treats a malformed, credentialed or blank value as unset', () => {
+      for (const value of ['not a url', 'ftp://npm.corp.test', 'https://user:pw@npm.corp.test', 'https://npm.corp.test?x=1', '  ']) {
+        expect(readNpmRegistry(machine({ [LINUX_POLICY]: JSON.stringify({ npmRegistry: value }) })), value).toBeNull();
+      }
+      expect(readNpmRegistry(machine({ [LINUX_POLICY]: '{"npmRegistry": 42}' }))).toBeNull();
     });
   });
 

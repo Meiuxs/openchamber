@@ -12,18 +12,22 @@ const originalLowerUserConfig = process.env.npm_config_userconfig;
 const originalPrivateRegistry = process.env.PRIVATE_NPM_REGISTRY;
 const originalPrivateToken = process.env.PRIVATE_NPM_TOKEN;
 const originalScopedRegistry = process.env['npm_config_@scope:registry'];
+const originalChamberRegistry = process.env.OPENCHAMBER_NPM_REGISTRY;
 let userConfigPath;
 
 describe('npm registry configuration', () => {
   beforeEach(() => {
     userConfigPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'openchamber-npmrc-')), '.npmrc');
-    process.env.NPM_CONFIG_USERCONFIG = userConfigPath;
+    // Windows env keys are case-insensitive: the lowercase delete would erase
+    // the uppercase set, so every delete runs before the configuration set.
     delete process.env.npm_config_userconfig;
     delete process.env.npm_config_registry;
     delete process.env.NPM_CONFIG_REGISTRY;
     delete process.env.PRIVATE_NPM_REGISTRY;
     delete process.env.PRIVATE_NPM_TOKEN;
     delete process.env['npm_config_@scope:registry'];
+    delete process.env.OPENCHAMBER_NPM_REGISTRY;
+    process.env.NPM_CONFIG_USERCONFIG = userConfigPath;
   });
 
   afterEach(() => {
@@ -42,6 +46,8 @@ describe('npm registry configuration', () => {
     else process.env.PRIVATE_NPM_TOKEN = originalPrivateToken;
     if (originalScopedRegistry === undefined) delete process.env['npm_config_@scope:registry'];
     else process.env['npm_config_@scope:registry'] = originalScopedRegistry;
+    if (originalChamberRegistry === undefined) delete process.env.OPENCHAMBER_NPM_REGISTRY;
+    else process.env.OPENCHAMBER_NPM_REGISTRY = originalChamberRegistry;
   });
 
   test('uses the default public registry without npm configuration', () => {
@@ -183,5 +189,29 @@ describe('npm registry configuration', () => {
     fs.writeFileSync(userConfigPath, 'registry=not-a-url-private-token\n');
 
     expect(() => resolveNpmRegistryRequest('plugin')).toThrow('Invalid npm registry URL');
+  });
+
+  test('uses the fork registry (intranet mirror) for an unscoped package', () => {
+    process.env.OPENCHAMBER_NPM_REGISTRY = 'https://npm.corp.test/registry';
+
+    expect(resolveNpmRegistryRequest('plugin')).toEqual({
+      url: 'https://npm.corp.test/registry/plugin',
+      headers: {},
+    });
+  });
+
+  test('prefers the fork registry over an inherited npm registry and user configuration', () => {
+    fs.writeFileSync(userConfigPath, 'registry=https://mirror.example.com/npm/\n');
+    process.env.NPM_CONFIG_REGISTRY = 'https://inherited.example.com/npm/';
+    process.env.OPENCHAMBER_NPM_REGISTRY = 'https://npm.corp.test/registry';
+
+    expect(resolveNpmRegistryRequest('plugin').url).toBe('https://npm.corp.test/registry/plugin');
+  });
+
+  test('a scoped registry still wins over the fork registry', () => {
+    process.env['npm_config_@scope:registry'] = 'https://packages.example.com/npm/';
+    process.env.OPENCHAMBER_NPM_REGISTRY = 'https://npm.corp.test/registry';
+
+    expect(resolveNpmRegistryRequest('@scope/plugin').url).toBe('https://packages.example.com/npm/@scope%2Fplugin');
   });
 });

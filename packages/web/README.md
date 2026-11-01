@@ -119,6 +119,7 @@ OPENCODE_HOST=https://myhost:4096 OPENCODE_SKIP_START=true openchamber
 | `OPENCHAMBER_FS_UPLOAD_MAX_BYTES` | Maximum file upload size in bytes (default: 100 MiB) |
 | `OPENCHAMBER_PROXY_TIMEOUT_MS` | OpenCode upstream proxy deadline in milliseconds. Accepts integers from `0` to `2147483647`; defaults to `240000` (4 minutes). Invalid values warn and keep the default. `0` disables this proxy deadline, allowing unbounded waits until the client disconnects. Other client and upstream timeouts still apply. VS Code's separate extension bridge is unchanged. |
 | `OPENCHAMBER_TERMINAL_SHELL` | Preferred terminal shell executable used by the `Auto` setting before platform defaults |
+| `OPENCHAMBER_NPM_REGISTRY` | Registry used for plugin metadata and npm version checks when the policy file does not pin one, ahead of `npm_config_registry` / `NPM_CONFIG_REGISTRY` and the user's `.npmrc`. A user setting in Settings → npm fills the gap while enterprise mode is off (fork: intranet mirror). |
 | `npm_config_registry` / `NPM_CONFIG_REGISTRY` | Registry used for plugin metadata and npm version checks. Scoped registry settings and the user's `.npmrc` are also honored. The lowercase value takes precedence when both are set. |
 
 </details>

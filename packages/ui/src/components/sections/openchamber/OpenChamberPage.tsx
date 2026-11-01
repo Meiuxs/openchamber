@@ -11,6 +11,7 @@ import { NotificationSettings } from './NotificationSettings';
 import { VoiceSettings } from './VoiceSettings';
 import { TunnelSettings } from './TunnelSettings';
 import { OpenCodeCliSettings } from './OpenCodeCliSettings';
+import { NpmRegistrySettings } from './NpmRegistrySettings';
 import { EnvironmentVariablesSettings } from './EnvironmentVariablesSettings';
 import { IsolatedSpacesSettings } from './IsolatedSpacesSettings';
 import { OpenChamberToolsSettings } from './OpenChamberToolsSettings';
@@ -135,6 +136,9 @@ const GeneralSectionContent: React.FC = () => {
             {showPasskeySettings && <PasskeySettings />}
             <AppLinkSecuritySettings />
             {!isVSCode && <OpenCodeCliSettings />}
+            {/* Fork: intranet npm mirror. Same gate as the CLI above, where the
+                registry serves plugin metadata and update checks. */}
+            {!isVSCode && <NpmRegistrySettings />}
             {/* Remounts on a runtime switch: the names come from that server. */}
             {!isVSCode && <EnvironmentVariablesSettings key={runtimeEndpointEpoch} />}
             {!isVSCode && <OpenChamberToolsSettings />}

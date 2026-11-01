@@ -2,6 +2,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { readNpmRegistry } from '../enterprise-mode.js';
+
 const DEFAULT_NPM_REGISTRY = 'https://registry.npmjs.org';
 
 function configPath() {
@@ -55,6 +57,13 @@ function registryFor(packageName, values) {
 
   const scopedRegistry = scope && configuredValue(values, `${scope}:registry`);
   if (scopedRegistry) return scopedRegistry;
+
+  // The policy file, the environment or the user setting (fork: intranet npm
+  // mirror), behind the scoped registries and ahead of the generic ones: a
+  // mirror is for every unscoped package, while an explicit generic npm config
+  // on the machine stays a personal choice the app's answer overrides.
+  const policyRegistry = readNpmRegistry();
+  if (policyRegistry) return policyRegistry;
 
   const environmentRegistry = [process.env.npm_config_registry, process.env.NPM_CONFIG_REGISTRY]
     .map((value) => value?.trim())

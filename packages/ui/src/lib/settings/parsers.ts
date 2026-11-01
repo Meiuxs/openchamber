@@ -130,6 +130,29 @@ export const parseOneOf = <const T extends readonly [string, ...string[]]>(optio
   trimmed.pipe(z.enum(options)),
 );
 
+/**
+ * The npm registry box as a plain string: a trimmed `http(s)` URL without
+ * credentials, query or fragment, a trailing slash added, '' kept as '' (the
+ * box is cleared) and anything else dropped so it stays unused. `normalizeNpmRegistryUrl`
+ * mirrors the server's validation; what persists and the registry the requests
+ * use never diverge.
+ */
+export const parseNpmRegistryText: SettingsParser<string> = (value, raw) => {
+  const text = parseTextUpTo(512)(value, raw);
+  if (text === undefined) return undefined;
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
+    if (url.username || url.password || url.search || url.hash) return undefined;
+    if (url.pathname.includes('*')) return undefined;
+    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, '')}/`;
+  } catch {
+    return undefined;
+  }
+};
+
 export const parseFiniteNumber = fromSchema(finiteNumber);
 
 export const parseIntegerInRange = (min: number, max: number): SettingsParser<number> => fromSchema(

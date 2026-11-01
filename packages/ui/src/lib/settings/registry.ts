@@ -51,6 +51,7 @@ import {
   parseIntegerAtLeast,
   parseIntegerInRange,
   parseInsecureGitOriginsText,
+  parseNpmRegistryText,
   parseLastUsedEfforts,
   parseManagedRemoteTunnelPresetTokens,
   parseManagedRemoteTunnelPresets,
@@ -480,6 +481,14 @@ export const SETTINGS_REGISTRY = {
     scope: 'profile',
     parse: parseInsecureGitOriginsText,
     ui: uiStore('allowedInsecureGitOrigins', setUi('allowedInsecureGitOrigins')),
+  }),
+  // Merged into the registry resolution on the server (`readNpmRegistry`),
+  // behind the policy file and the environment, and ignored entirely once
+  // enterprise mode is on (fork: intranet npm mirror).
+  npmRegistry: field({
+    scope: 'profile',
+    parse: parseNpmRegistryText,
+    ui: uiStore('npmRegistry', setUi('npmRegistry')),
   }),
   defaultFileViewerPreview: field({ scope: 'profile', parse: parseBoolean }),
   directoryShowHidden: field({

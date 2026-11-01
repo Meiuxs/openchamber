@@ -1104,6 +1104,8 @@ interface UIStore {
   gitChangesViewMode: 'flat' | 'tree';
   /** One plain-HTTP Git origin per line, as typed in Settings → Git. */
   allowedInsecureGitOrigins: string;
+  /** The npm registry URL as typed in Settings → npm (fork: intranet mirror). */
+  npmRegistry: string;
   toolJsonViewMode: 'summary' | 'formatted' | 'raw';
   isTimelineDialogOpen: boolean;
   isPromptNavigatorPanelOpen: boolean;
@@ -1507,6 +1509,7 @@ interface UIStore {
   setFileEditorKeymap: (value: FileEditorKeymap) => void;
   setFileEditorVimMappings: (value: string) => void;
   setAllowedInsecureGitOrigins: (value: string) => void;
+  setNpmRegistry: (value: string) => void;
 }
 
 
@@ -1664,6 +1667,7 @@ export const useUIStore = create<UIStore>()(
         walkthroughTocWidth: 224,
         gitChangesViewMode: 'flat',
         allowedInsecureGitOrigins: '',
+        npmRegistry: '',
         toolJsonViewMode: 'summary',
         isTimelineDialogOpen: false,
         isPromptNavigatorPanelOpen: false,
@@ -3525,6 +3529,12 @@ export const useUIStore = create<UIStore>()(
           // Raw text while typing; the registry's parser keeps only whole
           // plain-HTTP origins in what persists. Same cap as that field.
           set({ allowedInsecureGitOrigins: value.slice(0, 10_000) });
+        },
+
+        setNpmRegistry: (value) => {
+          // Raw text while typing; the registry's parser keeps only a whole
+          // registry URL in what persists. Same cap as that field.
+          set({ npmRegistry: value.slice(0, 512) });
         },
 
         toggleExpandedInput: () => {
