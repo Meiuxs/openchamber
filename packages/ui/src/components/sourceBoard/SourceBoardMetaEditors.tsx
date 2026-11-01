@@ -14,11 +14,14 @@ import type {
     RepositoryReferenceDetail,
     RepositoryReferenceReviewer,
     SourceControlReadContext,
+    TrackerItemSummary,
 } from '@/lib/api/types';
 import { useI18n } from '@/lib/i18n';
 import { useSourceControlProvider } from '@/lib/source-control/providers/registry';
+import { editTrackerItem } from '@/lib/trackers/mutations';
 import { SourceBoardChoicePicker, type BoardChoice } from './SourceBoardChoicePicker';
 import { newMutationKey } from './mutationKey';
+import { blockerCandidates } from './trackerChoices';
 
 const labelChoice = (label: Label): BoardChoice => ({
     id: label.name,
@@ -170,6 +173,88 @@ export const SourceBoardReviewers: React.FC<{
             ) : null}
         >
             {reviewers.map((person) => <Person key={person.id} person={person} />)}
+        </MetaValue>
+    );
+};
+
+const issueChoice = (issue: TrackerItemSummary): BoardChoice => ({
+    id: issue.identifier,
+    label: `${issue.identifier} ${issue.title}`,
+    content: (
+        <span className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 font-mono typography-meta text-muted-foreground">{issue.identifier}</span>
+            <span className="truncate">{issue.title}</span>
+        </span>
+    ),
+});
+
+/** A blocker named only by its identifier, for one that left the open list. */
+const blockerChoice = (identifier: string): BoardChoice => ({
+    id: identifier,
+    label: identifier,
+    content: <span className="font-mono">{identifier}</span>,
+});
+
+/**
+ * The issues this one waits on, changed as one set from the project's own open
+ * issues. Only identifiers are written: whether they still block is the
+ * tracker's answer, computed from their states, so settling a blocker needs no
+ * edit here.
+ */
+export const SourceBoardBlockers: React.FC<{
+    item: TrackerItemSummary;
+    /** The project the board shows; the issues offered are its own. */
+    containerId: string | null;
+    onChanged: () => void;
+}> = ({ item, containerId, onChanged }) => {
+    const { t } = useI18n();
+    const { trackers } = useRuntimeAPIs();
+    const [busy, setBusy] = React.useState(false);
+    const blockers = item.blockedBy ?? [];
+
+    const commit = async (identifiers: string[]) => {
+        setBusy(true);
+        try {
+            // The container travels with the write: identifiers restart in every
+            // project, so the number alone could reach another project's issue.
+            await editTrackerItem(item.provider, containerId
+                ? { id: item.id, containerId, blockedBy: identifiers }
+                : { id: item.id, blockedBy: identifiers });
+        } catch (error) {
+            toast.error(t('sourceBoard.toast.blockersFailed', { identifier: item.identifier }), {
+                description: error instanceof Error ? error.message : String(error),
+            });
+        } finally {
+            setBusy(false);
+            onChanged();
+        }
+    };
+
+    return (
+        <MetaValue
+            empty={blockers.length === 0}
+            picker={(
+                <SourceBoardChoicePicker
+                    ariaLabel={t('sourceBoard.blockers.edit')}
+                    searchPlaceholder={t('sourceBoard.blockers.search')}
+                    emptyText={t('sourceBoard.blockers.empty')}
+                    selected={blockers}
+                    selectedChoices={blockers.map(blockerChoice)}
+                    loadChoices={async () => {
+                        if (!trackers) return [];
+                        const listed = await trackers.list(item.provider, { state: 'open', containerId });
+                        if (listed.connected === false) return [];
+                        // It never waits on itself: that would block it forever.
+                        return blockerCandidates(listed.items, item.identifier).map(issueChoice);
+                    }}
+                    onCommit={(identifiers) => void commit(identifiers)}
+                    busy={busy}
+                />
+            )}
+        >
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono">
+                {blockers.map((identifier) => <span key={identifier}>{identifier}</span>)}
+            </span>
         </MetaValue>
     );
 };

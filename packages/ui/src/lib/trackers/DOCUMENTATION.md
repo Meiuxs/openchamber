@@ -81,7 +81,12 @@ on the source-control side (`lib/source-control/`).
 - Capabilities gate what a surface offers: `stateUpdate` the status menu,
   `create` the board's New issue button, `edit` the preview's Edit issue action,
   `children` parent and children, `labels`, `priority`, `filters` the list
-  filters, `projectMapping` the container picker and start-in project,
+  filters, `feature` the grouping field in the issue form (`SourceBoardFeatureField`:
+  the slugs already in use, plus a new one when the typed word is not one of
+  them) and the grouping filter, `blockers` the preview's **Blocked by** row
+  (`SourceBoardBlockers`) — no form holds a blocker list, since picking an
+  issue from the project beats typing its key, and the row shows with none so
+  one can be added; `projectMapping` the container picker and start-in project,
   `multipleAccounts` the account switch, `sessionComments` the session status
   post, `translatedStates` whether a state's name is a slug this UI translates
   (the status pill, the status menu and every row label go through

@@ -76,7 +76,7 @@ import { SourceBoardTrackerStatus } from './SourceBoardTrackerStatus';
 import { SourceBoardReply } from './SourceBoardReply';
 import { SourceBoardAcrossNote } from './SourceBoardAcrossNote';
 import { SourceBoardChecksDialog } from './SourceBoardChecksDialog';
-import { SourceBoardLabels, SourceBoardReviewers } from './SourceBoardMetaEditors';
+import { SourceBoardBlockers, SourceBoardLabels, SourceBoardReviewers } from './SourceBoardMetaEditors';
 import { SourceBoardContainerPicker, SourceBoardProjectPicker, SourceBoardRepositoryPicker } from './SourceBoardPickers';
 import { TrackerIssueDialog } from './TrackerIssueDialog';
 import { choiceForFocus, resolveBoardTab, shouldRememberAll, useBoardRepository, useLinkRepository } from './boardRepository';
@@ -758,6 +758,7 @@ const SourceBoardBody: React.FC<{
             provider={tracker}
             mode={issueDialog}
             containers={issueContainers}
+            featureOptions={browser.trackerFeatures}
             initial={issueDialog === 'edit' ? issueInitial : undefined}
             onDone={() => void refreshList()}
             onClose={() => setIssueDialog(null)}
@@ -793,6 +794,14 @@ const SourceBoardBody: React.FC<{
             ) : undefined}
             onOpenTrackerItem={(item) => browser.openItem({ source: 'tracker', provider: item.provider, item })}
             onOpenTrackerIdentifier={browser.openTrackerIdentifier}
+            blockersControl={previewItem?.source === 'tracker' && canEditIssue && trackerDescriptor.capabilities.blockers ? (
+                <SourceBoardBlockers
+                    key={referencePickerItemKey(previewItem)}
+                    item={previewItem.item}
+                    containerId={previewItem.item.container?.id ?? null}
+                    onChanged={browser.list.retry}
+                />
+            ) : undefined}
             onOpenStackLayer={openStackLayer}
             revisionChoice={latestPull?.revisions ? { revisions: latestPull.revisions, selected: browser.previewRevision, onSelect: browser.selectPreviewRevision } : undefined}
             onOpenChecks={previewPull && context ? () => setChecksOpenFor(previewKey) : undefined}

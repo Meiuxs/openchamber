@@ -12,7 +12,8 @@ import type { TrackerItem, TrackerPriority } from '@/lib/api/types';
 import { useI18n } from '@/lib/i18n';
 import { createTrackerItem, editTrackerItem } from '@/lib/trackers/mutations';
 import { useTrackerDescriptor } from '@/lib/trackers/registry';
-import type { TrackerCreateItemInput } from '@/lib/trackers/types';
+import type { TrackerCreateItemInput, TrackerEditItemInput } from '@/lib/trackers/types';
+import { SourceBoardFeatureField } from './SourceBoardFeatureField';
 
 const PRIORITIES: readonly TrackerPriority[] = ['none', 'urgent', 'high', 'medium', 'low'];
 
@@ -20,28 +21,37 @@ const labelsOf = (value: string): string[] => (
   value.split(',').map((label) => label.trim()).filter(Boolean)
 );
 
-/** Identifiers typed as a comma list, read the way the tracker stores them. */
-const identifiersOf = (value: string): string[] => (
-  [...new Set(labelsOf(value).map((identifier) => identifier.toUpperCase()))]
+/**
+ * An edit that names the project the item lives in. A number repeats in every
+ * project's issues, so without it the tracker finds the first project holding
+ * that number and edits that one. A JSON body drops an undefined field, which
+ * is what an item that names no project gets.
+ */
+const editOf = (input: TrackerEditItemInput & { containerId: string }): TrackerEditItemInput => (
+  input.containerId ? input : { ...input, containerId: undefined }
 );
 
 /**
  * Create or edit one tracker item, from the board's New issue button and Edit
  * issue action. The form holds the fields `items/create` and `items/edit`
- * take; a failed submit keeps every field so the user can retry, and `onDone`
- * lets the caller refresh what it lists. The dialog's project options are the
- * caller's containers, the first of them preselected.
+ * take, except a blocker list: it is edited on the item itself, where the
+ * issues that could block it are there to pick instead of typed by key. A
+ * failed submit keeps every field so the user can retry, and `onDone` lets the
+ * caller refresh what it lists. The dialog's project options are the caller's
+ * containers, the first of them preselected.
  */
 export const TrackerIssueDialog: React.FC<{
   provider: string;
   mode: 'create' | 'edit';
   /** The containers (a Linear team, a local project) create mode offers. */
   containers: { id: string; name: string }[];
+  /** The grouping slugs already in use, so an existing one is picked rather than retyped. */
+  featureOptions?: readonly string[];
   /** The item edit mode works on. */
   initial?: TrackerItem;
   onDone: (item: TrackerItem) => void;
   onClose: () => void;
-}> = ({ provider, mode, containers, initial, onDone, onClose }) => {
+}> = ({ provider, mode, containers, featureOptions = [], initial, onDone, onClose }) => {
   const { t } = useI18n();
   const { capabilities } = useTrackerDescriptor(provider);
   const isCreate = mode === 'create';
@@ -51,17 +61,16 @@ export const TrackerIssueDialog: React.FC<{
   const [containerId, setContainerId] = React.useState(containers[0]?.id ?? '');
   const [labels, setLabels] = React.useState((initial?.labels ?? []).map((label) => label.name).join(', '));
   const [feature, setFeature] = React.useState(initial?.feature ?? '');
-  const [blockedBy, setBlockedBy] = React.useState((initial?.blockedBy ?? []).join(', '));
   const [submitting, setSubmitting] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
 
   const canSubmit = Boolean(title.trim()) && !submitting
     && (isCreate ? containerId !== '' : Boolean(initial?.id));
+  const editContainerId = initial?.container?.id ?? '';
   // Sent only where the tracker has the field: one without it is never handed a
   // value it would have to drop.
-  const grouping: Pick<TrackerCreateItemInput, 'feature' | 'blockedBy'> = {};
+  const grouping: Pick<TrackerCreateItemInput, 'feature'> = {};
   if (capabilities.feature) grouping.feature = feature.trim() || null;
-  if (capabilities.blockers) grouping.blockedBy = identifiersOf(blockedBy);
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
@@ -76,14 +85,15 @@ export const TrackerIssueDialog: React.FC<{
           labels: labelsOf(labels),
           ...grouping,
         })
-        : await editTrackerItem(provider, {
+        : await editTrackerItem(provider, editOf({
           id: initial?.id ?? '',
+          containerId: editContainerId,
           title: title.trim(),
           description: description.trim() || null,
           priority,
           labels: labelsOf(labels),
           ...grouping,
-        });
+        }));
       onDone(item);
       onClose();
     } catch {
@@ -146,12 +156,17 @@ export const TrackerIssueDialog: React.FC<{
           </SettingsStackedField>
           {capabilities.feature ? (
             <SettingsStackedField label={t('sourceBoard.tracker.form.feature')} controlClassName="max-w-none">
-              <Input value={feature} onChange={(event) => setFeature(event.target.value)} />
-            </SettingsStackedField>
-          ) : null}
-          {capabilities.blockers ? (
-            <SettingsStackedField label={t('sourceBoard.tracker.form.blockedBy')} controlClassName="max-w-none">
-              <Input value={blockedBy} onChange={(event) => setBlockedBy(event.target.value)} />
+              <SourceBoardFeatureField
+                value={feature}
+                options={featureOptions}
+                onChange={setFeature}
+                ariaLabel={t('sourceBoard.tracker.form.feature')}
+                placeholder={t('sourceBoard.tracker.form.feature.placeholder')}
+                searchPlaceholder={t('sourceBoard.tracker.form.feature.search')}
+                emptyText={t('sourceBoard.tracker.form.feature.empty')}
+                createLabel={(typed) => t('sourceBoard.tracker.form.feature.create', { value: typed })}
+                clearLabel={t('sourceBoard.tracker.form.feature.clear')}
+              />
             </SettingsStackedField>
           ) : null}
         </div>

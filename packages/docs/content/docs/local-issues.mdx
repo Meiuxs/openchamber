@@ -17,12 +17,12 @@ Open the [Issues and PRs board](/issues-and-prs/) and switch to the **Local** ta
 
 The search matches titles, identifiers, descriptions, the grouping slug and labels. Pasting an issue file name or path, such as `.issues/LOCAL-7-fix-login.md`, opens that issue. The filter beside the search narrows the list by state and priority, and by grouping slug where the issues carry one: the menu lists every slug in the project, not only those of the issues already shown, so you can switch from one grouping to another without clearing the filter first.
 
-The preview shows the description, the priority, the labels and the comments. File paths in a description, such as `src/auth.ts:42`, render as links that open the file at that line. An issue with a `feature` value shows it, and one whose `blockedBy` still holds an open blocker shows **Blocked by** with the identifiers it waits on, each opening that issue; the list marks such a row **Blocked**.
+The preview shows the description, the priority, the labels and the comments. File paths in a description, such as `src/auth.ts:42`, render as links that open the file at that line. An issue with a `feature` value shows it, and **Blocked by** lists the issues it waits on — each opening that issue — and is where that list is changed: open it to pick from this project's unfinished issues, and unpick one to stop waiting on it. The list marks a row whose blockers still hold as **Blocked**.
 
 From the preview you can:
 
-- **Create an issue** with a title, a description, a priority, labels, a grouping slug and the issues it waits on. The board picks the next free `LOCAL-<n>` number and creates the file.
-- **Edit** the title, description, priority, labels, grouping slug and blockers of an issue.
+- **Create an issue** with a title, a description, a priority, labels and a grouping slug — picked from the slugs already in use, or typed as a new one. The board picks the next free `LOCAL-<n>` number and creates the file.
+- **Edit** the title, description, priority, labels and grouping slug of an issue, and change which issues it waits on from the **Blocked by** row, which offers this project's unfinished issues instead of asking for a number.
 - **Change the state** from the status pill. The six states are `triage`, `backlog`, `todo`, `in-progress`, `done` and `canceled`; the board shows them in your interface language, while the file always stores the slug.
 
 Every change the board makes lands in the file right away, and a file you edit in your own editor shows up on the board on the next scan.

@@ -69,6 +69,19 @@ mock.module('@/components/sections/shared/SettingsSection', () => ({
 }));
 mock.module('@/components/icon/Icon', () => ({ Icon: () => null }));
 
+// What the tracker offers, as the registry answers it. Nothing here renders a
+// popup, so the capabilities are all a test needs to switch a field on.
+const LOCAL_CAPABILITIES = {
+  multipleAccounts: false, stateUpdate: true, children: false, labels: true, priority: true,
+  feature: false, blockers: false, filters: { people: false, priority: false },
+  projectMapping: true, sessionComments: false, hostAccess: false,
+  externalUrl: false, translatedStates: true, containersAreProjects: true,
+};
+let capabilities = LOCAL_CAPABILITIES;
+mock.module('@/lib/trackers/registry', () => ({
+  useTrackerDescriptor: () => ({ capabilities }),
+}));
+
 const { TrackerIssueDialog } = await import('../TrackerIssueDialog');
 const { I18nProvider } = await import('@/lib/i18n');
 
@@ -91,6 +104,7 @@ beforeEach(() => {
   document.body.append(host);
   root = createRoot(host);
   requests.length = 0;
+  capabilities = LOCAL_CAPABILITIES;
   nextResponse = Response.json({ connected: true, item: ITEM });
 });
 
@@ -184,12 +198,37 @@ describe('TrackerIssueDialog', () => {
     expect(closed).toBe(false);
   });
 
-  test('an edit submit posts the edit route with the item id and the form', async () => {
-    const done: unknown[] = [];
+  test('a tracker with the grouping field sends it, and no form sends a blocker list', async () => {
+    capabilities = { ...LOCAL_CAPABILITIES, feature: true, blockers: true };
+    await renderDialog();
+
+    // The blockers are edited on the item itself, where the issues that could
+    // block it are there to pick; the form has no field for them.
+    expect(host.textContent).toContain('Grouping');
+    expect(host.textContent).not.toContain('Blocked by');
+
+    await setValue(host.querySelectorAll('input')[0], 'Grouped issue');
+    await clickButton('Create issue');
+
+    const posted = JSON.parse(String(requests[0].init.body));
+    expect(posted).toEqual({
+      containerId: 'proj-1',
+      title: 'Grouped issue',
+      description: null,
+      priority: 'none',
+      labels: [],
+      feature: null,
+    });
+    expect(posted.blockedBy).toBeUndefined();
+  });
+
+  test('an edit submit posts the edit route with the item id and the form', async () => {    const done: unknown[] = [];
     await renderDialog({
       mode: 'edit',
       initial: {
         ...ITEM, title: 'Old title', description: 'Old body', priority: 'high',
+        // The project the item lives in: a number repeats in every project.
+        container: { id: 'proj-1', key: null, name: 'alpha' },
         labels: [{ id: 'l1', name: 'bug', color: null }, { id: 'l2', name: 'ui', color: null }],
       },
       onDone: (item) => done.push(item),
@@ -205,6 +244,8 @@ describe('TrackerIssueDialog', () => {
     expect(requests[0].path).toBe('/api/tracker/local/items/edit');
     expect(JSON.parse(String(requests[0].init.body))).toEqual({
       id: 'LOCAL-1',
+      // The number alone would reach whichever project holds it first.
+      containerId: 'proj-1',
       title: 'Renamed',
       description: 'Old body',
       priority: 'high',

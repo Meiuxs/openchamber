@@ -130,6 +130,12 @@ export type TrackerCreateItemInput = {
  */
 export type TrackerEditItemInput = {
   id: string;
+  /**
+   * The container the item lives in. Identifiers restart per container (each
+   * project numbers from `LOCAL-1`), so without it a tracker that has several
+   * finds the first project holding that number and edits that one.
+   */
+  containerId?: string;
   title?: string;
   description?: string | null;
   priority?: TrackerPriority | null;
@@ -159,7 +165,7 @@ export type TrackerDescriptor = {
     priority: boolean;
     /** Items carry a grouping slug (`feature`), so filters and forms can offer one. */
     feature: boolean;
-    /** Items wait on others by identifier (`blockedBy`), so a form can offer the field. */
+    /** Items wait on others by identifier (`blockedBy`), so an item can be given blockers and shown them. */
     blockers: boolean;
     filters: { people: boolean; priority: boolean };
     /** Container to OpenChamber project mapping (Linear: team). */

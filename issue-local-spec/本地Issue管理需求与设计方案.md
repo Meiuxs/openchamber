@@ -1,12 +1,13 @@
 # OpenChamber 本地 Issue 管理 · 需求与设计方案（统一版）
 
-> 版本：v2.5 · 日期：2026-11-01
+> 版本：v2.6 · 日期：2026-11-01
 > 本文件是唯一现行版本，取代《本地Issue管理需求规格.md》《本地Issue管理设计方案.md》（v1，server 级 JSON 存储，已废弃）与《本地Issue管理设计方案-v2-markdown.md》。
 > v2.2 按已落地的实现（as-built）重写相关章节：v2.1 写于实现之前，本版与 shipped 代码一致，仍是唯一现行文档。
 > v2.3 补齐 FR-12/FR-13 的**消费层**：分组筛选项改由服务端 `facets` 提供（不再从已加载条目推导）、`blocked` 成为派生只读位并在 board 展示且阻塞来源可跳转、create/edit 载荷与建单/编辑表单接入 `feature`/`blockedBy`；§12 为这两条补上验收标准，§9 的约定文档 `docs/agents/issue-tracker.md` 已落库。
 > v2.4 补上**分享链接**这一层：`openchamber.local` 只是标识不是地址（无域名、无路由），因此新增 `capabilities.externalUrl`，本地 tracker 报 `false`，UI 改为复制「本应用地址 + `?reference=<issue url>`」并在应用内打开该 issue（FR-17、§12 第 9 条）；同时把 container 的展示文案统一为「项目」，避免与「分组」同译（§8）。
 > 产品决策已于 2026-10-31/11-01 与维护者在会话中逐节确认；关键决策记录见 §3。
 > v2.5 修两处作用域与展示：状态名改由 UI 按 id 翻译（新增 `capabilities.translatedStates`，此前下拉把 `triage/backlog/…` 这些 slug 直接显示给用户）；board 的本地页签强制单项目作用域（新增 `capabilities.containersAreProjects`，此前 list 不带 containerId，把**所有项目**的 issue 混在一张表里，两个项目各有一个 `LOCAL-1` 会同时出现）。同时把 item 详情读取带上 container，避免跨项目同名 identifier 读到别人的 issue（FR-18、§8、§12 第 10/11 条）。
+> v2.6 改两个字段的**输入方式**，概念与数据格式不变：分组从自由文本框改为「可选已有 + 可新建」的组合框（候选来自 `facets.feature`，此前拼错或大小写不同会被 scanner 当成两个分组）；`blockedBy` 从建单/编辑表单移出，改为在预览的「被阻塞于」一行里勾选同项目的未完成 issue（此前要用户背出 `LOCAL-3` 再手打进逗号分隔框），该行也改为恒显，「无阻塞」时可直接添加（FR-1/FR-2/FR-13、§8、§12 第 7 条）。
 
 ## 1. 背景
 
@@ -47,10 +48,11 @@
 | 18 | `issuesDir` 的 `..` 拒绝覆盖 Windows 可归一化变体（段级谓词，`.. ` 与 `.. .` 也拒绝；点串段如 `....` 合法），settings 归一化、UI projects store、scanner 回退三处镜像并同测 | 11-01 |
 | 19 | `blocked` 是**派生只读位**：由 scanner 每次扫描按同项目内 `blockedBy` 的状态算出，不落盘；阻塞者缺失/自引用不阻塞；解除阻塞不需要写等待者的文件 | 11-01 |
 | 20 | 分组筛选项由服务端在 list 结果里以 `facets.feature` 返回，统计范围是 container 全量而非当前页/当前筛选结果；UI 不用已加载条目推导选项，否则选中一个 slug 后其余 slug 从菜单消失 | 11-01 |
-| 21 | 契约能力位新增 `feature`、`blockers`；`feature`/`blockedBy` 进入 create/edit 载荷与 UI 表单，但仅在能力位为真且 body 携带该键时透传；identifier 数组在路由层归一（trim、大写、去重） | 11-01 |
+| 21 | 契约能力位新增 `feature`、`blockers`；`feature`/`blockedBy` 进入 create/edit 载荷，但仅在能力位为真且 body 携带该键时透传；identifier 数组在路由层归一（trim、大写、去重）。UI 侧只有 `feature` 在表单里（能力位为真时），`blockedBy` 由预览的阻塞编辑器写入（决策 25） | 11-01 |
 | 22 | **`url` 是标识不是地址**：`https://openchamber.local/tracker/local/<ID>` 只用于贴回识别（`matchUrl`/`urlPatterns`/会话链接），不提供任何页面；新增 `capabilities.externalUrl`，本地报 `false`，UI 复制「本应用地址 + `?reference=<url>`」并在应用内打开该 issue，不再把浏览器送向该域名。深链参数只在应用内消费一次即从地址栏移除 | 11-01 |
 | 23 | **状态名是 slug，展示名归 UI**：本地 `states()` 返回的 `name` 是 `STATES` 里的取值（`triage`…），不是人写的文案；新增 `capabilities.translatedStates`，为真时 UI 按 state id 查既有 `references.picker.filter.tracker.state.*` 翻译，未知 id 回退 `name`；Linear 报 `false`，其状态名是团队自己写的，永不翻译 | 11-01 |
 | 24 | **本地容器就是项目**：新增 `capabilities.containersAreProjects`，为真时 board 用当前项目 id 作为 `containerId`（项目选择器即作用域选择器，与 GitHub 项目/仓库选择器同位置），不再出现「全部项目」；项目内编号各自从 `LOCAL-1` 起，跨项目同名靠作用域而非改名区分。item 详情读取同时带上 `containerId`，避免同号读到别的项目 | 11-01 |
+| 25 | **两个字段各给一个对的输入方式，概念与格式都不变**：`feature` 从裸文本框改为「列已有 slug + 可输入新建」的组合框（`SourceBoardFeatureField`），候选取 `facets.feature`，大小写不同视为同一个 slug——此前 `auth` 与 `Auth` 会被 scanner 按字符串精确比较拆成两个分组；`blockedBy` 从建单/编辑表单移出，改为预览「被阻塞于」一行里的多选（`SourceBoardBlockers`，复用标签/评审人那套弹层），候选是同项目未完成的 issue 且排除自身，勾选即保存。该行改为恒显（无阻塞时值显示「无」），否则空阻塞没有添加入口。阻塞仍只写 identifier，`blocked` 仍是派生 | 11-01 |
 
 ## 4. 功能需求
 
@@ -58,8 +60,8 @@
 
 | 编号 | 需求 | 说明 | 优先级 |
 |---|---|---|---|
-| FR-1 | UI 建单 | board New issue 按钮；title 必填，description/labels/priority 可选，`feature`/`blockedBy` 在能力位为真时可选；自动分配 `LOCAL-<n>`，n 为目录内 max+1 | P0 |
-| FR-2 | UI 编辑 | 编辑 title/description/labels/priority，以及 `feature`/`blockedBy`；契约能力位 `edit`、`feature`、`blockers` | P0 |
+| FR-1 | UI 建单 | board New issue 按钮；title 必填，description/labels/priority 可选，`feature` 在能力位为真时可选（组合框，候选为已有 slug 且可新建）；自动分配 `LOCAL-<n>`，n 为目录内 max+1。建单表单不含 `blockedBy`：新建的 issue 还没有值得阻塞的关系，等有了在预览里加（决策 25） | P0 |
+| FR-2 | UI 编辑 | 编辑 title/description/labels/priority 与 `feature`；`blockedBy` 不在编辑表单里，由预览的「被阻塞于」一行增删（同样走 edit 载荷）；契约能力位 `edit`、`feature`、`blockers` | P0 |
 | FR-3 | 列表与筛选 | 复用 `GET items/list`；筛选：状态（open/all/六分类）、优先级（`all`/缺省任意，`none` 为无优先级，其余按值相等）、分组 `feature`（精确匹配一个 slug）；分组选项取自 list 返回的 `facets.feature` | P0 |
 | FR-4 | 搜索与直达 | 按 title、identifier、描述、分组 slug、labels、文件名匹配；粘贴编号或文件路径（`.issues/LOCAL-7-x.md`）直达该条 | P0 |
 | FR-5 | 详情预览 | description、labels、comments、分组与阻塞来源；沿用现有 board 预览布局 | P0 |
@@ -184,9 +186,9 @@ completed in 12m
 
 - `packages/ui/src/lib/trackers/presentation.ts` 加 `local` 条目（icon、copy、branchName、settingsSearch）；board 页签、picker、状态颜色由 descriptor 自动绘制。
 - board 以 `capabilities.create === true` 条件渲染 New issue，编辑入口独立以 `capabilities.edit === true` 门禁（server 两路由各自校验，一个 tracker 可只许编辑）；New issue 对话框带项目（container）下拉，默认当前 UI 上下文的项目。
-- 建单/编辑对话框：title、description、priority、labels 之外，`capabilities.feature` 为真时显示「分组」输入，`capabilities.blockers` 为真时显示「被阻塞于」输入（逗号分隔 identifier，提交前 trim/大写/去重）；能力位为假时字段不渲染、也不进载荷。
+- 建单/编辑对话框：title、description、priority、labels 之外，`capabilities.feature` 为真时显示「分组」组合框（`SourceBoardFeatureField`：列出 `facets.feature` 的已有值并可按输入新建，输入与已有值仅大小写/空格不同时不给「新建」项）；`capabilities.blockers` 为真时**不再**在表单里给 `blockedBy` 字段，改由预览的「被阻塞于」一行提供多选（决策 25）。能力位为假时字段不渲染、也不进载荷。
 - 筛选菜单：状态、people/priority（按 `capabilities.filters` 门禁）之外，`capabilities.feature` 且服务端返回了 `facets.feature` 时提供「分组」组，选项为 facets ∪ 当前选中的 slug，选「全部分组」清空；摘要只在菜单确实提供该组时显示 slug，避免按钮与菜单不一致。
-- 有 `blocked` 的行显示「已阻塞」徽标（lock 图标）；预览 meta 显示「分组」与「被阻塞于」，后者逐个 identifier 渲染，可点击跳到该 issue（列表里没有该行时按 identifier 向 tracker 读取，读不到则回退为用 identifier 搜索）。
+- 有 `blocked` 的行显示「已阻塞」徽标（lock 图标）；预览 meta 的「分组」一行展示 slug，「被阻塞于」一行在 `capabilities.blockers` 为真时**恒显**（没有阻塞时值显示「无」，行尾按钮打开多选弹层，候选是同项目未完成的 issue 且排除自身，勾选即写回），无该能力位时退回只读：有 `blocked` 才显示，identifier 可点击跳到该 issue（列表里没有该行时按 identifier 向 tracker 读取，读不到则回退为用 identifier 搜索）。
 - container（即项目本身，见 §6）在预览 meta 与 board 范围选择器里一律显示为「项目 / Project」，不再叫「分组」：否则与分组行同译，中文界面会出现两行都叫「分组」。Linear 的 container 是 team，文案仍为「团队」。
 - **状态名**：状态胶囊、状态下拉项、行状态、会话侧栏状态行都经 `lib/trackers/stateLook.ts` 的 `trackerStateLabel(state, t, translatedStates)`。`capabilities.translatedStates` 为假时返回 `name`（Linear 的团队自定义状态原样显示）；为真时按 state id 取 `references.picker.filter.tracker.state.*`，id 缺失退回 `category`，仍未命中则回退 `name`。
 - **本地页签的作用域**：`capabilities.containersAreProjects` 为真时，`trackerScopeOf()` 直接返回当前项目 id，board 工具栏显示应用的项目选择器（与 GitHub 的项目/仓库选择器同位置、同交互），**不提供「全部项目」**；切项目时保持在本页签，不再跳回仓库页签。Linear 仍用自己的 team 选择器（`projectMapping`）。
@@ -213,7 +215,7 @@ completed in 12m
 | routes | create/edit 能力位门禁（未声明 404 UNSUPPORTED）；`feature`/`blockedBy` 按需透传、identifier 归一（trim/大写/去重） |
 | registry | `local` 注册与校验 |
 | web api | `facets` 与 `feature`/`blockedBy`/`blocked` 的 zod 解析（缺省保持缺省，`null` 读作无分组）；`feature` 进入 list query string |
-| UI | presentation `local` 夹具、行徽标与预览 meta、阻塞来源可点击、筛选菜单分组选项与摘要一致、代码引用识别、i18n parity（15 locale，含 `sourceBoard.tracker.form.*`）；状态名翻译（`stateLook.test.ts`：六态、未知 id 回退、Linear 不翻）、作用域判定（`scope.test.ts`：项目作用域 / 自带容器 / 容器消失） |
+| UI | presentation `local` 夹具、行徽标与预览 meta、阻塞来源可点击、筛选菜单分组选项与摘要一致、代码引用识别、i18n parity（15 locale，含 `sourceBoard.tracker.form.*` 与 `sourceBoard.blockers.*`）；状态名翻译（`stateLook.test.ts`：六态、未知 id 回退、Linear 不翻）、作用域判定（`scope.test.ts`：项目作用域 / 自带容器 / 容器消失）、字段候选（`trackerChoices.test.ts`：分组匹配与「新建」判定、阻塞候选排除自身）、建单载荷（`TrackerIssueDialog.test.tsx`：能力位为真时发 `feature`、任何情况都不发 `blockedBy`） |
 | 路由/深链 | `parseRoute` 只接受 http(s) 的 `reference`；`referenceLinkHref` 保留 origin/端口/参数、替换已有 `reference`、非 http(s) 页面（`openchamber-ui://`、`file://`）返回 null；`externalUrl` 缺省读作 false；`ReferencePreview` 对本地 issue 不渲染外链、复制按钮文案切换 |
 | 全局 | `bun run check:changed` 通过 |
 
@@ -232,7 +234,7 @@ completed in 12m
 4. agent 按 `/local-issues` 命令建的文件能被 board 列出与编辑；UI 建的文件能被手工编辑拾取。
 5. registry 启动校验通过；`bun run check:changed` 通过；新增模块 tests + DOCUMENTATION.md 齐备。
 6. **FR-12 分组消费**：`feature` 不为空的 issue 在筛选菜单里出现对应分组项，选中后列表只剩该分组的 issue；选中任一 slug 后菜单仍列出其它 slug（选项来自 `facets`，不需要先清空再切换）；预览显示该 issue 的分组；建单/编辑对话框能写入与清空 `feature`，保存后落盘。
-7. **FR-13 阻塞消费**：`blockedBy` 指向未结束 issue 时 board 行显示「已阻塞」且预览列出阻塞来源、点击可跳到该阻塞者；把最后一个阻塞者置为 `done`/`canceled` 后，等待者在下一次读取即不再阻塞，其文件未被改写；自引用与指向不存在 issue 的条目不算阻塞；对话框能写入与清空 `blockedBy`。
+7. **FR-13 阻塞消费**：`blockedBy` 指向未结束 issue 时 board 行显示「已阻塞」且预览列出阻塞来源、点击可跳到该阻塞者；把最后一个阻塞者置为 `done`/`canceled` 后，等待者在下一次读取即不再阻塞，其文件未被改写；自引用与指向不存在 issue 的条目不算阻塞；预览的「被阻塞于」一行能勾选写入与取消勾选清空 `blockedBy`（候选不含自身），该行在无阻塞时也显示，建单/编辑表单里没有这个字段。
 8. 能力位为假的 tracker（Linear）不出现分组/阻塞字段与筛选项，且其 create/edit 载荷不携带这两个键。
 9. **FR-17 分享链接**：本地 issue 预览复制出的链接形如 `<应用地址>?reference=<encode 后的 issue url>`；在浏览器打开该链接，应用定位到该 issue（桌面/网页为 Tracker 面板 tab，手机为 board 聚焦），地址栏随后不再带 `reference`；界面与预览中不存在指向 `openchamber.local` 的可点击外链；`externalUrl: true` 的 tracker（Linear）仍复制其自身地址并保留外链图标。
 10. **FR-18 状态名**：本地 issue 的状态胶囊、状态下拉、行状态与会话侧栏状态行显示「分诊 / 待办池 / 待办 / 进行中 / 已完成 / 已取消」，不出现 `triage`、`in-progress` 等 slug；Linear 的 `In Progress` 等自定义状态名保持原样；未知 state id 回退显示其 `name`。

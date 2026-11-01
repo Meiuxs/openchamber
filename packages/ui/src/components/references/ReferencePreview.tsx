@@ -800,10 +800,12 @@ const TrackerPreview: React.FC<{
     now: number;
     footer?: React.ReactNode;
     stateControl?: React.ReactNode;
+    /** Replaces the blocker identifiers with ones that change them. */
+    blockersControl?: React.ReactNode;
     onOpenIssue?: (issue: TrackerItemSummary) => void;
     /** Opens a blocker by identifier; without it blockers are plain text. */
     onOpenIdentifier?: (identifier: string) => void;
-}> = ({ issue, detail, purpose, pinned, now, footer: footerOverride, stateControl, onOpenIssue, onOpenIdentifier }) => {
+}> = ({ issue, detail, purpose, pinned, now, footer: footerOverride, stateControl, blockersControl, onOpenIssue, onOpenIdentifier }) => {
     const { t } = useI18n();
     const relative = useRelative(now);
     const descriptor = useTrackerDescriptor(issue.provider);
@@ -889,7 +891,10 @@ const TrackerPreview: React.FC<{
                     {issue.feature ? (
                         <MetaRow label={t('references.picker.preview.feature')}>{issue.feature}</MetaRow>
                     ) : null}
-                    {issue.blocked ? (
+                    {blockersControl ? (
+                        // Shown with no blockers too, so some can be added.
+                        <MetaRow label={t('references.picker.preview.blockedBy')}>{blockersControl}</MetaRow>
+                    ) : issue.blocked ? (
                         <MetaRow label={t('references.picker.preview.blockedBy')}>
                             <BlockerIdentifiers identifiers={issue.blockedBy ?? []} onOpen={onOpenIdentifier} />
                         </MetaRow>
@@ -947,6 +952,8 @@ export const ReferencePreview: React.FC<{
     /** Replace an issue's or PR's labels, and a PR's reviewers, with ones that change them. */
     labelsControl?: React.ReactNode;
     reviewersControl?: React.ReactNode;
+    /** Replaces a tracker item's blockers with ones that change them. */
+    blockersControl?: React.ReactNode;
     /** Opens the previewed PR's check runs from its checks totals. */
     onOpenChecks?: () => void;
     /** An issue's or PR's comments, pinned above the composer one by one or together. */
@@ -965,7 +972,7 @@ export const ReferencePreview: React.FC<{
     onOpenStackLayer?: (layer: PullRequestStackLayer) => void;
     /** A change's revisions to pick the shown one from, where the host keeps revisions. */
     revisionChoice?: RevisionChoice;
-}> = ({ item, directory, pullStatus, trackerDetail, repositoryDetail, purpose, pinned, includeDiff, onIncludeDiffChange, now, footer, pullLinks, trackerStateControl, reply, labelsControl, reviewersControl, onOpenChecks, commentAttachments, stateMenu, onOpenTrackerItem, onOpenTrackerIdentifier, onRefresh, threadActions, onOpenStackLayer, revisionChoice }) => {
+}> = ({ item, directory, pullStatus, trackerDetail, repositoryDetail, purpose, pinned, includeDiff, onIncludeDiffChange, now, footer, pullLinks, trackerStateControl, reply, labelsControl, reviewersControl, blockersControl, onOpenChecks, commentAttachments, stateMenu, onOpenTrackerItem, onOpenTrackerIdentifier, onRefresh, threadActions, onOpenStackLayer, revisionChoice }) => {
     const { t } = useI18n();
     const rewriteMarkdown = useProjectUploadRewrite(directory, item?.source === 'repository' ? item.reference : null);
     const links = useReferenceLinks(directory, item?.source === 'repository' ? item.reference : null);
@@ -977,7 +984,7 @@ export const ReferencePreview: React.FC<{
         );
     }
     if (item.source === 'tracker') {
-        return <TrackerPreview issue={item.item} detail={trackerDetail} purpose={purpose} pinned={pinned} now={now} footer={footer} stateControl={trackerStateControl} onOpenIssue={onOpenTrackerItem} onOpenIdentifier={onOpenTrackerIdentifier} />;
+        return <TrackerPreview issue={item.item} detail={trackerDetail} purpose={purpose} pinned={pinned} now={now} footer={footer} stateControl={trackerStateControl} blockersControl={blockersControl} onOpenIssue={onOpenTrackerItem} onOpenIdentifier={onOpenTrackerIdentifier} />;
     }
     return (
         <ReferenceMarkdownRewriteContext.Provider value={rewriteMarkdown}>
