@@ -1,11 +1,12 @@
 # OpenChamber 本地 Issue 管理 · 需求与设计方案（统一版）
 
-> 版本：v2.4 · 日期：2026-11-01
+> 版本：v2.5 · 日期：2026-11-01
 > 本文件是唯一现行版本，取代《本地Issue管理需求规格.md》《本地Issue管理设计方案.md》（v1，server 级 JSON 存储，已废弃）与《本地Issue管理设计方案-v2-markdown.md》。
 > v2.2 按已落地的实现（as-built）重写相关章节：v2.1 写于实现之前，本版与 shipped 代码一致，仍是唯一现行文档。
 > v2.3 补齐 FR-12/FR-13 的**消费层**：分组筛选项改由服务端 `facets` 提供（不再从已加载条目推导）、`blocked` 成为派生只读位并在 board 展示且阻塞来源可跳转、create/edit 载荷与建单/编辑表单接入 `feature`/`blockedBy`；§12 为这两条补上验收标准，§9 的约定文档 `docs/agents/issue-tracker.md` 已落库。
 > v2.4 补上**分享链接**这一层：`openchamber.local` 只是标识不是地址（无域名、无路由），因此新增 `capabilities.externalUrl`，本地 tracker 报 `false`，UI 改为复制「本应用地址 + `?reference=<issue url>`」并在应用内打开该 issue（FR-17、§12 第 9 条）；同时把 container 的展示文案统一为「项目」，避免与「分组」同译（§8）。
 > 产品决策已于 2026-10-31/11-01 与维护者在会话中逐节确认；关键决策记录见 §3。
+> v2.5 修两处作用域与展示：状态名改由 UI 按 id 翻译（新增 `capabilities.translatedStates`，此前下拉把 `triage/backlog/…` 这些 slug 直接显示给用户）；board 的本地页签强制单项目作用域（新增 `capabilities.containersAreProjects`，此前 list 不带 containerId，把**所有项目**的 issue 混在一张表里，两个项目各有一个 `LOCAL-1` 会同时出现）。同时把 item 详情读取带上 container，避免跨项目同名 identifier 读到别人的 issue（FR-18、§8、§12 第 10/11 条）。
 
 ## 1. 背景
 
@@ -48,6 +49,8 @@
 | 20 | 分组筛选项由服务端在 list 结果里以 `facets.feature` 返回，统计范围是 container 全量而非当前页/当前筛选结果；UI 不用已加载条目推导选项，否则选中一个 slug 后其余 slug 从菜单消失 | 11-01 |
 | 21 | 契约能力位新增 `feature`、`blockers`；`feature`/`blockedBy` 进入 create/edit 载荷与 UI 表单，但仅在能力位为真且 body 携带该键时透传；identifier 数组在路由层归一（trim、大写、去重） | 11-01 |
 | 22 | **`url` 是标识不是地址**：`https://openchamber.local/tracker/local/<ID>` 只用于贴回识别（`matchUrl`/`urlPatterns`/会话链接），不提供任何页面；新增 `capabilities.externalUrl`，本地报 `false`，UI 复制「本应用地址 + `?reference=<url>`」并在应用内打开该 issue，不再把浏览器送向该域名。深链参数只在应用内消费一次即从地址栏移除 | 11-01 |
+| 23 | **状态名是 slug，展示名归 UI**：本地 `states()` 返回的 `name` 是 `STATES` 里的取值（`triage`…），不是人写的文案；新增 `capabilities.translatedStates`，为真时 UI 按 state id 查既有 `references.picker.filter.tracker.state.*` 翻译，未知 id 回退 `name`；Linear 报 `false`，其状态名是团队自己写的，永不翻译 | 11-01 |
+| 24 | **本地容器就是项目**：新增 `capabilities.containersAreProjects`，为真时 board 用当前项目 id 作为 `containerId`（项目选择器即作用域选择器，与 GitHub 项目/仓库选择器同位置），不再出现「全部项目」；项目内编号各自从 `LOCAL-1` 起，跨项目同名靠作用域而非改名区分。item 详情读取同时带上 `containerId`，避免同号读到别的项目 | 11-01 |
 
 ## 4. 功能需求
 
@@ -72,6 +75,7 @@
 | FR-15 | 导入 | GitLab/Jira/其他格式一次性导入，保留原链接 | P2 |
 | FR-16 | 自定义状态、导出 JSON | | P2 |
 | FR-17 | 分享链接 | 预览「复制应用内链接」产出 `<当前应用地址>?reference=<issue url>`；打开该链接在应用内定位到该 issue（桌面/网页开 Tracker 面板 tab，手机开 board 并聚焦该条），消费后从地址栏移除该参数；`capabilities.externalUrl` 为假时不渲染指向 `openchamber.local` 的外链，无法展示时也不回退到系统浏览器 | P1 |
+| FR-18 | 状态名展示 | 状态胶囊、状态下拉、行状态、会话侧栏状态行统一走 `trackerStateLabel`：`capabilities.translatedStates` 为真按 id 翻译六态，为假原样显示 tracker 的 `name`；未知 id 回退 `name`。board 的本地页签按项目作用域列表，项目选择器与 GitHub 同位置；item 详情读取携带 `containerId` | P1 |
 
 ## 5. 存储与文件格式
 
@@ -161,6 +165,7 @@ completed in 12m
     filters: { people: false, priority: true },
     projectMapping: false, sessionComments: true, hostAccess: false,
     externalUrl: false,
+    translatedStates: true, containersAreProjects: true,
     create: true, edit: true,
   },
   stateFilters: ['open', 'all', 'triage', 'backlog', 'todo', 'in-progress', 'done', 'canceled'],
@@ -171,6 +176,8 @@ completed in 12m
 
 - `auth.status()` 恒 `{connected: true, account: {id:'local', name:'Local', current:true}}`。
 - `externalUrl: false` 标记「`url` 不是可导航页面」：本地 issue 的 url 只是命名空间，UI 依此改为应用内打开/复制（FR-17）。缺省读作 `false`（旧 server 未声明），把陈旧客户端推向应用内链接而不是死链。
+- `translatedStates: true` 标记「`state.name` 是生成值不是文案」：UI 按 state id 翻译；缺省读作 `false`，宁可本地状态暂时留英文，也不翻译 Linear 里团队自己写的状态名。
+- `containersAreProjects: true` 标记「容器 = 项目文件夹」：board 以当前项目 id 作为 `containerId`，不再有「全部项目」；缺省读作 `false`，保持 tracker 自带容器的旧行为。
 - **老客户端兼容**（照搬既有 tracker 决策）：会话链接写入 `kind: 'tracker'`；`liveSummaries` 返回的 state 附带 `type` 字段（老手机 UI alias 窗口期）。
 
 ## 8. UI
@@ -181,6 +188,8 @@ completed in 12m
 - 筛选菜单：状态、people/priority（按 `capabilities.filters` 门禁）之外，`capabilities.feature` 且服务端返回了 `facets.feature` 时提供「分组」组，选项为 facets ∪ 当前选中的 slug，选「全部分组」清空；摘要只在菜单确实提供该组时显示 slug，避免按钮与菜单不一致。
 - 有 `blocked` 的行显示「已阻塞」徽标（lock 图标）；预览 meta 显示「分组」与「被阻塞于」，后者逐个 identifier 渲染，可点击跳到该 issue（列表里没有该行时按 identifier 向 tracker 读取，读不到则回退为用 identifier 搜索）。
 - container（即项目本身，见 §6）在预览 meta 与 board 范围选择器里一律显示为「项目 / Project」，不再叫「分组」：否则与分组行同译，中文界面会出现两行都叫「分组」。Linear 的 container 是 team，文案仍为「团队」。
+- **状态名**：状态胶囊、状态下拉项、行状态、会话侧栏状态行都经 `lib/trackers/stateLook.ts` 的 `trackerStateLabel(state, t, translatedStates)`。`capabilities.translatedStates` 为假时返回 `name`（Linear 的团队自定义状态原样显示）；为真时按 state id 取 `references.picker.filter.tracker.state.*`，id 缺失退回 `category`，仍未命中则回退 `name`。
+- **本地页签的作用域**：`capabilities.containersAreProjects` 为真时，`trackerScopeOf()` 直接返回当前项目 id，board 工具栏显示应用的项目选择器（与 GitHub 的项目/仓库选择器同位置、同交互），**不提供「全部项目」**；切项目时保持在本页签，不再跳回仓库页签。Linear 仍用自己的 team 选择器（`projectMapping`）。
 - 预览头的复制按钮按 `capabilities.externalUrl` 分流：Linear 复制其自身页面地址；本地复制 `<当前页面地址>?reference=<issue url>`（保留 origin/端口/tunnel host/鉴权参数），按钮文案为「复制应用内链接」，且不再渲染指向 `openchamber.local` 的外链图标。`?reference=` 由 `TrackerItemRouteOpener` 在首帧读取并在 `effect` 里调用 `useShowTrackerItem` 打开，成功后 `history.replaceState` 去掉该参数；tracker 状态/描述符尚未就绪时保持 pending，随 store 变化重试。`TrackerItemView` 在无法读取该条时，对 `externalUrl: false` 的 tracker 不再 `openExternalUrl`，改为就地说明。
 - Settings 卡片：无 auth 表单，展示连接账号名（`account?.name` 回退，其后为 Unknown user 文案）、issuesDir 说明与 sessionComments 开关。
 - i18n：新增 local key，15 个 locale 覆盖（en, nl, de, fr, es, ja, ko, pl, uk, tr, ar, he, pt-BR, zh-CN, zh-TW），parity 测试保障翻译。
@@ -204,7 +213,7 @@ completed in 12m
 | routes | create/edit 能力位门禁（未声明 404 UNSUPPORTED）；`feature`/`blockedBy` 按需透传、identifier 归一（trim/大写/去重） |
 | registry | `local` 注册与校验 |
 | web api | `facets` 与 `feature`/`blockedBy`/`blocked` 的 zod 解析（缺省保持缺省，`null` 读作无分组）；`feature` 进入 list query string |
-| UI | presentation `local` 夹具、行徽标与预览 meta、阻塞来源可点击、筛选菜单分组选项与摘要一致、代码引用识别、i18n parity（15 locale，含 `sourceBoard.tracker.form.*`） |
+| UI | presentation `local` 夹具、行徽标与预览 meta、阻塞来源可点击、筛选菜单分组选项与摘要一致、代码引用识别、i18n parity（15 locale，含 `sourceBoard.tracker.form.*`）；状态名翻译（`stateLook.test.ts`：六态、未知 id 回退、Linear 不翻）、作用域判定（`scope.test.ts`：项目作用域 / 自带容器 / 容器消失） |
 | 路由/深链 | `parseRoute` 只接受 http(s) 的 `reference`；`referenceLinkHref` 保留 origin/端口/参数、替换已有 `reference`、非 http(s) 页面（`openchamber-ui://`、`file://`）返回 null；`externalUrl` 缺省读作 false；`ReferencePreview` 对本地 issue 不渲染外链、复制按钮文案切换 |
 | 全局 | `bun run check:changed` 通过 |
 
@@ -226,6 +235,8 @@ completed in 12m
 7. **FR-13 阻塞消费**：`blockedBy` 指向未结束 issue 时 board 行显示「已阻塞」且预览列出阻塞来源、点击可跳到该阻塞者；把最后一个阻塞者置为 `done`/`canceled` 后，等待者在下一次读取即不再阻塞，其文件未被改写；自引用与指向不存在 issue 的条目不算阻塞；对话框能写入与清空 `blockedBy`。
 8. 能力位为假的 tracker（Linear）不出现分组/阻塞字段与筛选项，且其 create/edit 载荷不携带这两个键。
 9. **FR-17 分享链接**：本地 issue 预览复制出的链接形如 `<应用地址>?reference=<encode 后的 issue url>`；在浏览器打开该链接，应用定位到该 issue（桌面/网页为 Tracker 面板 tab，手机为 board 聚焦），地址栏随后不再带 `reference`；界面与预览中不存在指向 `openchamber.local` 的可点击外链；`externalUrl: true` 的 tracker（Linear）仍复制其自身地址并保留外链图标。
+10. **FR-18 状态名**：本地 issue 的状态胶囊、状态下拉、行状态与会话侧栏状态行显示「分诊 / 待办池 / 待办 / 进行中 / 已完成 / 已取消」，不出现 `triage`、`in-progress` 等 slug；Linear 的 `In Progress` 等自定义状态名保持原样；未知 state id 回退显示其 `name`。
+11. **FR-18 作用域**：本地页签的 list 请求带 `containerId=<当前项目 id>`，只列出该项目 `.issues/` 的 issue；工具栏出现项目选择器，切换项目后列表随之变化且停留在本地页签；两个项目各有一个 `LOCAL-1` 时不会出现在同一张表里；预览与「附加到会话」读取详情同样带 `containerId`。
 
 ## 13. 备选方案否决记录
 

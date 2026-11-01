@@ -130,6 +130,19 @@ export type TrackerDescriptor = {
      * browser a dead address.
      */
     externalUrl: boolean;
+    /**
+     * `state.name` is a generated slug the UI translates by state id (Local's
+     * `triage`, `todo`…), not words someone wrote in the tracker (Linear's
+     * "In Progress", which is shown as is). False when names are content.
+     */
+    translatedStates: boolean;
+    /**
+     * A container is an OpenChamber project folder (Local reads `.issues/`
+     * inside it), so the board scopes the list by the project it is showing
+     * rather than by a container of the tracker's own (Linear's team). False
+     * when the tracker names containers the board has to offer separately.
+     */
+    containersAreProjects: boolean;
     /** UI can create items (POST items/create). */
     create: boolean;
     /** UI can edit item fields (POST items/edit). */

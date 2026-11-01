@@ -45,6 +45,8 @@ export const BUILT_IN_LINEAR_TRACKER: TrackerDescriptor = {
     sessionComments: true,
     hostAccess: true,
     externalUrl: true,
+    translatedStates: false,
+    containersAreProjects: false,
     create: false,
     edit: false,
   },

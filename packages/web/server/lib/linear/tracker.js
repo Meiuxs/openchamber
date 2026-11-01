@@ -42,6 +42,10 @@ export const LINEAR_TRACKER_DESCRIPTOR = Object.freeze({
     hostAccess: true,
     // A Linear item's link is Linear's own page.
     externalUrl: true,
+    // Linear's state names are words the team wrote, not slugs to translate.
+    translatedStates: false,
+    // A Linear container is a team, not an OpenChamber project.
+    containersAreProjects: false,
     create: false,
     edit: false,
   }),

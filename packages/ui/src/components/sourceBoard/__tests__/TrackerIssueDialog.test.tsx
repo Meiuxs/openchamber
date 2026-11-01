@@ -79,6 +79,8 @@ const CONTAINERS = [
 
 const ITEM = {
   id: 'LOCAL-1', identifier: 'LOCAL-1', title: 'New issue', provider: 'local', url: '', state: null, description: null,
+  // The tracker read a write answers with carries the grouping it just wrote.
+  feature: null,
 };
 
 let root: Root;

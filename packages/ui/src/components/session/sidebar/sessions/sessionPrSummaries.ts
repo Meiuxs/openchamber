@@ -157,6 +157,10 @@ export const buildSessionIssueItems = (
   issues: readonly LinkedSidebarIssue[],
   repositoryStates: ReadonlyArray<IssueLiveSummary | null>,
   trackerStates: ReadonlyArray<TrackerLiveSummary | null> = [],
+  // How a tracker's state reads in the row. A tracker that generates its state
+  // names (Local's slugs) hands a translating one in; the default shows the
+  // tracker's own words, which is right for Linear.
+  trackerStateText: (provider: string, state: TrackerLiveSummary['state']) => string = (_provider, state) => state.name,
 ): SessionIssueItem[] => {
   let repositoryIndex = 0;
   let trackerIndex = 0;
@@ -187,7 +191,7 @@ export const buildSessionIssueItems = (
         icon: trackerPresentation(issue.provider).icon,
         color: look?.color ?? null,
         statusKey: null,
-        statusText: state?.state.name ?? null,
+        statusText: state ? trackerStateText(issue.provider, state.state) : null,
         url: issue.url,
         title: state?.title || issue.title,
       };

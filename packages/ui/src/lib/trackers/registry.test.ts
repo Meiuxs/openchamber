@@ -69,6 +69,8 @@ describe('tracker registry', () => {
         multipleAccounts: false, stateUpdate: false, children: false, labels: false, priority: false, feature: false, blockers: false,
         filters: { people: false, priority: false }, projectMapping: false, sessionComments: false, hostAccess: false,
         externalUrl: false,
+        translatedStates: false,
+        containersAreProjects: false,
       },
       stateFilters: ['open', 'all'],
       urlPatterns: [],
@@ -265,5 +267,9 @@ describe('tracker descriptor list', () => {
     // A server that does not say its links are pages reads as "not navigable":
     // an in-app link beats a browser address nobody serves.
     expect(parsed?.capabilities.externalUrl).toBe(false);
+    // Nor does it say whether a state's name is a slug or a word: read as a
+    // word, since translating a name someone wrote is the worse mistake.
+    expect(parsed?.capabilities.translatedStates).toBe(false);
+    expect(parsed?.capabilities.containersAreProjects).toBe(false);
   });
 });

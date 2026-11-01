@@ -16,6 +16,7 @@ import { useTrackedItems } from '@/lib/trackedItems/interest';
 import { repositoryThread, workItem } from '@/lib/trackedItems/fromLinks';
 import { trackerPresentation } from '@/lib/trackers/presentation';
 import { useTrackerDescriptors } from '@/lib/trackers/registry';
+import { trackerStateLabel } from '@/lib/trackers/stateLook';
 import { getPrStatusLabel } from '@/components/session/sidebar/prStatusLabel';
 import { getIssueStateLook, getTrackerItemStateLook } from '@/components/session/sidebar/sessions/sessionPrSummaries';
 import { fetchSessionKnowledgeSummary, setSessionProjectContextPin, type SessionKnowledgeSummary } from '@/lib/sessionKnowledgeApi';
@@ -195,7 +196,7 @@ export const WorkStatusContextSection: React.FC<Props> = ({ sessionId, directory
   );
   const repositoryIssueItems = React.useMemo(() => repositoryIssueRefs.map((ref) => repositoryThread(ref.thread, ref)), [repositoryIssueRefs]);
   const linkedTrackerEntries = React.useMemo(
-    () => linkedSidebarIssues.flatMap((issue) => (issue.source === 'tracker' ? [{ key: issue.key, identifier: issue.identifier, item: workItem(issue.provider, issue.identifier) }] : [])),
+    () => linkedSidebarIssues.flatMap((issue) => (issue.source === 'tracker' ? [{ key: issue.key, identifier: issue.identifier, provider: issue.provider, item: workItem(issue.provider, issue.identifier) }] : [])),
     [linkedSidebarIssues],
   );
   const linkedWorkItems = React.useMemo(() => linkedTrackerEntries.map((entry) => entry.item), [linkedTrackerEntries]);
@@ -218,6 +219,7 @@ export const WorkStatusContextSection: React.FC<Props> = ({ sessionId, directory
     [gitDirectory],
   ));
   const branchPrSummary = useFreshestSourceControlVisualSummaryForBranch(gitDirectory, branch);
+  const trackerDescriptors = useTrackerDescriptors();
   // Repository thread key, or a tracker entry's id (`linear:ENG-12`) lowercased -> the coloured status line.
   const liveLookById = React.useMemo(() => {
     const looks = new Map<string, { color: string; text: string }>();
@@ -242,12 +244,14 @@ export const WorkStatusContextSection: React.FC<Props> = ({ sessionId, directory
       looks.set(ref.key, { color: look.color, text: `${identifier} · ${t(look.statusKey)}` });
     });
     // A tracker shows its own state name; the colour comes from its category.
-    linkedTrackerEntries.forEach(({ key, identifier }, index) => {
+    // One that generates its names (Local's slugs) gets the board's words.
+    const translatesStateNames = new Set(trackerDescriptors.filter((descriptor) => descriptor.capabilities.translatedStates === true).map((descriptor) => descriptor.id));
+    linkedTrackerEntries.forEach(({ key, identifier, provider }, index) => {
       const state = linkedWorkItemStates[index];
       if (!state) return;
       looks.set(key.toLowerCase(), {
         color: getTrackerItemStateLook(state.state.category).color,
-        text: `${identifier} · ${state.state.name}`,
+        text: `${identifier} · ${trackerStateLabel(state.state, t, translatesStateNames.has(provider))}`,
       });
     });
     if (branchPrSummary?.repo) {
@@ -260,11 +264,10 @@ export const WorkStatusContextSection: React.FC<Props> = ({ sessionId, directory
       if (match) looks.set(match.ref.key, changeLook(branchPrSummary, match.ref));
     }
     return looks;
-  }, [branchPrSummary, changeSummaries, linkedTrackerEntries, linkedWorkItemStates, repositoryChanges, repositoryIssueRefs, repositoryIssueStates, t, urlMatcher]);
+  }, [branchPrSummary, changeSummaries, linkedTrackerEntries, linkedWorkItemStates, repositoryChanges, repositoryIssueRefs, repositoryIssueStates, t, trackerDescriptors, urlMatcher]);
   const openTrackerItem = useOpenTrackerItem();
   const copyLink = useCopyReferenceLink();
   const leaveWorkStatus = useLeaveWorkStatus();
-  const trackerDescriptors = useTrackerDescriptors();
   // Connected servers only. A disabled server contributes nothing to the
   // context, so counting it here contradicts the MCP section right above,
   // which shows the same servers switched off.

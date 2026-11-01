@@ -52,6 +52,11 @@ const descriptorSchema = z.object({
     // Older servers did not say, and a link to a page nobody serves is worse
     // than an in-app one: a silent server reads as "not navigable".
     externalUrl: flag,
+    // An older server does not say whether a state's name is a slug or a word:
+    // read as "a word", since translating a name someone wrote is the worse
+    // mistake (the cost is Local's slugs stay English until the server ships).
+    translatedStates: flag,
+    containersAreProjects: flag,
     // An older server's descriptor carries neither key; a missing key is off.
     create: flag,
     edit: flag,
@@ -107,6 +112,8 @@ export const unknownTrackerDescriptor = (id: string): TrackerDescriptor => {
       sessionComments: false,
       hostAccess: false,
       externalUrl: false,
+      translatedStates: false,
+      containersAreProjects: false,
     },
     stateFilters: ['open', 'all'],
     urlPatterns: [],

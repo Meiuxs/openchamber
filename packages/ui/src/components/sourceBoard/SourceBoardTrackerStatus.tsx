@@ -14,7 +14,7 @@ import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import type { TrackerItemSummary, TrackerWorkflowState } from '@/lib/api/types';
 import { useI18n } from '@/lib/i18n';
 import { useTrackerDescriptor } from '@/lib/trackers/registry';
-import { trackerStateCategoryRank, trackerStateGlyph } from '@/lib/trackers/stateLook';
+import { trackerStateCategoryRank, trackerStateGlyph, trackerStateLabel } from '@/lib/trackers/stateLook';
 
 // The workflow's own order: triage, backlog, to do, in progress, done, canceled; then position and name.
 const compareStates = (left: TrackerWorkflowState, right: TrackerWorkflowState): number => (
@@ -50,12 +50,15 @@ function useContainerStates(provider: string, containerId: string | null, enable
 export const SourceBoardTrackerStatus: React.FC<{ item: TrackerItemSummary; onChanged: () => void }> = ({ item, onChanged }) => {
     const { t } = useI18n();
     const { trackers } = useRuntimeAPIs();
-    const canUpdate = useTrackerDescriptor(item.provider).capabilities.stateUpdate;
+    const descriptor = useTrackerDescriptor(item.provider);
+    const canUpdate = descriptor.capabilities.stateUpdate;
+    // A tracker that generates its state names gets the board's words for them.
+    const translatesStates = descriptor.capabilities.translatedStates === true;
     const states = useContainerStates(item.provider, item.container?.id ?? null, canUpdate);
     const [updating, setUpdating] = React.useState(false);
     const currentId = item.state?.id ?? null;
     const look = trackerStateGlyph(item.state?.category);
-    const label = item.state?.name ?? '';
+    const label = item.state ? trackerStateLabel(item.state, t, translatesStates) : '';
 
     if (!label) return null;
     if (!trackers || !canUpdate || states.length === 0 || !currentId) {
@@ -104,7 +107,7 @@ export const SourceBoardTrackerStatus: React.FC<{ item: TrackerItemSummary; onCh
                         return (
                             <DropdownMenuRadioItem key={state.id} value={state.id}>
                                 <Icon name={stateLook.icon} className="mt-0.5 size-3.5" style={{ color: stateLook.color }} />
-                                {state.name}
+                                {trackerStateLabel(state, t, translatesStates)}
                             </DropdownMenuRadioItem>
                         );
                     })}

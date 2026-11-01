@@ -60,6 +60,7 @@ import { cn, formatDirectoryName } from '@/lib/utils';
 import { resolveTrackerMappedProjectPath } from '@/lib/trackers/projectMapping';
 import { trackerPresentation } from '@/lib/trackers/presentation';
 import { useTrackerDescriptor } from '@/lib/trackers/registry';
+import { scopedByProject, trackerScopeOf } from '@/lib/trackers/scope';
 import { useTrackerSources, useTrackerSourcesPending } from '@/lib/trackers/sources';
 import { useTrackedItems } from '@/lib/trackedItems/interest';
 import { isTrackedWorkItem, type TrackedItem } from '@/lib/trackedItems/model';
@@ -241,8 +242,14 @@ const SourceBoard: React.FC<{ layout: SourceBoardLayout; onLeave?: () => void; o
     const trackerConnected = isTrackerConnected(useTrackerAuthEntry(tracker));
     const mapping = useTrackerMapping(tracker, trackerConnected);
     const containers = mapping?.connected ? mapping.containers : [];
+    // A tracker whose containers are the projects (Local reads `.issues/` inside
+    // one) is scoped by the project the board is showing, the same way the New
+    // issue dialog offers those projects. One with containers of its own
+    // (Linear's team) keeps its own picker.
+    const trackerDescriptor = useTrackerDescriptor(tracker);
+    const byProject = tracker !== null && scopedByProject(trackerDescriptor);
     const storedContainerId = tracker ? choice.trackerContainerByProvider[tracker] ?? null : null;
-    const containerId = storedContainerId && containers.some((container) => container.id === storedContainerId) ? storedContainerId : null;
+    const containerId = trackerScopeOf(trackerDescriptor, project, storedContainerId, containers);
 
     const projectPicker = project ? (
         <SourceBoardProjectPicker
@@ -250,7 +257,10 @@ const SourceBoard: React.FC<{ layout: SourceBoardLayout; onLeave?: () => void; o
             selected={project}
             onSelect={(projectId) => {
                 useSourceBoardStore.getState().clearRepositoryFocus();
-                updateChoice({ projectId, tab: 'repository' });
+                // A tracker scoped by project stays on its tab: the project is
+                // the scope, not a reason to jump to the repository tab.
+                if (byProject) updateChoice({ projectId });
+                else updateChoice({ projectId, tab: 'repository' });
             }}
             ariaLabel={t('sourceBoard.project.label')}
             size="toolbar"
@@ -274,19 +284,21 @@ const SourceBoard: React.FC<{ layout: SourceBoardLayout; onLeave?: () => void; o
         />
     ) : null;
     const projectScope = <>{projectPicker}{repositoryPicker}</>;
-    // On a tracker the board lists a container (a Linear team). The project's
-    // pickers stay beside it when the project offers no repository tab, the
-    // only other way off the tracker.
+    // On a tracker the board lists a container: a Linear team, or — where the
+    // containers are the projects — the project itself, whose picker therefore
+    // shows even when the project offers a repository tab.
     const scopePicker = tracker ? (
         <>
-            {hasRepository ? null : projectScope}
-            <SourceBoardContainerPicker
-                provider={tracker}
-                containers={containers}
-                selectedContainerId={containerId}
-                onSelectContainer={(next) => updateChoice({ trackerContainerByProvider: { [tracker]: next } })}
-                onAccountSwitched={() => updateChoice({ trackerContainerByProvider: { [tracker]: null } })}
-            />
+            {hasRepository && !byProject ? null : projectScope}
+            {byProject ? null : (
+                <SourceBoardContainerPicker
+                    provider={tracker}
+                    containers={containers}
+                    selectedContainerId={containerId}
+                    onSelectContainer={(next) => updateChoice({ trackerContainerByProvider: { [tracker]: next } })}
+                    onAccountSwitched={() => updateChoice({ trackerContainerByProvider: { [tracker]: null } })}
+                />
+            )}
         </>
     ) : projectScope;
 

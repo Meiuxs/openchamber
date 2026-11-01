@@ -22,7 +22,7 @@ import { ReferenceLinksContext, useReferenceLinks } from './referenceLinks';
 import { useSourceControlProvider } from '@/lib/source-control/providers/registry';
 import { trackerPresentation } from '@/lib/trackers/presentation';
 import { useTrackerDescriptor } from '@/lib/trackers/registry';
-import { isSettledTrackerState, trackerStateGlyph } from '@/lib/trackers/stateLook';
+import { isSettledTrackerState, trackerStateGlyph, trackerStateLabel } from '@/lib/trackers/stateLook';
 import { ReferenceComments, type ReferenceThreadActions } from './ReferenceComments';
 import { buildReferenceTimeline, type ReferenceCommentItem, type ReferenceTimelineEntry } from './referenceTimeline';
 import { ChecksGlyph, DiscussionCategory, ReferenceLabelChips } from './ReferencePickerRow';
@@ -821,6 +821,9 @@ const TrackerPreview: React.FC<{
     // A tracker whose links are not pages (Local) hands out a link to this app
     // instead: the item's own address only resolves once it is pasted back.
     const externalUrl = capabilities.externalUrl;
+    // A tracker that generates its state names (Local's slugs) gets the board's
+    // words for them; one whose names a team wrote is shown as written.
+    const stateLabel = issue.state ? trackerStateLabel(issue.state, t, capabilities.translatedStates === true) : '';
     const copyUrl = externalUrl ? issue.url : (referenceLinkHref(issue.url) ?? issue.url);
     const comments = React.useMemo(
         () => mapDetail(detail, (value) => (value.comments ?? []).map((comment): ReferenceTimelineEntry => ({
@@ -849,7 +852,7 @@ const TrackerPreview: React.FC<{
             header={
                 <>
                     <div className="flex items-center gap-2">
-                        {stateControl ?? (issue.state?.name ? <StatePill icon={look.icon} color={look.color} label={issue.state.name} /> : null)}
+                        {stateControl ?? (stateLabel ? <StatePill icon={look.icon} color={look.color} label={stateLabel} /> : null)}
                         <span className={cn('truncate typography-meta', REFERENCE_META_TEXT)}>{issue.identifier}</span>
                         <CopyReferenceLinkButton
                             url={copyUrl}

@@ -601,10 +601,13 @@ export function useRepositoryPullStatusesAcross(contexts: AcrossContexts, items:
     );
 }
 
-const trackerDetailKey = (provider: string, account: string, itemId: string) => JSON.stringify([getRuntimeKey(), provider, account, itemId]);
+// Identifiers restart per container (Local numbers per project), so the
+// container a read was for is part of what the cache keys on.
+const trackerDetailKey = (provider: string, account: string, itemId: string, containerId: string | null) =>
+    JSON.stringify([getRuntimeKey(), provider, account, containerId ?? '', itemId]);
 
-const fetchTrackerItem = async (trackers: TrackerAPI, provider: string, itemId: string): Promise<TrackerItem> => {
-    const result = await trackers.get(provider, itemId);
+const fetchTrackerItem = async (trackers: TrackerAPI, provider: string, itemId: string, containerId: string | null): Promise<TrackerItem> => {
+    const result = await trackers.get(provider, itemId, containerId);
     if (result.connected === false) throw new Error(`${provider} is not connected`);
     if (!result.item) throw new Error('Item not found');
     return result.item;
@@ -614,22 +617,23 @@ const fetchTrackerItem = async (trackers: TrackerAPI, provider: string, itemId: 
  * A tracker item with its description and comments, from the same cache the
  * preview fills: attaching an item that was previewed asks the tracker nothing.
  */
-export function readTrackerItemDetail(trackers: TrackerAPI, provider: string, itemId: string): Promise<TrackerItem> {
+export function readTrackerItemDetail(trackers: TrackerAPI, provider: string, itemId: string, containerId: string | null = null): Promise<TrackerItem> {
     const account = currentTrackerAccountId(useTrackerAuthStore.getState().entries[provider]);
-    return trackerDetails.ensure(trackerDetailKey(provider, account, itemId), () => fetchTrackerItem(trackers, provider, itemId));
+    return trackerDetails.ensure(trackerDetailKey(provider, account, itemId, containerId), () => fetchTrackerItem(trackers, provider, itemId, containerId));
 }
 
 /** The previewed tracker item's description and comments; asked once `settled`, like a repository item's. */
-export function useTrackerItemDetail(item: { provider: string; id: string } | null, settled: boolean) {
+export function useTrackerItemDetail(item: { provider: string; id: string; containerId?: string | null } | null, settled: boolean) {
     const { trackers } = useRuntimeAPIs();
     const provider = item?.provider ?? null;
     const itemId = item?.id ?? null;
+    const containerId = item?.containerId ?? null;
     const account = useTrackerAccount(provider);
-    const key = provider && itemId && trackers ? trackerDetailKey(provider, account, itemId) : null;
+    const key = provider && itemId && trackers ? trackerDetailKey(provider, account, itemId, containerId) : null;
     const fetch = React.useCallback(async () => {
         if (!trackers || !provider || !itemId) throw new Error('Trackers are not available here');
-        return fetchTrackerItem(trackers, provider, itemId);
-    }, [itemId, provider, trackers]);
+        return fetchTrackerItem(trackers, provider, itemId, containerId);
+    }, [containerId, itemId, provider, trackers]);
     const cached = useCachedValue(trackerDetails, key, fetch, settled);
     // The item's state as the server follows it, once that is newer than the read.
     const items = React.useMemo(() => (cached.status === 'ready' ? [cached.value] : []), [cached]);

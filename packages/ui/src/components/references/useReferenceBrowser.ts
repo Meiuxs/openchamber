@@ -231,7 +231,9 @@ export function useReferenceBrowser({
     const previewSettled = Boolean(settledPreviewItem && previewItem
         && referencePickerItemKey(settledPreviewItem) === referencePickerItemKey(previewItem));
     const { detail: trackerDetail } = useTrackerItemDetail(
-        previewItem?.source === 'tracker' ? { provider: previewItem.provider, id: previewItem.item.id } : null,
+        previewItem?.source === 'tracker'
+            ? { provider: previewItem.provider, id: previewItem.item.id, containerId: previewItem.item.container?.id ?? null }
+            : null,
         previewSettled,
     );
     // The revision picked for the previewed change; another item, or the latest, reads as none.

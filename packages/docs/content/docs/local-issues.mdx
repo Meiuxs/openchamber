@@ -13,7 +13,7 @@ Issues sit in `.issues/` inside the project by default. A project can use anothe
 
 ## The Local tab
 
-Open the [Issues and PRs board](/issues-and-prs/) and switch to the **Local** tab to see a project's issues. The tab is per project, like the rest of the board.
+Open the [Issues and PRs board](/issues-and-prs/) and switch to the **Local** tab to see a project's issues. The tab is per project, like the rest of the board: the project picker beside the tabs decides which project's `.issues/` directory is listed, and switching it switches the issues. There is no all-projects list — `LOCAL-<n>` restarts at 1 in every project, so two projects can both have a `LOCAL-1` and only the project tells them apart.
 
 The search matches titles, identifiers, descriptions, the grouping slug and labels. Pasting an issue file name or path, such as `.issues/LOCAL-7-fix-login.md`, opens that issue. The filter beside the search narrows the list by state and priority, and by grouping slug where the issues carry one: the menu lists every slug in the project, not only those of the issues already shown, so you can switch from one grouping to another without clearing the filter first.
 
@@ -23,7 +23,7 @@ From the preview you can:
 
 - **Create an issue** with a title, a description, a priority, labels, a grouping slug and the issues it waits on. The board picks the next free `LOCAL-<n>` number and creates the file.
 - **Edit** the title, description, priority, labels, grouping slug and blockers of an issue.
-- **Change the state** from the status pill. The six states are `triage`, `backlog`, `todo`, `in-progress`, `done` and `canceled`.
+- **Change the state** from the status pill. The six states are `triage`, `backlog`, `todo`, `in-progress`, `done` and `canceled`; the board shows them in your interface language, while the file always stores the slug.
 
 Every change the board makes lands in the file right away, and a file you edit in your own editor shows up on the board on the next scan.
 

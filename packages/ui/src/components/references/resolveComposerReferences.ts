@@ -30,8 +30,11 @@ export type ReferenceResolveDeps = {
     sourceControl: Pick<SourceControlAPI, 'issueGet' | 'issueComments' | 'changeRequestContext' | 'referenceDetail'>;
     /** The read context of the project the items belong to. */
     context: SourceControlReadContext | null;
-    /** A tracker item with its comments, by tracker and the tracker's id; the preview's cache. */
-    readTrackerDetail: (provider: string, itemId: string) => Promise<TrackerItem>;
+    /**
+     * A tracker item with its comments, by tracker, the tracker's id and the
+     * container it was listed under (identifiers restart per container).
+     */
+    readTrackerDetail: (provider: string, itemId: string, containerId: string | null) => Promise<TrackerItem>;
     /** The tracker's name for the agent's context header (`Linear`). */
     trackerName: (provider: string) => string;
 };
@@ -92,7 +95,7 @@ const selectionLabel = (selection: ReferencePickerSelection): string => (
 
 async function resolveOne(selection: ReferencePickerSelection, deps: ReferenceResolveDeps): Promise<ComposerReference> {
     if (selection.source === 'tracker') {
-        const item = await deps.readTrackerDetail(selection.provider, selection.item.id);
+        const item = await deps.readTrackerDetail(selection.provider, selection.item.id, selection.item.container?.id ?? null);
         const login = item.assignee?.name;
         return {
             kind: 'tracker-item',

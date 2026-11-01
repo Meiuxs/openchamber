@@ -77,6 +77,11 @@ export const LOCAL_TRACKER_DESCRIPTOR = Object.freeze({
     // `itemUrl()` names the issue, it does not address a page: the host is
     // synthetic, so the UI opens and copies an in-app link instead.
     externalUrl: false,
+    // `STATES` are slugs the board translates; nobody authored these words.
+    translatedStates: true,
+    // A container is the project folder whose `.issues/` holds the files, so
+    // the board scopes the list by the project it is showing.
+    containersAreProjects: true,
     create: true,
     edit: true,
   }),
@@ -237,7 +242,8 @@ export function createLocalTracker({ listProjects }) {
       return { connected: true, posted: false, skipped: 'already-posted' };
     }
 
-    const found = await scanner.get(identifier);
+    const projectHint = asNonEmptyString(input?.containerId) ?? asNonEmptyString(input?.projectDirectory) ?? null;
+    const found = await scanner.get(identifier, projectHint);
     if (!found) {
       return { connected: true, posted: false, skipped: 'no-identifier' };
     }
@@ -308,15 +314,15 @@ export function createLocalTracker({ listProjects }) {
       };
     },
 
-    get: async (id) => {
-      const found = await scanner.get(id);
+    get: async (id, containerId) => {
+      const found = await scanner.get(id, containerId);
       return { connected: true, item: found ? toTrackerItem(found.issue, found.container) : null };
     },
 
     states: async () => ({ connected: true, states: await scanner.states() }),
 
-    updateState: async ({ id, stateId }) => {
-      const issue = await scanner.updateState(id, stateId);
+    updateState: async ({ id, stateId, containerId, projectDirectory }) => {
+      const issue = await scanner.updateState(id, stateId, containerId || projectDirectory);
       return { connected: true, item: toTrackerItemSummary(issue, await containerOfIssue(issue)) };
     },
 
@@ -332,7 +338,7 @@ export function createLocalTracker({ listProjects }) {
       return { connected: true, item: toTrackerItemSummary(issue, await containerOfIssue(issue)) };
     },
 
-    edit: async ({ id, title, description, priority, labels, feature, blockedBy }) => {
+    edit: async ({ id, title, description, priority, labels, feature, blockedBy, containerId, projectDirectory }) => {
       // Only the fields the caller carries are forwarded; an absent field
       // leaves the stored value alone, an explicit value replaces it.
       const patch = {};
@@ -342,7 +348,7 @@ export function createLocalTracker({ listProjects }) {
       if (labels !== undefined) patch.labels = toSingleLineLabels(labels);
       if (feature !== undefined) patch.feature = toSingleLine(feature);
       if (blockedBy !== undefined) patch.blockedBy = toSingleLineLabels(blockedBy);
-      const issue = await scanner.edit(id, patch);
+      const issue = await scanner.edit(id, patch, containerId || projectDirectory);
       return { connected: true, item: toTrackerItemSummary(issue, await containerOfIssue(issue)) };
     },
 

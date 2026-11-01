@@ -4,6 +4,8 @@ import { getLinkedSidebarChanges, getLinkedSidebarIssues, type LinkedSidebarChan
 import type { Session } from '@/lib/opencode/model';
 import { formatChangeRequestReference } from '@/lib/source-control/providers/terminology';
 import { useRepositoryUrlMatcher } from '@/lib/source-control/repositoryUrlMatcher';
+import { useTrackerDescriptors } from '@/lib/trackers/registry';
+import { trackerStateLabel } from '@/lib/trackers/stateLook';
 import { repositoryThread, workItem } from '@/lib/trackedItems/fromLinks';
 import { useFreshestSourceControlVisualSummaryForBranch, type PrVisualSummary } from '@/stores/useGitHubPrStatusStore';
 import { useTrackedIssueStates, useTrackedPullVisualSummaries, useTrackedWorkItemStates } from '@/stores/useTrackedItemsStore';
@@ -80,6 +82,7 @@ export function useSessionRefLines(session: Session, worktree: WorktreeMetadata 
     [linkedIssues],
   );
   const linkedWorkItemStates = useTrackedWorkItemStates(linkedWorkItems);
+  const trackerDescriptors = useTrackerDescriptors();
   // What the row's badge and tooltips list: its PRs, or else its issues.
   const refLines = React.useMemo((): SessionRefLine[] => {
     if (prSummaries.length > 0 || linkedPrsWithoutState.length > 0 || uncolouredChanges.length > 0) {
@@ -107,7 +110,9 @@ export function useSessionRefLines(session: Session, worktree: WorktreeMetadata 
       }));
       return [...summaryLines, ...otherLines];
     }
-    return buildSessionIssueItems(linkedIssues, repositoryIssueStates, linkedWorkItemStates).map((item) => ({
+    return buildSessionIssueItems(linkedIssues, repositoryIssueStates, linkedWorkItemStates, (provider, state) => (
+      trackerStateLabel(state, t, trackerDescriptors.find((descriptor) => descriptor.id === provider)?.capabilities.translatedStates === true)
+    )).map((item) => ({
       key: item.key,
       icon: item.icon,
       label: item.label,
@@ -116,6 +121,6 @@ export function useSessionRefLines(session: Session, worktree: WorktreeMetadata 
       title: item.title,
       text: item.statusKey ? `${item.label} · ${t(item.statusKey)}` : item.statusText ? `${item.label} · ${item.statusText}` : item.label,
     }));
-  }, [linkedIssues, linkedWorkItemStates, linkedPrsWithoutState, prSummaries, repositoryIssueStates, t, uncolouredChanges, urlMatcher]);
+  }, [linkedIssues, linkedWorkItemStates, linkedPrsWithoutState, prSummaries, repositoryIssueStates, t, trackerDescriptors, uncolouredChanges, urlMatcher]);
   return { refLines, branchPrIconColor };
 }

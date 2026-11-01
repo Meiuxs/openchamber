@@ -175,6 +175,18 @@ export type TrackerDescriptor = {
      * browser a dead address.
      */
     externalUrl: boolean;
+    /**
+     * `state.name` is a generated slug the UI translates by state id (Local's
+     * `triage`, `todo`…), not words someone wrote in the tracker (Linear's
+     * "In Progress", which is shown as is). Absent on an older server: false.
+     */
+    translatedStates?: boolean;
+    /**
+     * A container is an OpenChamber project folder (Local reads `.issues/`
+     * inside it), so the board scopes the list by the project it shows rather
+     * than by a container of the tracker's own (Linear's team). Absent: false.
+     */
+    containersAreProjects?: boolean;
     /** UI can create items (POST items/create); absent on an older server, read as false. */
     create?: boolean;
     /** UI can edit item fields (POST items/edit); absent on an older server, read as false. */
@@ -228,7 +240,7 @@ export interface TrackerAPI {
   list(provider: TrackerProviderId, options?: TrackerListOptions): Promise<TrackerListResult>;
   /** Forgets the server's short-lived lists of this tracker, so the next list read asks it: the board's list refresh. */
   refreshListReads(provider: TrackerProviderId): Promise<void>;
-  get(provider: TrackerProviderId, id: string): Promise<TrackerItemResult>;
+  get(provider: TrackerProviderId, id: string, containerId?: string | null): Promise<TrackerItemResult>;
   states(provider: TrackerProviderId, containerId: string): Promise<TrackerStatesResult>;
   updateState(provider: TrackerProviderId, input: TrackerStateUpdateInput): Promise<TrackerItemResult>;
   mappingGet(provider: TrackerProviderId): Promise<TrackerMappingResult>;

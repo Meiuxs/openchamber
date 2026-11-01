@@ -26,8 +26,8 @@ export function useAttachReferences(
         const resolved = await resolveComposerReferences(selections, {
             sourceControl,
             context: repositoryContext && repositoryContext !== 'missing' ? repositoryContext : null,
-            readTrackerDetail: (provider, itemId) => (trackers
-                ? readTrackerItemDetail(trackers, provider, itemId)
+            readTrackerDetail: (provider, itemId, containerId) => (trackers
+                ? readTrackerItemDetail(trackers, provider, itemId, containerId)
                 : Promise.reject(new Error('Trackers are not available here'))),
             trackerName: (provider) => readTrackerDescriptor(provider).name,
         });

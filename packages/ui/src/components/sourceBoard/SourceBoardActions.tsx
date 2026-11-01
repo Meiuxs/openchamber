@@ -151,8 +151,8 @@ export const SourceBoardActions: React.FC<{
         void resolveComposerReferences([selectionOf(item)], {
             sourceControl,
             context,
-            readTrackerDetail: (provider, itemId) => (trackers
-                ? readTrackerItemDetail(trackers, provider, itemId)
+            readTrackerDetail: (provider, itemId, containerId) => (trackers
+                ? readTrackerItemDetail(trackers, provider, itemId, containerId)
                 : Promise.reject(new Error('Trackers are not available here'))),
             trackerName: (provider) => readTrackerDescriptor(provider).name,
         }).then(({ references, failures }) => {

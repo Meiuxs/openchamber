@@ -15,6 +15,7 @@ import type {
     TrackerPriorityFilter,
 } from '@/lib/api/types';
 import type { I18nKey } from '@/lib/i18n';
+import { TRACKER_STATE_LABEL_KEYS } from '@/lib/trackers/stateLook';
 import { prVisualStateOf } from '@/lib/source-control/prVisualState';
 import type { ChangeRequestTerm, SourceControlProviderDescriptor } from '@/lib/source-control/providers/descriptor';
 import { formatChangeRequestReference } from '@/lib/source-control/providers/terminology';
@@ -136,12 +137,8 @@ export const TRACKER_PRIORITY_FILTERS = ['all', 'urgent', 'high', 'medium', 'low
 const TRACKER_STATE_FILTER_LABEL_KEYS = new Map<string, I18nKey>([
     ['open', 'references.picker.filter.tracker.state.open'],
     ['all', 'references.picker.filter.tracker.state.all'],
-    ['triage', 'references.picker.filter.tracker.state.triage'],
-    ['backlog', 'references.picker.filter.tracker.state.backlog'],
-    ['todo', 'references.picker.filter.tracker.state.todo'],
-    ['in-progress', 'references.picker.filter.tracker.state.inProgress'],
-    ['done', 'references.picker.filter.tracker.state.done'],
-    ['canceled', 'references.picker.filter.tracker.state.canceled'],
+    // The six generated states, the same words a state pill shows.
+    ...TRACKER_STATE_LABEL_KEYS,
     // Linear's own filters.
     ['inReview', 'references.picker.filter.tracker.linear.inReview'],
     ['duplicate', 'references.picker.filter.tracker.linear.duplicate'],

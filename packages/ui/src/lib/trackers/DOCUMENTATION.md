@@ -83,8 +83,15 @@ on the source-control side (`lib/source-control/`).
   `children` parent and children, `labels`, `priority`, `filters` the list
   filters, `projectMapping` the container picker and start-in project,
   `multipleAccounts` the account switch, `sessionComments` the session status
-  post. A session started before the tracker list is held waits for it
-  (bounded, dropped on a runtime switch) before that gate is read.
+  post, `translatedStates` whether a state's name is a slug this UI translates
+  (the status pill, the status menu and every row label go through
+  `trackerStateLabel` in `stateLook.ts`) or words someone wrote in the tracker
+  and shown as is, `containersAreProjects` whether a container *is* an
+  OpenChamber project folder, in which case the board's own project picker is
+  the list's scope picker (no container picker, no all-projects option) and the
+  project id travels as `containerId`; `scope.ts` holds the two rules. A
+  session started before the tracker list is held waits for it (bounded,
+  dropped on a runtime switch) before that gate is read.
 - Where a tracker is offered depends on sign-in (`sources.ts`):
   `useTrackerSources()` is the served trackers with a connected account, and
   it alone feeds the board's tabs, the composer's attach rows and New

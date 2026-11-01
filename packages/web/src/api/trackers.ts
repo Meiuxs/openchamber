@@ -166,9 +166,13 @@ export const createWebTrackerAPI = ({
       await call(provider, '/read-cache/refresh?scope=lists', { method: 'POST' }, z.unknown(), 'Failed to refresh tracker lists');
     },
 
-    async get(provider, id): Promise<TrackerItemResult> {
+    async get(provider, id, containerId): Promise<TrackerItemResult> {
       if (await onLegacyWire()) return legacy.get(provider, id);
-      return call(provider, `/items/get?${new URLSearchParams({ id }).toString()}`, GET, itemResultSchema, 'Failed to load tracker item');
+      // Identifiers restart per container (Local numbers per project), so the
+      // item's own container travels with the read where the caller knows it.
+      const query = new URLSearchParams({ id });
+      if (containerId) query.set('containerId', containerId);
+      return call(provider, `/items/get?${query.toString()}`, GET, itemResultSchema, 'Failed to load tracker item');
     },
 
     async states(provider, containerId): Promise<TrackerStatesResult> {

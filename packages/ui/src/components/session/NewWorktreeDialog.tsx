@@ -411,8 +411,8 @@ export function NewWorktreeDialog({
     void resolveComposerReferences([item.selection], {
       sourceControl,
       context: item.kind === 'pr' ? item.context : (repositoryContext && repositoryContext !== 'missing' ? repositoryContext : null),
-      readTrackerDetail: (provider, itemId) => (trackers
-        ? readTrackerItemDetail(trackers, provider, itemId)
+      readTrackerDetail: (provider, itemId, containerId) => (trackers
+        ? readTrackerItemDetail(trackers, provider, itemId, containerId)
         : Promise.reject(new Error('Trackers are not available here'))),
       trackerName: (provider) => readTrackerDescriptor(provider).name,
     }).then(({ references, failures }) => {
