@@ -10,13 +10,16 @@ import { setWarmingDuration, setWarmingEnabled } from './websearch-config.js';
 import { registerSourceControlRoutes } from '../source-control/routes.js';
 import { registerLinearRoutes } from '../linear/routes.js';
 import { registerTrackerRoutes } from '../trackers/routes.js';
+import { createExtensionTrackers } from '../trackers/extension-trackers.js';
+import { createTrackerAccounts, trackerAccountsPersistPath } from '../trackers/extension-accounts.js';
+import { createTrackerOAuth } from '../trackers/extension-oauth.js';
 import { registerGuestRoutes, settleGuestDeactivationListeners } from '../guests/routes.js';
 import { listInstalledGuests, registerBuiltInGuests } from '../guests/catalog.js';
 import { setHostCallbackRoute } from '../guests/host-callback.js';
 import { registerNotificationChannelRoutes } from '../notifications/channel-routes.js';
 import { createOutboundHandles } from '../source-control/outbound-handles.js';
 import { createExtensionProviders } from '../source-control/extension-providers.js';
-import { SOURCE_CONTROL_OUTBOUND_PATH } from '@openchamber/sdk';
+import { SOURCE_CONTROL_OUTBOUND_PATH, TRACKER_OUTBOUND_PATH } from '@openchamber/sdk';
 import { extensionsPersistPath } from '../guests/persist.js';
 import { createWorktreeInstanceDisposer, registerGitRoutes } from '../git/routes.js';
 import { registerDevServerRoutes } from '../dev-servers/routes.js';
@@ -99,9 +102,12 @@ import { createSourceControlAuditStore } from '../source-control/audit-storage.j
 export const createFeatureRoutesRuntime = (dependencies) => {
   // `trackers` is the tracker registry the server builds once (`index.js`):
   // routes, tracked-item readers, the read cache and guest host access.
+  // `trackerSessionStatus` is its session-comment fan-out, told when an
+  // extension's tracker leaves.
   const {
     clientReloadDelayMs,
     trackers,
+    trackerSessionStatus,
   } = dependencies;
   const gitRuntimeIdentity = Object.freeze({
     id: `server_${crypto.randomUUID()}`,
@@ -520,7 +526,8 @@ export const createFeatureRoutesRuntime = (dependencies) => {
     let trackedItemsService = null;
     const providerReadCache = createProviderReadCache({
       sourceControlProviderIds: sourceControlProviders.list().map((descriptor) => descriptor.id),
-      trackerIds: trackers.list(),
+      // Extension trackers attach and detach while the server runs.
+      trackerIds: () => trackers.list(),
       onChange: (provider) => trackedItemsService?.refreshProvider(provider),
       onItemRefresh: (provider, item) => trackedItemsService?.refreshItem(provider, item),
     });
@@ -706,6 +713,17 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       trustedDirectoriesConfig: createTrustedDirectoriesConfig({ gitBinary }),
     });
     await registerBuiltInGuests({ persistPath: extensionsPersistPath(openchamberDataDir), root: routeDependencies.builtInExtensionsDir });
+    // A change every client reads again from the server; the event carries nothing.
+    const announceChange = (type) => {
+      const clients = getOpenChamberEventClients();
+      for (const client of clients) {
+        try {
+          writeSseEvent(client, { type, properties: {} });
+        } catch {
+          clients.delete(client);
+        }
+      }
+    };
     // Extensions that act as a Git host, kept in step with the catalog; every
     // client re-reads the provider list when the set changes.
     const extensionSourceControlProviders = createExtensionProviders({
@@ -713,16 +731,28 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       register: walkthroughBindingService.registerExtensionProvider,
       unregister: walkthroughBindingService.unregisterExtensionProvider,
       dropSection: (id) => sourceControlAuthStore.dropSection(id),
-      emitChanged: () => {
-        const clients = getOpenChamberEventClients();
-        for (const client of clients) {
-          try {
-            writeSseEvent(client, { type: 'openchamber:source-control-providers-changed', properties: {} });
-          } catch {
-            clients.delete(client);
-          }
-        }
-      },
+      emitChanged: () => announceChange('openchamber:source-control-providers-changed'),
+    });
+    // Extensions that act as a tracker, attached to the registry beside Linear
+    // and kept in step with the catalog; their accounts live in their own
+    // store, and their services reach the tracker's server only through these
+    // handles on the callback listener.
+    const trackerOutboundHandles = createOutboundHandles();
+    setHostCallbackRoute(TRACKER_OUTBOUND_PATH, {
+      refusal: trackerOutboundHandles.refusal,
+      serve: trackerOutboundHandles.serve,
+    });
+    const extensionTrackers = createExtensionTrackers({
+      listGuests: () => listInstalledGuests({ persistPath: extensionsPersistPath(openchamberDataDir) }),
+      currentGuest: async (guestId) => (await listInstalledGuests({ persistPath: extensionsPersistPath(openchamberDataDir) }))
+        .find((guest) => guest.id === guestId) ?? null,
+      registry: trackers,
+      accounts: createTrackerAccounts({ persistPath: trackerAccountsPersistPath(openchamberDataDir) }),
+      handles: trackerOutboundHandles,
+      oauth: createTrackerOAuth(),
+      sessionStatus: trackerSessionStatus ?? { forget: () => {} },
+      persistPath: extensionsPersistPath(openchamberDataDir),
+      emitChanged: () => announceChange('openchamber:tracker-providers-changed'),
     });
     registerGuestRoutes(app, {
       openchamberDataDir, openchamberVersion, resolveGitBinaryForSpawn, resolveOptionalProjectDirectory, getSmallModelService,
@@ -733,6 +763,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
         { name: 'withdraw an extension Git host', listener: (event) => extensionSourceControlProviders.deactivated(event) },
         { name: 'drop an extension\'s session event subscription', listener: () => onExtensionSessionEventsChanged() },
         { name: 'withdraw an extension notification channel', listener: (event) => extensionNotificationChannels?.deactivated(event) },
+        { name: 'withdraw an extension tracker', listener: (event) => extensionTrackers.deactivated(event) },
       ]),
       // One failing reconcile never skips another; each failure is logged by the route.
       onGuestActivated: async () => {
@@ -740,15 +771,21 @@ export const createFeatureRoutesRuntime = (dependencies) => {
           extensionSourceControlProviders.reconcile(),
           onExtensionSessionEventsChanged(),
           extensionNotificationChannels?.reconcile(),
+          extensionTrackers.reconcile(),
         ]);
         const failed = results.find((result) => result.status === 'rejected');
         if (failed) throw failed.reason;
       },
+      onGuestsChanged: () => announceChange('openchamber:guests-changed'),
+      watchFolderInstalls: true,
       surfaceViewerHeaders, trackers,
     });
     // The providers extensions served before the restart, before any request reads the list.
     await extensionSourceControlProviders.reconcile().catch((error) => {
       console.warn('Failed to load extension Git hosts:', error?.message ?? error);
+    });
+    await extensionTrackers.reconcile().catch((error) => {
+      console.warn('Failed to load extension trackers:', error?.message ?? error);
     });
     if (extensionNotificationChannels) {
       registerNotificationChannelRoutes(app, { channels: extensionNotificationChannels });
