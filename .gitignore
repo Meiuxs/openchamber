@@ -100,3 +100,6 @@ artifacts/
 # TypeScript build-mode caches: UI declarations for project references
 packages/ui/.tsbuild/
 *.tsbuildinfo
+
+# Intranet migration deliverable zips (built locally, not part of the tree)
+/openchamber-intranet-*.zip
