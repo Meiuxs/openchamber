@@ -21,6 +21,7 @@ Routes answered (through the shared `/api/tracker/local/*` routes, host-only in 
 - **`feature` is a free-form grouping slug.** The file format does not validate it, `list` narrows on exact equality, and no derived state depends on it. `list` also reports `facets.feature` — every slug in the container — so a consumer's filter options survive its own filter.
 - **`feature` and `blockedBy` are writable through the API.** `items/create` and `items/edit` forward them when the body carries the key (an absent key leaves the stored value alone, `null`/`[]` clears it), so the board's form and an agent end up in the same place. The descriptor's `feature`/`blockers` bits say which trackers have the fields; `readListOptions` passes `feature` through without a gate.
 - **Search covers what the row shows:** identifier, title, body, file name, the grouping slug and every label, plus the pasted-file-name shortcut.
+- **The item `url` is an identity, not an address.** `itemUrl()` builds `https://openchamber.local/tracker/local/<ID>`; the host is synthetic and nothing serves it. Its only job is to be recognised when pasted back (`matchUrl`, the descriptor's `urlPatterns`, session links). The descriptor therefore answers `capabilities.externalUrl: false`, which is the UI's instruction to open and copy the item in-app (`?reference=`) instead of handing a browser a dead address.
 
 ## Decisions
 
@@ -53,3 +54,17 @@ FR-4 asks for a pasted file path to reach its issue. A path or file name (`LOCAL
 ### Why issue files live outside the OpenChamber data dir
 
 The spec puts issues in each project so they version with the project and travel with a checkout. The cost — scan caching by stat, path traversal care, slug sanitizing — is owned here; no other module writes into `issuesDir`.
+
+### Why edit renames the issue file when the title changes
+
+The file name derives from the issue number and the sanitized title slug (`LOCAL-<number>-<slug>.md`). When an edit changes the title, `scanner.edit` computes the new slug and target file name, writes the updated file, removes the old file, and purges the stale file name from the cache. This keeps the file name on disk in sync with the issue title while avoiding stale duplicate files.
+
+### Why the item URL is not a page
+
+An issue needs a link: one value that names it in a session, in a pasted reference and in the tracker contract's `url` field. Linear's link is also an address, so the UI can offer it to a browser. A local issue has no server behind it — the data is a markdown file in one project on one machine — so there is nothing to address, and inventing a reachable one would mean either a per-machine server route or a real host in someone's DNS.
+
+`openchamber.local` is the smallest thing that works as an identity: a host nobody resolves, a path that reads like the Linear shape, and a `urlPatterns` entry that makes a paste resolve back to `LOCAL-<n>`. `capabilities.externalUrl: false` is what keeps that honest downstream: the UI copies the page's own address with `?reference=<that link>` instead, which opens the item in this app for whoever can already reach it, and nothing pretends the link works anywhere else.
+
+### Why locate scopes to project hint when provided
+
+`LOCAL-<n>` identifiers restart from 1 per project. When `locate` or `get` receives a `containerId` or `projectDirectory` hint, it scopes the lookup strictly to that project without falling back to other projects, preventing cross-project mutations or state updates on ambiguous identifiers.

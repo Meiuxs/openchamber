@@ -11,6 +11,7 @@
  * - `?tab=<chat|git|diff|terminal|files>` - Legacy URL name for the active workspace surface
  * - `?settings=<section>` - Open settings to specific section
  * - `?file=<path>` - Diff view with file selected
+ * - `?reference=<url>` - Open a tracker item (its own link) in the app
  *
  * Examples:
  * - `/?session=abc123` - Open session abc123
@@ -23,6 +24,8 @@ export type { RouteState } from './types';
 
 
 export { parseRoute, hasRouteParams } from './parseRoute';
+
+export { referenceLinkHref } from './referenceLink';
 
 export type { AppRouteState } from './serializeRoute';
 export {

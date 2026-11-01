@@ -65,6 +65,7 @@ import { useSourceControlProviderRegistry } from '@/lib/source-control/providers
 import { refreshTrackers } from '@/stores/useTrackerAuthStore';
 import type { RuntimeAPIs } from '@/lib/api/types';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { TrackerItemRouteOpener } from '@/components/sourceBoard/TrackerItemRouteOpener';
 import { lazyWithChunkRecovery } from '@/lib/chunkLoadRecovery';
 import { useOnDemandComponent } from '@/hooks/useOnDemandComponent';
 import { preloadFileTypeSprite } from '@/lib/fileTypeIcons';
@@ -869,6 +870,7 @@ function App({ apis }: AppProps) {
               <TooltipProvider delayDuration={300} skipDelayDuration={150}>
                 <div className={isDesktopRuntime ? 'h-full text-foreground bg-transparent' : 'h-full text-foreground bg-background'}>
                   <SyncAppEffects backgroundWorkEnabled />
+                  <TrackerItemRouteOpener />
                   <OpenCodeUpdateToast />
                   <ProjectConfigErrorToast />
                   <MainLayout />

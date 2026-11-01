@@ -40,6 +40,8 @@ export const LINEAR_TRACKER_DESCRIPTOR = Object.freeze({
     projectMapping: true,
     sessionComments: true,
     hostAccess: true,
+    // A Linear item's link is Linear's own page.
+    externalUrl: true,
     create: false,
     edit: false,
   }),

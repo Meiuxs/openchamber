@@ -13,6 +13,7 @@ import { useEffectiveDirectory } from '@/hooks/useEffectiveDirectory';
 import { useEmojiShortcodes } from '@/lib/emoji/shortcodes';
 import { useI18n, type I18nKey } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { referenceLinkHref } from '@/lib/router';
 import { parseCodeReferences } from '@/lib/trackers/codeReferences';
 
 import type { CachedValue } from './referenceCache';
@@ -391,15 +392,16 @@ const PullDetailRows: React.FC<{
 };
 
 /** Copies the item's address, beside the link that opens it on its host. */
-const CopyReferenceLinkButton: React.FC<{ url: string; className?: string }> = ({ url, className }) => {
+const CopyReferenceLinkButton: React.FC<{ url: string; className?: string; label?: string }> = ({ url, className, label }) => {
     const { t } = useI18n();
     const copyLink = useCopyReferenceLink();
+    const text = label ?? t('references.link.copy');
     return (
         <button
             type="button"
             className={cn('inline-flex size-6 shrink-0 items-center justify-center rounded-md hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', REFERENCE_META_TEXT, className)}
-            aria-label={t('references.link.copy')}
-            title={t('references.link.copy')}
+            aria-label={text}
+            title={text}
             onClick={() => copyLink(url)}
         >
             <Icon name="link" className="size-3.5" />
@@ -816,6 +818,10 @@ const TrackerPreview: React.FC<{
     const parent = capabilities.children ? full?.parent ?? issue.parent ?? null : null;
     const updated = relative(issue.updatedAt);
     const assignee = issue.assignee?.name;
+    // A tracker whose links are not pages (Local) hands out a link to this app
+    // instead: the item's own address only resolves once it is pasted back.
+    const externalUrl = capabilities.externalUrl;
+    const copyUrl = externalUrl ? issue.url : (referenceLinkHref(issue.url) ?? issue.url);
     const comments = React.useMemo(
         () => mapDetail(detail, (value) => (value.comments ?? []).map((comment): ReferenceTimelineEntry => ({
             kind: 'comment',
@@ -845,16 +851,22 @@ const TrackerPreview: React.FC<{
                     <div className="flex items-center gap-2">
                         {stateControl ?? (issue.state?.name ? <StatePill icon={look.icon} color={look.color} label={issue.state.name} /> : null)}
                         <span className={cn('truncate typography-meta', REFERENCE_META_TEXT)}>{issue.identifier}</span>
-                        <CopyReferenceLinkButton url={issue.url} className="ms-auto" />
-                        <a
-                            href={issue.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={cn('inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 typography-meta hover:bg-interactive-hover hover:text-foreground', REFERENCE_META_TEXT)}
-                        >
-                            {descriptor.name}
-                            <Icon name="external-link" className="size-3.5" />
-                        </a>
+                        <CopyReferenceLinkButton
+                            url={copyUrl}
+                            className="ms-auto"
+                            label={externalUrl ? undefined : t('references.link.copyInApp')}
+                        />
+                        {externalUrl ? (
+                            <a
+                                href={issue.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={cn('inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 typography-meta hover:bg-interactive-hover hover:text-foreground', REFERENCE_META_TEXT)}
+                            >
+                                {descriptor.name}
+                                <Icon name="external-link" className="size-3.5" />
+                            </a>
+                        ) : null}
                     </div>
                     <h3 className="typography-ui-header font-semibold break-words text-foreground">{issue.title}</h3>
                 </>

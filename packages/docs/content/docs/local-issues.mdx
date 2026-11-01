@@ -27,6 +27,18 @@ From the preview you can:
 
 Every change the board makes lands in the file right away, and a file you edit in your own editor shows up on the board on the next scan.
 
+## Sharing an issue
+
+A local issue lives in one project on one machine, so its link opens it in OpenChamber rather than on a website. The preview's **Copy in-app link** button copies this app's own address with the issue in it:
+
+```
+<your OpenChamber address>/?reference=https%3A%2F%2Fopenchamber.local%2Ftracker%2Flocal%2FLOCAL-7
+```
+
+Open that link and the issue's preview is on screen, in the same instance the link came from. The `openchamber.local` address inside it is not a page and nothing serves it; the board's search and a session's links recognise it, which is what a pasted `https://openchamber.local/tracker/local/LOCAL-7` is for.
+
+Issues also travel as files: a teammate who clones the project sees the same `LOCAL-7` in their own instance, and can open it there.
+
 ## Grouping and blockers
 
 Two optional frontmatter fields group issues and order the work:

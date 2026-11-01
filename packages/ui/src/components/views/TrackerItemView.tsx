@@ -32,6 +32,7 @@ import { useTrackedItems } from '@/lib/trackedItems/interest';
 import { isTrackedWorkItem, type TrackedItem } from '@/lib/trackedItems/model';
 import { useTrackerUrlMatcher } from '@/lib/trackers/matchTrackerUrl';
 import { useTrackerSourceStatus } from '@/lib/trackers/sources';
+import { readTrackerDescriptor } from '@/lib/trackers/registry';
 import { openExternalUrl } from '@/lib/url';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useUIStore } from '@/stores/useUIStore';
@@ -69,9 +70,13 @@ export const TrackerItemView: React.FC<TrackerItemViewProps> = (props) => {
     const { panelDirectory, tabId, url } = props;
     const fallBack = React.useCallback(() => {
         if (!wasTrackerItemRequested(panelDirectory, tabId)) return;
+        // A tracker whose item links are not pages (Local) has nowhere to send
+        // a browser; its tab stays and says what it could not read.
+        const navigable = target?.source !== 'tracker' || readTrackerDescriptor(target.provider).capabilities.externalUrl;
+        if (!navigable) return;
         void openExternalUrl(url);
         useUIStore.getState().closeContextPanelTab(panelDirectory, tabId);
-    }, [panelDirectory, tabId, url]);
+    }, [panelDirectory, tabId, url, target]);
     const settle = React.useCallback(() => settleTrackerItemRequest(panelDirectory, tabId), [panelDirectory, tabId]);
 
     const content = !target
@@ -95,12 +100,13 @@ const TrackerState: React.FC<{ message: string; onRetry?: () => void }> = ({ mes
 };
 
 /** What a restored tab shows when its project cannot read the item. */
-const UnavailableState: React.FC<{ url: string }> = ({ url }) => {
+const UnavailableState: React.FC<{ url: string; external?: boolean }> = ({ url, external = true }) => {
     const { t } = useI18n();
     return (
         <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center typography-meta text-muted-foreground">
             <span>{t('contextPanel.tracker.unavailable')}</span>
-            <Button size="sm" variant="outline" onClick={() => void openExternalUrl(url)}>{t('contextPanel.preview.actions.openExternal')}</Button>
+            {/* A tracker whose links are not pages (Local) has nothing to open. */}
+            {external ? <Button size="sm" variant="outline" onClick={() => void openExternalUrl(url)}>{t('contextPanel.preview.actions.openExternal')}</Button> : null}
         </div>
     );
 };
@@ -287,7 +293,7 @@ const TrackerWorkItem: React.FC<{
         if (ready) onShown();
     }, [onShown, ready]);
 
-    if (disconnected) return <UnavailableState url={url} />;
+    if (disconnected) return <UnavailableState url={url} external={readTrackerDescriptor(provider).capabilities.externalUrl} />;
     if (detail.status === 'error') {
         return <TrackerState message={detail.error || t('contextPanel.tracker.loadFailed')} onRetry={() => void refresh()} />;
     }

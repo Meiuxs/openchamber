@@ -37,7 +37,11 @@ type TrackerCopyKeys = {
   containerLabel: I18nKey;
   containerAll: I18nKey;
   accountLabel: I18nKey;
-  /** Preview meta row naming the item's container: "Team". */
+  /**
+   * Preview meta row naming the item's container: "Team" for Linear, "Project"
+   * for a tracker whose container is the folder the items live in. Kept apart
+   * from the grouping row so the two never read as the same thing.
+   */
   containerMeta: I18nKey;
 };
 

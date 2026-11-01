@@ -15,6 +15,11 @@ export interface RouteState {
   settingsPath: string | null;
   /** File path for diff view */
   diffFile: string | null;
+  /**
+   * A tracker item's own link, to open in the app rather than in a browser:
+   * what a copied `?reference=` link carries (`referenceLink.ts`).
+   */
+  reference: string | null;
 }
 
 /**
@@ -46,4 +51,5 @@ export const ROUTE_PARAMS = {
   TAB: 'tab',
   SETTINGS: 'settings',
   FILE: 'file',
+  REFERENCE: 'reference',
 } as const;

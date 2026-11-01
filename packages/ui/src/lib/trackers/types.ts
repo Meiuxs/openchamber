@@ -168,6 +168,13 @@ export type TrackerDescriptor = {
     sessionComments: boolean;
     /** An SDK guest may borrow the token. */
     hostAccess: boolean;
+    /**
+     * The item's `url` is a page outside the app (Linear). False when it only
+     * names the item — Local's links carry a synthetic host and reach no
+     * server — so the UI opens and copies them in-app instead of handing a
+     * browser a dead address.
+     */
+    externalUrl: boolean;
     /** UI can create items (POST items/create); absent on an older server, read as false. */
     create?: boolean;
     /** UI can edit item fields (POST items/edit); absent on an older server, read as false. */

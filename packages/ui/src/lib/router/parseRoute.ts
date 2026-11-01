@@ -20,6 +20,7 @@ export function parseRoute(searchParams?: URLSearchParams): RouteState {
     tab: parseTab(params),
     settingsPath: parseSettingsPath(params),
     diffFile: parseDiffFile(params),
+    reference: parseReference(params),
   };
 }
 
@@ -129,6 +130,27 @@ function parseDiffFile(params: URLSearchParams): string | null {
 }
 
 /**
+ * The item link a `?reference=` deep link names. Only http(s): the value ends
+ * up as a tab's target, and anything else (`javascript:`, `data:`) is not a
+ * link this app can show. Anything unreadable reads as absent.
+ */
+function parseReference(params: URLSearchParams): string | null {
+  const value = params.get(ROUTE_PARAMS.REFERENCE)?.trim() ?? '';
+  if (!value || value.length > 2048) {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return null;
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check if the current URL has any route parameters.
  */
 export function hasRouteParams(): boolean {
@@ -142,7 +164,8 @@ export function hasRouteParams(): boolean {
       params.has(ROUTE_PARAMS.SESSION) ||
       params.has(ROUTE_PARAMS.TAB) ||
       params.has(ROUTE_PARAMS.SETTINGS) ||
-      params.has(ROUTE_PARAMS.FILE)
+      params.has(ROUTE_PARAMS.FILE) ||
+      params.has(ROUTE_PARAMS.REFERENCE)
     );
   } catch {
     return false;

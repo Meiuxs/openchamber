@@ -8,7 +8,7 @@ import type { RepositoryChangeRequestReference, RepositoryReferenceDetail, Track
 import { I18nProvider } from '@/lib/i18n';
 import { githubLikeDescriptor } from '@/lib/source-control/providers/descriptor.fixture';
 import { useSourceControlProviderRegistry } from '@/lib/source-control/providers/registry';
-import { linearLikeTrackerDescriptor } from '@/lib/trackers/descriptor.fixture';
+import { linearLikeTrackerDescriptor, localTrackerDescriptor } from '@/lib/trackers/descriptor.fixture';
 import { useTrackerRegistry } from '@/lib/trackers/registry';
 import { createWebAPIs } from '../../../../web/src/api';
 import { ReferencePreview } from './ReferencePreview';
@@ -37,6 +37,13 @@ const issue: TrackerItem = {
     container: { id: 'eng', key: 'ENG', name: 'Engineering' }, priority: 'high', labels: [],
     description: '', comments: [],
 };
+// A tracker whose links name the item and address nothing: no page to open.
+const localIssue: TrackerItem = {
+    provider: 'local', id: 'LOCAL-2', identifier: 'LOCAL-2', title: 'Local preview',
+    url: 'https://openchamber.local/tracker/local/LOCAL-2',
+    state: { id: 'todo', name: 'Todo', category: 'todo' },
+    priority: 'none', labels: [], description: '', comments: [],
+};
 
 const items: ReferencePickerItem[] = [{ source: 'repository', reference: pull }, { source: 'tracker', provider: 'linear', item: issue }];
 const apis = createWebAPIs();
@@ -45,7 +52,13 @@ const apis = createWebAPIs();
 const github = githubLikeDescriptor();
 Object.assign(useSourceControlProviderRegistry.getInitialState(), { ordered: [github], byId: new Map([[github.id, github]]), status: 'ready', holdsList: true });
 const linear = linearLikeTrackerDescriptor();
-Object.assign(useTrackerRegistry.getInitialState(), { ordered: [linear], byId: new Map([[linear.id, linear]]), status: 'ready', holdsList: true });
+const local = localTrackerDescriptor();
+Object.assign(useTrackerRegistry.getInitialState(), {
+    ordered: [linear, local],
+    byId: new Map([[linear.id, linear], [local.id, local]]),
+    status: 'ready',
+    holdsList: true,
+});
 
 function renderPreview(
     item: ReferencePickerItem,
@@ -53,10 +66,11 @@ function renderPreview(
     status: 'ready' | 'loading' | 'error' = 'ready',
     customFooter = true,
     extra: { onOpenTrackerIdentifier?: (identifier: string) => void } = {},
+    detail: TrackerItem = issue,
 ) {
     const pending = status === 'error' ? { status, error: 'Host unavailable' } as const : { status: 'loading' } as const;
     const github: CachedValue<RepositoryReferenceDetail> = status === 'ready' ? { status, value: repositoryDetail } : pending;
-    const tracker: CachedValue<TrackerItem> = status === 'ready' ? { status, value: issue } : pending;
+    const tracker: CachedValue<TrackerItem> = status === 'ready' ? { status, value: detail } : pending;
     const dom = new Window();
     const container = dom.document.createElement('div');
     container.innerHTML = renderToStaticMarkup(
@@ -167,5 +181,23 @@ describe('ReferencePreview layout', () => {
         const plain = renderPreview(item, false);
         expect([...plain.querySelectorAll('button')].some((candidate) => candidate.textContent === 'ENG-3')).toBe(false);
         expect(plain.textContent).toContain('ENG-3');
+    });
+
+    test('a tracker whose links are not pages offers no browser address, only an in-app link', () => {
+        const item: ReferencePickerItem = { source: 'tracker', provider: 'local', item: localIssue };
+        const container = renderPreview(item, false, 'ready', true, {}, localIssue);
+        const header = container.querySelector('header');
+        // Nothing in the header points a browser at the synthetic host.
+        expect(header?.querySelector('a')).toBeNull();
+        expect(container.querySelector('a[href^="https://openchamber.local"]')).toBeNull();
+        expect(header?.querySelector('button[aria-label="Copy in-app link"]')).not.toBeNull();
+    });
+
+    test('a tracker with its own pages keeps the provider link and a plain copy', () => {
+        const container = renderPreview(items[1], false);
+        const header = container.querySelector('header');
+        expect(header?.querySelector('a')?.getAttribute('href')).toBe('https://linear.app/acme/issue/ENG-12');
+        expect(header?.querySelector('button[aria-label="Copy link"]')).not.toBeNull();
+        expect(header?.querySelector('button[aria-label="Copy in-app link"]')).toBeNull();
     });
 });

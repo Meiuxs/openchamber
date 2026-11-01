@@ -49,6 +49,9 @@ const descriptorSchema = z.object({
     projectMapping: flag,
     sessionComments: flag,
     hostAccess: flag,
+    // Older servers did not say, and a link to a page nobody serves is worse
+    // than an in-app one: a silent server reads as "not navigable".
+    externalUrl: flag,
     // An older server's descriptor carries neither key; a missing key is off.
     create: flag,
     edit: flag,
@@ -103,6 +106,7 @@ export const unknownTrackerDescriptor = (id: string): TrackerDescriptor => {
       projectMapping: false,
       sessionComments: false,
       hostAccess: false,
+      externalUrl: false,
     },
     stateFilters: ['open', 'all'],
     urlPatterns: [],

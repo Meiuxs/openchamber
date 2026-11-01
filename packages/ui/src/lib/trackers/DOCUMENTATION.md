@@ -53,7 +53,13 @@ on the source-control side (`lib/source-control/`).
   tracker's served name.
 - Links are a tracker's only through its served `urlPatterns`
   (`matchTrackerUrl.ts`), the same rule as the server's `matchUrl`; one URL
-  table is asserted on both sides (`linearUrlCases.fixture.ts`).
+  table is asserted on both sides (`linearUrlCases.fixture.ts`). A pattern
+  matching a link does not make it a page: `capabilities.externalUrl` says
+  whether the item's `url` can be handed to a browser (Linear) or only names
+  the item (the local tracker, whose host is synthetic). Where it is false the
+  preview copies `referenceLinkHref` — this page's own address with
+  `?reference=<url>` — and the route handles it (`TrackerItemRouteOpener`),
+  instead of sending anyone to a host nobody serves.
 - Persisted identity strings do not change: tracked-items key
   `${provider}|${IDENTIFIER}`, Tracker tab key `${provider}:${IDENTIFIER}`,
   linked id `${provider}:${identifier}`, composer and picker key

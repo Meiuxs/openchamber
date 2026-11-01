@@ -33,3 +33,19 @@ describe('parseRoute message', () => {
     expect(parseRoute(new URLSearchParams('session=ses_abc&message=msg"]')).messageId).toBeNull();
   });
 });
+
+describe('parseRoute reference', () => {
+  const link = 'https://openchamber.local/tracker/local/LOCAL-2';
+
+  test('carries the item link a deep link names', () => {
+    expect(parseRoute(new URLSearchParams(`reference=${encodeURIComponent(link)}`)).reference).toBe(link);
+  });
+
+  test('only reads an http(s) link', () => {
+    expect(parseRoute(new URLSearchParams('reference=javascript%3Aalert(1)')).reference).toBeNull();
+    expect(parseRoute(new URLSearchParams('reference=data%3Atext%2Fhtml%2Cx')).reference).toBeNull();
+    expect(parseRoute(new URLSearchParams('reference=not%20a%20url')).reference).toBeNull();
+    expect(parseRoute(new URLSearchParams('reference=')).reference).toBeNull();
+    expect(parseRoute(new URLSearchParams('')).reference).toBeNull();
+  });
+});

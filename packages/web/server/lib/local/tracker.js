@@ -74,6 +74,9 @@ export const LOCAL_TRACKER_DESCRIPTOR = Object.freeze({
     projectMapping: false,
     sessionComments: true,
     hostAccess: false,
+    // `itemUrl()` names the issue, it does not address a page: the host is
+    // synthetic, so the UI opens and copies an in-app link instead.
+    externalUrl: false,
     create: true,
     edit: true,
   }),

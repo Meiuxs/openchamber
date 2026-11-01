@@ -68,6 +68,7 @@ describe('tracker registry', () => {
       capabilities: {
         multipleAccounts: false, stateUpdate: false, children: false, labels: false, priority: false, feature: false, blockers: false,
         filters: { people: false, priority: false }, projectMapping: false, sessionComments: false, hostAccess: false,
+        externalUrl: false,
       },
       stateFilters: ['open', 'all'],
       urlPatterns: [],
@@ -261,5 +262,8 @@ describe('tracker descriptor list', () => {
     expect(parsed?.capabilities.stateUpdate).toBe(true);
     expect(parsed?.capabilities.children).toBe(false);
     expect(parsed?.capabilities.filters).toEqual({ people: false, priority: false });
+    // A server that does not say its links are pages reads as "not navigable":
+    // an in-app link beats a browser address nobody serves.
+    expect(parsed?.capabilities.externalUrl).toBe(false);
   });
 });
