@@ -219,11 +219,23 @@ describe('enterprise policy', () => {
         .toEqual(['http://git.lab']);
     });
 
-    it('are never taken from the environment', () => {
+    it('come from the environment where the environment turns enterprise mode on', () => {
       expect(readEnterprisePolicy(machine({}, { env: {
         OPENCHAMBER_ENTERPRISE_MODE: '1',
+        OPENCHAMBER_ALLOWED_INSECURE_GIT_ORIGINS: 'http://git.lab, http://other.lab:8080',
+      } })).allowedInsecureGitOrigins).toEqual(['http://git.lab', 'http://other.lab:8080']);
+    });
+
+    it('add nothing from the environment once the file turns enterprise mode on', () => {
+      expect(readEnterprisePolicy(machine({ [LINUX_POLICY]: '{"enterpriseMode": true}' }, { env: {
         OPENCHAMBER_ALLOWED_INSECURE_GIT_ORIGINS: 'http://git.lab',
       } })).allowedInsecureGitOrigins).toEqual([]);
+    });
+
+    it('take the file value over the environment', () => {
+      expect(readEnterprisePolicy(machine({ [LINUX_POLICY]: '{"allowedInsecureGitOrigins": ["http://file.lab"]}' }, { env: {
+        OPENCHAMBER_ALLOWED_INSECURE_GIT_ORIGINS: 'http://env.lab',
+      } })).allowedInsecureGitOrigins).toEqual(['http://file.lab']);
     });
 
     it('resolve to exact plain-HTTP origins; anything else counts as unset', () => {

@@ -59,8 +59,12 @@ export async function probeGitLabAuth({ origin, clientId, fetch: fetchImpl = fet
   const versionPayload = await readJson(versionResponse);
   const requiresAuthentication = versionResponse.status === 401 || versionResponse.status === 403;
   const hasGitLabMarker = isString(versionResponse.headers.get('x-gitlab-meta'));
+  // Older private instances send no X-GitLab-Meta; a tokenless version request
+  // then answers with the JSON challenge GitLab's API responder emits.
+  const gitLabAuthChallenge = requiresAuthentication && versionPayload
+    && (versionPayload.message === '401 Unauthorized' || versionPayload.message === '403 Forbidden');
   const confirmed = (versionResponse.ok && versionPayload && isString(versionPayload.version))
-    || (requiresAuthentication && hasGitLabMarker);
+    || (requiresAuthentication && (hasGitLabMarker || gitLabAuthChallenge));
   if (!confirmed) return { confirmed: false, device: { available: false, reason: 'not-gitlab' }, pat: { available: false, reason: 'not-gitlab' }, cli: { available: false, reason: 'not-gitlab' } };
 
   if (!clientId) {

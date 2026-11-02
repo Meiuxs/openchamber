@@ -1483,13 +1483,14 @@ export async function resolvePrimaryWorktreeRoot(directory) {
 }
 
 export async function resolveRepositoryGitPaths(directory) {
-  const result = await runGitCommand(directory, [
-    'rev-parse',
-    '--absolute-git-dir',
-    '--path-format=absolute',
-    '--git-common-dir',
-    '--is-bare-repository',
-  ]);
+  const args = ['rev-parse', '--absolute-git-dir', '--path-format=absolute', '--git-common-dir', '--is-bare-repository'];
+  let result = await runGitCommand(directory, args);
+  if (!result.success && /unknown (option|switch)|path-format/i.test(result.stderr)) {
+    // Git before 2.31 (UOS ships 2.20) rejects --path-format=absolute;
+    // --git-common-dir then prints a path relative to the working directory,
+    // which the path.resolve below turns absolute again.
+    result = await runGitCommand(directory, args.filter((arg) => arg !== '--path-format=absolute'));
+  }
   if (!result.success) {
     return { supported: false, reason: 'not-a-git-repository' };
   }

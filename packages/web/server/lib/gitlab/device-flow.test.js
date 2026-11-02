@@ -56,8 +56,20 @@ describe('GitLab device flow', () => {
       .rejects.toMatchObject({ kind: 'temporarily-unavailable', status });
   });
 
-  it('does not trust an unmarked unauthorized response as GitLab', async () => {
+  it('confirms an older private instance whose 401 carries only the GitLab challenge message', async () => {
+    // Old GitLab sends no X-GitLab-Meta; the API responder's own message is the marker.
     const fetch = vi.fn().mockResolvedValueOnce(json({ message: '401 Unauthorized' }, 401));
+
+    await expect(probeGitLabAuth({ origin: 'https://gitlab.example.com', clientId: '', fetch })).resolves.toMatchObject({
+      confirmed: true,
+      device: { available: false, reason: 'invalid-client' },
+      pat: { available: true },
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('still refuses an unauthorized response whose body is not the GitLab challenge', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(json({ message: 'go away' }, 401));
 
     await expect(probeGitLabAuth({ origin: 'https://example.com', clientId: '', fetch })).resolves.toMatchObject({
       confirmed: false,

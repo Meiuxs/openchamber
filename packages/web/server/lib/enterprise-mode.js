@@ -334,8 +334,12 @@ export const readEnterprisePolicy = (options = {}) => {
     opencodeBinary: fromFile?.opencodeBinary ?? null,
     // File only, in or out of enterprise mode, for the same reason.
     hideBuiltinSkillCatalogs: fromFile?.hideBuiltinSkillCatalogs === true,
-    // File only, in or out of enterprise mode, for the same reason.
-    allowedInsecureGitOrigins: fromFile?.allowedInsecureGitOrigins ?? [],
+    // The file's value wins; the environment's fills the gap, unless the file
+    // turned enterprise mode on (the environment is the user's to edit). The
+    // profile setting stays out either way: an administrator who owns the
+    // environment lists trusted origins there, a user cannot reopen them.
+    allowedInsecureGitOrigins: fromFile?.allowedInsecureGitOrigins
+      ?? (fileGoverns ? [] : envList(env, 'OPENCHAMBER_ALLOWED_INSECURE_GIT_ORIGINS')),
     // File only, in or out of enterprise mode, for the same reason.
     modelsDevUrl: fromFile?.modelsDevUrl ?? null,
     // The file's value wins; the environment's fills the gap, unless the file
@@ -465,8 +469,10 @@ export const normalizeInsecureGitOrigin = (raw) => {
 
 /**
  * The exact plain-HTTP origins allowed for Git hosting providers: the policy
- * file's `allowedInsecureGitOrigins` plus, while enterprise mode is off, the
- * user setting of the same name in `preferences.json`. Entries go through
+ * file's `allowedInsecureGitOrigins`, or where the file says nothing,
+ * `OPENCHAMBER_ALLOWED_INSECURE_GIT_ORIGINS` (comma-separated) unless the file
+ * turned enterprise mode on, plus, while enterprise mode is off, the user
+ * setting of the same name in `preferences.json`. Entries go through
  * `normalizeInsecureGitOrigin`; a malformed one counts as unset. Read at every
  * use, like the rest of the policy; the callers that consult it are
  * `source-control/origin-instance.js`, the Git transport checks
