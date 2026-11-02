@@ -8,7 +8,7 @@ import { devtools, persist } from "zustand/middleware";
 import { findCatalogModel, type Provider, type Model, type Agent, type Config } from "@/lib/opencode/model";
 import type { DesktopSettings } from "@/lib/desktop";
 import type { CatalogKind } from "@/lib/opencode/events";
-import { opencodeClient, type OpencodeHealthProbe } from "@/lib/opencode/client";
+import { OpencodeApiError, opencodeClient, type OpencodeHealthProbe } from "@/lib/opencode/client";
 import { isSameProjectConfigError, readProjectConfigError, type ProjectConfigError } from "@/lib/opencode/configError";
 import { scopeMatches, subscribeToConfigChanges } from "@/lib/configSync";
 import type { ModelMetadata } from "@/types";
@@ -1270,9 +1270,16 @@ const hydrateConfigCatalogFromCache = async (directoryKey: string): Promise<void
     });
 };
 
-// Last agent-load error text per config-directory key, read by initializeApp
-// to explain a startup failure. Cleared when that directory loads again.
-const _agentsLoadErrors = new Map<string, string>();
+// Last agent-load error per config-directory key, read by initializeApp to
+// explain a startup failure. Cleared when that directory loads again.
+const _agentsLoadErrors = new Map<string, Error>();
+
+// OpenCode cannot open the directory at all (deleted, or a path it cannot
+// resolve). Retrying gives the same answer, and startup treats the project like
+// one whose folder is gone.
+const isLocationNotFound = (error: Error | undefined): boolean => (
+    error instanceof OpencodeApiError && error.tag === 'LocationNotFoundError'
+);
 
 const clearProjectConfigError = (directoryKey: string): void => {
     if (!useConfigStore.getState().projectConfigErrors[directoryKey]) return;
@@ -3341,7 +3348,7 @@ export const useConfigStore = create<ConfigStore>()(
                             });
                             // A rejected project config fails the same way until the
                             // user edits the file; retrying only delays the message.
-                            if (readProjectConfigError(error)) break;
+                            if (readProjectConfigError(error) || (error instanceof Error && isLocationNotFound(error))) break;
                             const waitMs = 200 * (attempt + 1);
                             await new Promise((resolve) => setTimeout(resolve, waitMs));
                             if (!isCurrentAgentLoad()) return false;
@@ -3350,7 +3357,7 @@ export const useConfigStore = create<ConfigStore>()(
 
                     if (!isCurrentAgentLoad()) return false;
                     console.error("Failed to load agents:", lastError);
-                    _agentsLoadErrors.set(directoryKey, lastError instanceof Error ? lastError.message : String(lastError ?? ''));
+                    _agentsLoadErrors.set(directoryKey, lastError instanceof Error ? lastError : new Error(String(lastError ?? '')));
                     const configError = readProjectConfigError(lastError);
                     if (configError && !isSameProjectConfigError(get().projectConfigErrors[directoryKey], configError)) {
                         set((state) => ({ projectConfigErrors: { ...state.projectConfigErrors, [directoryKey]: configError } }));
@@ -4518,11 +4525,12 @@ export const useConfigStore = create<ConfigStore>()(
                                 const configError = get().projectConfigErrors[configDirectoryKey];
                                 if (configError) {
                                     markStartupTrace('initializeApp:projectConfigInvalid', { configDirectoryKey, name: configError.name });
-                                } else if (await opencodeClient.getDirectoryAvailability(configDirectory) === 'missing') {
+                                } else if (isLocationNotFound(_agentsLoadErrors.get(configDirectoryKey))
+                                    || await opencodeClient.getDirectoryAvailability(configDirectory) === 'missing') {
                                     if (!isConfigRuntimeContextCurrent(runtimeContext)) return;
                                     markStartupTrace('initializeApp:projectDirectoryMissing', { configDirectoryKey });
                                 } else {
-                                    set({ lastInitFailure: { step: 'loadAgents', message: _agentsLoadErrors.get(configDirectoryKey) || null } });
+                                    set({ lastInitFailure: { step: 'loadAgents', message: _agentsLoadErrors.get(configDirectoryKey)?.message || null } });
                                     return;
                                 }
                             }
