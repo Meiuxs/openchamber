@@ -1,0 +1,106 @@
+OpenChamber npm deliverable
+===========================
+The version follows the tarball names (openchamber-*-<version>.tgz); the
+install scripts read it from the bundled SDK tarball, so a new release zip
+needs no script edit.
+
+Contents
+========
+- openchamber-web-<version>.tgz  @openchamber/web  - OpenChamber server + `openchamber` CLI
+- openchamber-sdk-<version>.tgz  @openchamber/sdk  - guest SDK, required dependency of the web package
+- RELEASE-NOTES.md               what this release changes
+
+Requirements: Node.js >= 24.14.0 (engines field enforces this).
+
+Quick install / update (recommended)
+====================================
+Unzip this package and run the script for your platform.
+
+Windows (PowerShell 5.1 or later, install.ps1):
+
+    powershell -ExecutionPolicy Bypass -File .\install.ps1
+
+Linux / macOS (bash, install.sh):
+
+    bash install.sh
+
+The script installs both tarballs (cache-first, with registry fallback),
+prepares the data directory, optionally writes the machine policy file and
+environment variables, prints the release notes (RELEASE-NOTES.md) and the
+service start commands, and works as an in-place updater when a previous
+OpenChamber is installed.
+
+Windows switches (Linux uses the --kebab-case form shown in `bash install.sh -h`):
+
+    -Registry <url>       install through the internal npm registry instead of
+                          the offline cache path
+    -Organization <name>  write the machine policy file with
+                          enterpriseMode + organization (admin/root needed)
+    -NpmRegistry <url>    pin the intranet npm mirror (policy file + env)
+    -PolicyFile <path>    copy an org-provided policy.json into the
+                          system policy path
+    -Port <n>             persist OPENCHAMBER_PORT (user environment)
+    -UiPassword <pwd>     persist OPENCHAMBER_UI_PASSWORD (plain text; use
+                          --ui-password at start instead if you do not want
+                          it on disk)
+    -OpenCodeHost/-OpenCodePort   persist OPENCODE_HOST / OPENCODE_PORT
+    -Start                launch the server after installing
+    -DryRun / --dry-run   print what would happen, change nothing
+
+Install
+=======
+The web tarball declares "@openchamber/sdk": "<version>" as an exact dependency,
+so the SDK package must be resolvable from a registry at install time.
+
+Option A - publish both into the internal npm registry (recommended for intranet):
+
+    npm publish openchamber-sdk-<version>.tgz --registry <internal-registry-url>
+    npm publish openchamber-web-<version>.tgz --registry <internal-registry-url>
+    npm install -g @openchamber/web --registry <internal-registry-url>
+
+Option B - direct install from files, with the SDK already visible in the registry:
+
+    npm install -g .\openchamber-web-<version>.tgz
+
+Configuration
+=============
+1. Data directory (created on first start):
+   Default: %USERPROFILE%\.config\openchamber (Linux/macOS: ~/.config/openchamber)
+   Override with OPENCHAMBER_DATA_DIR.
+   Holds settings.json (app settings, written by the UI),
+   extensions\ (installed guest extensions), secrets\, remote-clients.json.
+
+2. Machine policy file (optional; enables intranet/enterprise lockdown).
+   Fixed paths, most authoritative first:
+   - Windows: C:\ProgramData\OpenChamber\policy.json
+   - Linux:   /etc/openchamber/policy.json
+   - macOS:   /Library/Application Support/OpenChamber/policy.json
+   Recognized keys include: enterpriseMode, organization, npmRegistry
+   (intranet npm mirror), allowNetworkAccess, allowedExtensions,
+   allowLocalExtensions, modelsDevUrl, relayUrl, jev { url, ... },
+   opencodeBinary, skillsCatalogSources.
+   The file is re-read on every use (no restart needed) and a broken
+   policy fails closed: it enables enterprise mode but pins nothing.
+
+3. Environment variables / CLI flags (all optional):
+   OPENCHAMBER_PORT or --port      listen port (default 3000)
+   OPENCHAMBER_HOST                bind address (default 127.0.0.1)
+   OPENCHAMBER_UI_PASSWORD or --ui-password
+                                   UI password; required when the server
+                                   is reachable from other machines
+   OPENCODE_HOST / OPENCODE_PORT / OPENCODE_SKIP_START
+                                   connect to an external OpenCode server
+   OPENCHAMBER_NPM_REGISTRY        npm registry used for plugin metadata
+                                   and version checks (intranet mirror)
+   OPENCHAMBER_TUNNEL_MODE / OPENCHAMBER_TUNNEL_TOKEN / OPENCHAMBER_TUNNEL_CONFIG
+                                   Cloudflare tunnel options (refused in
+                                   enterprise mode)
+
+Start
+=====
+    openchamber                                   # port 3000, localhost only
+    openchamber serve --lan --port 3000 --ui-password <password>
+    OPENCODE_HOST=https://host:4096 OPENCODE_SKIP_START=true openchamber
+
+OpenCode must be running (opencode serve) or OpenChamber starts a managed
+instance itself. After start, open http://localhost:3000.
