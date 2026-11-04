@@ -29,6 +29,7 @@ import { getMarkdownCjk, getMarkdownProcessingOptions, markdownMath } from './ma
 import { remarkEmojiShortcodes } from './markdown/remarkEmojiShortcodes';
 import { remarkRepositoryReferences } from './markdown/remarkRepositoryReferences';
 import { remarkCodeReferences } from './markdown/remarkCodeReferences';
+import { fenceUiBlocks } from './uiBlocks/taggedBlocks';
 import type { EmojiShortcodes } from '@/lib/emoji/shortcodes';
 import type { RepositoryLinkContext } from '@/lib/source-control/repositoryLinks';
 import { MarkdownMediaProvider, type MarkdownDocumentAssets } from './markdown/MarkdownMediaContext';
@@ -439,7 +440,7 @@ export function MarkdownContent({
     // Only an assistant reply on screen draws UI blocks; copies and image
     // exports keep the block's source.
     uiBlocks: uiBlocks && !purpose,
-    uiBlockReply: uiBlocks && !purpose && settled && sessionId && messageId ? { sessionId, messageId } : null,
+    settledReply: uiBlocks && !purpose && settled && sessionId && messageId ? { sessionId, messageId } : null,
     disableLinkSafety,
     theme,
     mermaidControls,
@@ -560,7 +561,7 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({
   const body = (
     <MarkdownContent
       key={identity}
-      content={content}
+      content={variant === 'assistant' ? fenceUiBlocks(content) : content}
       singleTilde={false}
       mode={mode}
       mediaMode={variant === 'assistant' ? 'assistant' : 'local'}

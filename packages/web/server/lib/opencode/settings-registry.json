@@ -229,9 +229,6 @@
     "openCodeUpdateToastDismissedVersion": {
       "scope": "instance"
     },
-    "openCodeProjectImportCompleted": {
-      "scope": "instance"
-    },
     "autoDeleteEnabled": {
       "scope": "instance"
     },
@@ -444,6 +441,9 @@
       "scope": "profile"
     },
     "copyMessagesAsPlainText": {
+      "scope": "profile"
+    },
+    "selectionApprovalText": {
       "scope": "profile"
     },
     "showTurnChangedFiles": {
@@ -782,6 +782,9 @@
       "scope": "profile"
     },
     "notifyOnCompletion": {
+      "scope": "profile"
+    },
+    "notifyOnPullRequests": {
       "scope": "profile"
     },
     "notifyOnError": {

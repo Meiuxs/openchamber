@@ -1325,7 +1325,7 @@ function Details({ props }: NodeProps) {
   const value = useBlockProps(blockProps.Details, props);
   const [open, setOpen] = React.useState(false);
   const panelId = React.useId();
-  if (!value) return null;
+  if (!value || value.children.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
       <button
@@ -1391,7 +1391,34 @@ function Node({ value }: { value: BlockValue }) {
 }
 
 /**
- * A block that fails to draw shows its source. The next source text clears
+ * A block that could not be drawn: why, and its source folded away. Unfolded,
+ * a long program filled the reply, and the reasons were nowhere.
+ */
+function NotDrawn({ source, errors, partial = false }: { source: string; errors: string[]; partial?: boolean }) {
+  const { t } = useI18n();
+  const [open, setOpen] = React.useState(false);
+  const panelId = React.useId();
+  return (
+    <div className="flex flex-col gap-1 typography-meta">
+      <div className={partial ? 'text-muted-foreground' : 'text-[var(--status-error)]'}>{t(partial ? 'chat.uiBlock.partial' : 'chat.uiBlock.invalid')}</div>
+      {errors.map((error, index) => <div key={index} className="text-muted-foreground" dir="ltr">{error}</div>)}
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-fit items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <Icon name="arrow-right-s" className={cn('size-4 shrink-0 transition-transform duration-150', open && 'rotate-90 rtl:-rotate-90')} />
+        {t('chat.uiBlock.source')}
+      </button>
+      <pre id={panelId} hidden={!open} dir="ltr"><code>{source}</code></pre>
+    </div>
+  );
+}
+
+/**
+ * A block that fails to draw shows why and its source. The next source text clears
  * the failure without remounting a working tree, so a streamed update keeps
  * the user's chosen tab.
  */
@@ -1436,7 +1463,10 @@ export function UiBlock({ source, complete, host = noHost, onNotDrawn }: {
 }) {
   const { t } = useI18n();
   const { currentTheme } = useThemeSystem();
-  const parsed = React.useMemo(() => parseUiBlock(source, complete), [source, complete]);
+  // A broken page goes back to the agent, which draws it again, so only a
+  // reply, which has no such second try, draws what it can.
+  const salvage = host.kind === 'reply';
+  const parsed = React.useMemo(() => parseUiBlock(source, complete, salvage), [source, complete, salvage]);
   // The kit's variables (series colours, tones) land on the block's root before paint, and follow a theme switch.
   const blockRef = React.useRef<HTMLDivElement>(null);
   React.useInsertionEffect(addKitStyles, []);
@@ -1574,12 +1604,16 @@ export function UiBlock({ source, complete, host = noHost, onNotDrawn }: {
   ) : !disabled ? <NoteToggle onOpen={() => setNoteOpen(true)} /> : null;
   const slot = slotPlace && noteElement ? { ...slotPlace, element: noteElement } : null;
   const canSendChosen = host.kind === 'reply' && !sent && chosen.size > 0 && (chosen.size < decisions.length || failed);
-  const fallback = (
-    <div className="flex flex-col gap-1">
-      <div className="typography-meta text-[var(--status-error)]">{t('chat.uiBlock.invalid')}</div>
-      <pre dir="ltr"><code>{source}</code></pre>
-    </div>
-  );
+  // Only a press answers a page, so a waiting form the agent gave no button
+  // gets one; without it the user could not answer at all.
+  const sendButton = host.kind === 'page' && complete && decisions.length === 0 && Boolean(host.submit || sent)
+    ? { label: host.answered?.button ?? t('chat.uiBlock.send'), variant: 'primary' }
+    : null;
+  // Fields in a reply answer through a press too, and a block without a Button
+  // has no decision that would ever send them.
+  const replyForm = host.kind === 'reply' && complete && decisions.length === 0 && fields.length > 0 && Boolean(host.submit || sent);
+  const hasValue = Object.values(answerValues).some((value) => (Array.isArray(value) ? value.length > 0 : value.trim() !== ''));
+  const fallback = <NotDrawn source={source} errors={notDrawnErrors ?? []} />;
   if (parsed.kind === 'invalid') return fallback;
   if (parsed.kind === 'empty') return null;
   // A block that fails to draw falls back to its source; the rest of the reply stays.
@@ -1593,8 +1627,20 @@ export function UiBlock({ source, complete, host = noHost, onNotDrawn }: {
         </FormContext.Provider>
       </BlockErrorBoundary>
       {showNote && !slot && noteElement ? <div className="mt-2">{noteElement}</div> : null}
+      {sendButton ? (
+        <FormContext.Provider value={form}>
+          <div className="mt-2"><Button props={sendButton} /></div>
+        </FormContext.Provider>
+      ) : null}
+      {replyForm ? (
+        <div className="mt-2">
+          <UiButton type="button" className="w-fit" disabled={disabled || !hasValue} onClick={() => sendReply(chosen)}>
+            {t('chat.uiBlock.send')}
+          </UiButton>
+        </div>
+      ) : null}
       {/* A block that sends keeps one line for what happened, so the reply does not jump. */}
-      {decisions.length > 0 && host.kind === 'reply' && (host.submit || sent) ? (
+      {replyForm || (decisions.length > 0 && host.kind === 'reply' && (host.submit || sent)) ? (
         <div className="mt-1 flex min-h-6 items-center gap-2 typography-meta text-muted-foreground" aria-live="polite" data-export-ignore>
           {failed ? <span className="text-[var(--status-error)]">{t('chat.uiBlock.sendFailed')}</span>
             : sent ? <span>{t('chat.uiBlock.sent')}</span>
@@ -1608,6 +1654,7 @@ export function UiBlock({ source, complete, host = noHost, onNotDrawn }: {
           ) : null}
         </div>
       ) : null}
+      {parsed.dropped.length > 0 ? <div className="mt-2"><NotDrawn source={source} errors={parsed.dropped} partial /></div> : null}
     </div>
   );
 }

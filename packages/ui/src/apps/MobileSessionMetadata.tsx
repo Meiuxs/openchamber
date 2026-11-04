@@ -5,7 +5,7 @@ import type { IconName } from '@/components/icon/icons';
 import { preloadProviderLogos } from '@/hooks/useProviderLogo';
 import { useTabletLayout } from '@/lib/device';
 import { useI18n } from '@/lib/i18n';
-import { clampPercent, resolveUsageTone } from '@/lib/quota';
+import { clampPercent, isExtensionQuotaProviderId, resolveUsageTone } from '@/lib/quota';
 import { UsageProviderCards } from '@/components/usage/UsageProviderCards';
 import { useUsageProviderGroups, type UsageProviderGroup } from '@/components/usage/usageGroups';
 import { cn } from '@/lib/utils';
@@ -347,41 +347,19 @@ export const MobileSessionMetadataButton = React.memo(function MobileSessionMeta
       [currentSessionId],
     ),
   );
-  const quotaResults = useQuotaStore((state) => state.results);
-  const quotaRefreshErrors = useQuotaStore((state) => state.refreshErrors);
-  const quotaRefreshAttempted = React.useRef(false);
-  const loadQuotaSettings = useQuotaStore((state) => state.loadSettings);
-  const fetchAllQuotas = useQuotaStore((state) => state.fetchAllQuotas);
   const isQuotaLoading = useQuotaStore((state) => state.isLoading);
   const quotaDisplayMode = useQuotaStore((state) => state.displayMode);
   const dropdownProviderIds = useQuotaStore((state) => state.dropdownProviderIds);
   const timeFormatPreference = useUIStore((state) => state.timeFormatPreference);
 
-  useQuotaAutoRefresh();
+  useQuotaAutoRefresh(open);
+
 
   React.useEffect(() => {
-    void loadQuotaSettings();
-  }, [loadQuotaSettings]);
-
-  React.useEffect(() => {
-    preloadProviderLogos(dropdownProviderIds);
+    // An extension's icon comes from its package, not the logo set.
+    preloadProviderLogos(dropdownProviderIds.filter((id) => !isExtensionQuotaProviderId(id)));
   }, [dropdownProviderIds]);
 
-  React.useEffect(() => {
-    if (!open) {
-      quotaRefreshAttempted.current = false;
-      return;
-    }
-    if (quotaRefreshAttempted.current || isQuotaLoading) return;
-    const missingEnabledProvider = dropdownProviderIds.some((providerId) => (
-      !quotaResults.some((result) => result.providerId === providerId) || quotaRefreshErrors[providerId]
-    ));
-    if (!missingEnabledProvider) return;
-    // Trigger at most one attempt per opening. A failed first load remains
-    // unknown, not an empty result that can suppress retries.
-    quotaRefreshAttempted.current = true;
-    void fetchAllQuotas();
-  }, [dropdownProviderIds, fetchAllQuotas, isQuotaLoading, open, quotaResults, quotaRefreshErrors]);
 
   // v2 records the model on the assistant reply (a user message carries none).
   const latestMessageModel = React.useMemo(() => {
@@ -431,7 +409,7 @@ export const MobileSessionMetadataButton = React.memo(function MobileSessionMeta
 
   React.useEffect(() => {
     if (!open || usageGroups.length === 0) return;
-    preloadProviderLogos(usageGroups.map((group) => group.providerId));
+    preloadProviderLogos(usageGroups.map((group) => group.providerId).filter((id) => !isExtensionQuotaProviderId(id)));
   }, [open, usageGroups]);
 
   return (

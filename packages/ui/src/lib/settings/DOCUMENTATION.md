@@ -29,6 +29,8 @@
 
 ## Adding a setting
 
+`notifyOnPullRequests` is a profile preference, default on in `useUIStore` and the server defaults. The Notifications page exposes it on clients of an OpenChamber server; VS Code does not run that server follower. The server checks the preference at delivery time, including when no UI is connected.
+
 1. Add one entry to `SETTINGS_REGISTRY` with `scope`, a parser from `parsers.ts`, and a `ui` binding when a store holds the live value. Use an existing setter so its side effects run.
 2. Run `bun run settings-registry:generate` and commit both JSON snapshots.
 3. If the server must validate the value beyond the registry gate, add its branch to `sanitizeSettingsUpdate` in `packages/web/server/lib/opencode/settings-helpers.js`; the drift test in `settings-helpers.test.js` needs a valid sample value for the new key.
@@ -36,6 +38,8 @@
 5. Optionally mark a rendered control's row with `labelAccessory={isNewSetting('<anchorId>') ? <SettingsBadge>{t('settings.view.badge.new')}</SettingsBadge> : undefined}`. Page badges are automatic and count only available controls. Opening a visible page acknowledges its available anchors; hidden anchors remain pending. Row badges stay for the rest of the load. On mobile the title badge appears only on the navigation stage and counts visible pages. A fresh install seeds every build anchor and starts without badges.
 
 `DesktopSettings`, `SettingsPayload`, the client sanitizer, the mirror, the apply step and the auto-save all follow from step 1; no second list has to stay in step for persistence.
+
+`selectionApprovalText` is a shared profile preference for the selection approval shortcut. An empty string means no custom text; older documents can omit the field. The setting stores only the override and does not define fallback message text or dispatch behavior.
 
 ## Decisions
 

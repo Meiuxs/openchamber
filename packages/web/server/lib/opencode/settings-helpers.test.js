@@ -619,18 +619,6 @@ describe('settings helpers', () => {
     });
   });
 
-  it('round-trips project import completion and rejects malformed markers', () => {
-    const helpers = createTestHelpers();
-    for (const value of [true, false]) {
-      const settings = helpers.sanitizeSettingsUpdate({ openCodeProjectImportCompleted: value });
-      expect(settings).toEqual({ openCodeProjectImportCompleted: value });
-      expect(helpers.formatSettingsResponse(settings).openCodeProjectImportCompleted).toBe(value);
-    }
-    for (const value of ['true', 1, null, {}]) {
-      expect(helpers.sanitizeSettingsUpdate({ openCodeProjectImportCompleted: value })).toEqual({});
-    }
-  });
-
   it('rejects non-boolean collapsibleThinkingBlocks values', () => {
     const helpers = createTestHelpers();
 
@@ -885,6 +873,18 @@ describe('settings helpers', () => {
 });
 
 describe('settings registry gate', () => {
+  it('round-trips selection approval overrides and explicit clearing through save and response boundaries', () => {
+    const helpers = createTestHelpers();
+    for (const text of ['  认可此方案 👍  ', '']) {
+      const changes = helpers.sanitizeSettingsUpdate({ selectionApprovalText: text });
+      const stored = helpers.mergePersistedSettings({ selectionApprovalText: 'previous' }, changes);
+      const response = helpers.formatSettingsResponse(JSON.parse(JSON.stringify(stored)));
+      expect(response.selectionApprovalText).toBe(text);
+    }
+    expect(helpers.sanitizeSettingsUpdate({ selectionApprovalText: 'x'.repeat(1001) }).selectionApprovalText).toHaveLength(1000);
+    const invalid = helpers.sanitizeSettingsUpdate({ selectionApprovalText: null });
+    expect(helpers.mergePersistedSettings({ selectionApprovalText: 'previous' }, invalid).selectionApprovalText).toBe('previous');
+  });
   const registryPath = join(dirname(testFilePath), 'settings-registry.json');
   const registry = JSON.parse(readFileSync(registryPath, 'utf8'));
   const persistableKeys = Object.entries(registry.fields)
@@ -896,7 +896,6 @@ describe('settings registry gate', () => {
   // stops accepting a key the registry still lists — that is the drift the
   // registry exists to end.
   const validValues = {
-    openCodeProjectImportCompleted: true,
     themeId: 'openchamber-dark', locale: 'zh-CN', useSystemTheme: true, themeVariant: 'dark', lightThemeId: 'openchamber-light', darkThemeId: 'openchamber-dark',
     splashBgLight: '#fff', splashFgLight: '#000', splashBgDark: '#000', splashFgDark: '#fff',
     lastDirectory: '/home/testuser/project', homeDirectory: '/home/testuser', opencodeBinary: '/usr/local/bin/opencode',
@@ -918,6 +917,7 @@ describe('settings registry gate', () => {
     showReasoningTraces: true, streamingAutoFollowEnabled: true, collapsibleThinkingBlocks: true, expandReasoningWhileStreaming: true, showTextJustificationActivity: true,
     chatRenderMode: 'live', activityRenderMode: 'summary', mermaidRenderingMode: 'svg', userMessageRenderingMode: 'markdown', collapsibleUserMessages: true,
     stickyUserHeader: true, promptNavigatorEnabled: true, wideChatLayoutEnabled: true, showSplitAssistantMessageActions: true, showToolFileIcons: true,
+    selectionApprovalText: 'Agreed.',
     codeBlockLineWrap: true, tableCellWrap: true, copyMessagesAsPlainText: true, showTurnChangedFiles: true, toolJsonViewMode: 'raw',
     timeFormatPreference: '24h', weekStartPreference: 'monday', messageStreamTransport: 'ws', diffLayoutPreference: 'inline', diffWrapLines: true, diffHideWhitespace: true,
     gitChangesViewMode: 'tree', gitmojiEnabled: true, allowedInsecureGitOrigins: 'http://git.internal', defaultFileViewerPreview: true, directoryShowHidden: true, filesViewShowGitignored: true,
@@ -933,7 +933,7 @@ describe('settings registry gate', () => {
     recentModels: [{ providerID: 'anthropic', modelID: 'claude' }], lastSelectedModel: 'anthropic/claude', recentAgents: ['build'], favoriteAgents: ['build'], recentEfforts: { 'anthropic/claude': ['high'] }, lastUsedEfforts: { 'anthropic/claude': 'high', 'openai/gpt-5': null }, providerOrder: ['anthropic'],
     sessionRecapEnabled: true, sessionSuggestionEnabled: true, sessionWorkEnabled: true, sessionReviewOfferEnabled: true, sessionGoalEnabled: true, sessionGoalChecker: 'small-model', sessionGoalMaxAutoTurns: 50, sessionGoalDefaultBudgetEnabled: true, sessionGoalDefaultBudget: 5,
     summarizeLastMessage: true, summaryThreshold: 100, summaryLength: 50, maxLastMessageLength: 200, showDeletionDialog: true,
-    nativeNotificationsEnabled: true, notificationMode: 'always', notifyOnSubtasks: true, notifyOnCompletion: true, notifyOnError: true, notifyOnQuestion: true,
+    nativeNotificationsEnabled: true, notificationMode: 'always', notifyOnSubtasks: true, notifyOnCompletion: true, notifyOnPullRequests: true, notifyOnError: true, notifyOnQuestion: true,
     notificationTemplates: { completion: { title: 't', message: 'm' } }, showOpenCodeUpdateNotifications: true, reportUsage: true,
     usageDisplayMode: 'usage', usageDropdownProviders: ['anthropic'], usageSelectedModels: { anthropic: ['claude'] }, usageCollapsedFamilies: { anthropic: ['f'] },
     usageExpandedFamilies: { anthropic: ['f'] }, usageModelGroups: { anthropic: { customGroups: [{ id: 'g', label: 'G', models: ['claude'], order: 0 }] } },

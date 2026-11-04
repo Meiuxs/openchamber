@@ -947,6 +947,8 @@ interface UIStore {
   pendingDiffFile: string | null;
   pendingDiffStaged: boolean;
   pendingDiffScope: PendingDiffScope | null;
+  /** A file a click asked to see in the session's last turn diff, until Changes answers whether it is there. */
+  pendingTurnDiffFile: { file: string; sessionId: string | null } | null;
   pendingFileNavigation: PendingFileNavigation | null;
   pendingFileFocusPath: string | null;
   isMobile: boolean;
@@ -1121,6 +1123,7 @@ interface UIStore {
 
   // Event toggles (which events trigger notifications)
   notifyOnCompletion: boolean;
+  notifyOnPullRequests: boolean;
   notifyOnError: boolean;
   notifyOnQuestion: boolean;
 
@@ -1206,6 +1209,7 @@ interface UIStore {
   codeBlockLineWrap: boolean;
   tableCellWrap: boolean;
   copyMessagesAsPlainText: boolean;
+  selectionApprovalText: string;
   showToolFileIcons: boolean;
   showTurnChangedFiles: boolean;
   timeFormatPreference: TimeFormatPreference;
@@ -1303,6 +1307,7 @@ interface UIStore {
   setSessionSwitcherOpen: (open: boolean) => void;
   setSessionDropdownOpen: (open: boolean) => void;
   setPendingDiffFile: (filePath: string | null, staged?: boolean, scope?: PendingDiffScope | null) => void;
+  setPendingTurnDiffFile: (request: { file: string; sessionId: string | null } | null) => void;
   setPendingFileNavigation: (navigation: PendingFileNavigation | null) => void;
   setPendingFileFocusPath: (path: string | null) => void;
   navigateToDiff: (filePath: string, staged?: boolean, scope?: PendingDiffScope | null) => void;
@@ -1441,6 +1446,7 @@ interface UIStore {
   setDockBadgeEnabled: (value: boolean) => void;
   setAlwaysShowScrollbars: (value: boolean) => void;
   setNotifyOnCompletion: (value: boolean) => void;
+  setNotifyOnPullRequests: (value: boolean) => void;
   setNotifyOnError: (value: boolean) => void;
   setNotifyOnQuestion: (value: boolean) => void;
   setNotificationTemplates: (
@@ -1485,6 +1491,7 @@ interface UIStore {
   setCodeBlockLineWrap: (value: boolean) => void;
   setTableCellWrap: (value: boolean) => void;
   setCopyMessagesAsPlainText: (value: boolean) => void;
+  setSelectionApprovalText: (value: string) => void;
   setShowToolFileIcons: (value: boolean) => void;
   setShowTurnChangedFiles: (value: boolean) => void;
   setTimeFormatPreference: (value: TimeFormatPreference) => void;
@@ -1530,6 +1537,9 @@ const openFileTab = (state: UIStore, directory: string, filePath: string, previe
   }
 };
 
+/** What the selection menu's thumb-up says when the user set no text of their own. */
+export const DEFAULT_SELECTION_APPROVAL_TEXT = 'Sounds good';
+
 export const useUIStore = create<UIStore>()(
   devtools(
     persist(
@@ -1569,6 +1579,7 @@ export const useUIStore = create<UIStore>()(
         pendingDiffFile: null,
         pendingDiffStaged: false,
         pendingDiffScope: null,
+        pendingTurnDiffFile: null,
         pendingFileNavigation: null,
         pendingFileFocusPath: null,
         isMobile: false,
@@ -1684,6 +1695,7 @@ export const useUIStore = create<UIStore>()(
 
         // Event toggles (which events trigger notifications)
         notifyOnCompletion: true,
+        notifyOnPullRequests: true,
         notifyOnError: true,
         notifyOnQuestion: true,
         notificationTemplates: {
@@ -1736,6 +1748,7 @@ export const useUIStore = create<UIStore>()(
         codeBlockLineWrap: true,
         tableCellWrap: true,
         copyMessagesAsPlainText: true,
+        selectionApprovalText: '',
         showToolFileIcons: true,
         showTurnChangedFiles: false,
         timeFormatPreference: 'auto',
@@ -2484,6 +2497,10 @@ export const useUIStore = create<UIStore>()(
             pendingDiffStaged: filePath ? staged : false,
             pendingDiffScope: filePath ? scope : null,
           });
+        },
+
+        setPendingTurnDiffFile: (request) => {
+          set({ pendingTurnDiffFile: request });
         },
 
         setPendingFileNavigation: (navigation) => {
@@ -3324,6 +3341,7 @@ export const useUIStore = create<UIStore>()(
         },
 
         setNotifyOnCompletion: (value) => { set({ notifyOnCompletion: value }); },
+        setNotifyOnPullRequests: (value) => { set({ notifyOnPullRequests: value }); },
         setNotifyOnError: (value) => { set({ notifyOnError: value }); },
         setNotifyOnQuestion: (value) => { set({ notifyOnQuestion: value }); },
         setNotificationTemplates: (templates) => {
@@ -3452,6 +3470,9 @@ export const useUIStore = create<UIStore>()(
         },
         setTableCellWrap: (value) => {
           set({ tableCellWrap: value });
+        },
+        setSelectionApprovalText: (value) => {
+          set({ selectionApprovalText: value });
         },
         setCopyMessagesAsPlainText: (value) => {
           set({ copyMessagesAsPlainText: value });
@@ -3936,6 +3957,7 @@ export const useUIStore = create<UIStore>()(
           dockBadgeEnabled: state.dockBadgeEnabled,
           alwaysShowScrollbars: state.alwaysShowScrollbars,
           notifyOnCompletion: state.notifyOnCompletion,
+          notifyOnPullRequests: state.notifyOnPullRequests,
           notifyOnError: state.notifyOnError,
           notifyOnQuestion: state.notifyOnQuestion,
           notificationTemplates: state.notificationTemplates,
@@ -3971,6 +3993,7 @@ export const useUIStore = create<UIStore>()(
           codeBlockLineWrap: state.codeBlockLineWrap,
           tableCellWrap: state.tableCellWrap,
           copyMessagesAsPlainText: state.copyMessagesAsPlainText,
+          selectionApprovalText: state.selectionApprovalText,
           showToolFileIcons: state.showToolFileIcons,
           showTurnChangedFiles: state.showTurnChangedFiles,
           timeFormatPreference: state.timeFormatPreference,

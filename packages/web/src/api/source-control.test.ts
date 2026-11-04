@@ -37,6 +37,7 @@ const createMutationContext: SourceControlMutationContext<SourceControlCreateMut
 };
 
 interface MutationTestResult {
+  outcome?: string;
   merged?: boolean | string;
   message?: string;
   ready?: boolean;
@@ -968,6 +969,16 @@ describe('createWebSourceControlAPI', () => {
     }));
   });
 
+  it.each(['queued', 'merging', 'auto-merge', 'cancelled'])('accepts a waiting or cancelled merge receipt (%s)', async (outcome) => {
+    runtimeFetchMock.mockResolvedValueOnce(Response.json(mutationReceipt({ merged: false, outcome })));
+    const api = createWebSourceControlAPI({ fetch: runtimeFetchMock });
+    await expect(api.changeRequestMerge({ ...mutationContext, method: 'squash', cancel: outcome === 'cancelled' }))
+      .resolves.toEqual(mutationReceipt({ merged: false, outcome }));
+    expect(runtimeFetchMock).toHaveBeenCalledWith('/api/source-control/github/pr/merge', expect.objectContaining({
+      body: expect.stringContaining(`"cancel":${outcome === 'cancelled'}`),
+    }));
+  });
+
   it("posts comments and reviews to their routes and reads whether a review's text posted", async () => {
     const api = createWebSourceControlAPI({ fetch: runtimeFetchMock });
     runtimeFetchMock
@@ -1283,6 +1294,22 @@ describe('createWebSourceControlAPI', () => {
     await expect(api.authStatus({ provider: 'gitlab', instance: 'http://other.example.com' })).rejects.toThrow();
     // A host-form provider reads nothing from the list: GitHub's rule is its own.
     await expect(api.authStatus({ provider: 'github', instance: 'http://github.example.com' })).rejects.toThrow();
+  });
+
+  it('saves an instance SSH address and returns the stored value', async () => {
+    const api = createWebSourceControlAPI({ fetch: runtimeFetchMock });
+    runtimeFetchMock.mockResolvedValueOnce(Response.json({ sshUrl: 'ssh://giteassh.example.com:2222' }));
+
+    await expect(api.authSetSshUrl(
+      { provider: 'gitea', instance: 'https://gitea.example.com/' },
+      'ssh://git@giteassh.example.com:2222',
+    )).resolves.toEqual({ sshUrl: 'ssh://giteassh.example.com:2222' });
+
+    expect(runtimeFetchMock).toHaveBeenCalledWith('/api/source-control/gitea/auth/ssh-url', expect.objectContaining({
+      method: 'POST',
+      query: new URLSearchParams({ instance: 'https://gitea.example.com' }),
+      body: JSON.stringify({ sshUrl: 'ssh://git@giteassh.example.com:2222' }),
+    }));
   });
 
   it('parses provider-neutral GitLab merge request context without GitHub identities', async () => {

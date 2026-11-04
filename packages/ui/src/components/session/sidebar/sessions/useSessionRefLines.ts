@@ -19,10 +19,7 @@ const EMPTY_LINKED_SIDEBAR_ISSUES: readonly LinkedSidebarIssue[] = [];
 const EMPTY_LINKED_SIDEBAR_CHANGES: readonly LinkedSidebarChange[] = [];
 
 /** One PR or issue a session row lists in its badge and tooltips. */
-export type SessionRefLine = SidebarRefLink & {
-  /** The badge's short form: `#12` or the tracker identifier. */
-  label: string;
-};
+export type SessionRefLine = SidebarRefLink;
 
 /**
  * The work linked to a session, as its row shows it: the branch's PR and the
@@ -97,6 +94,7 @@ export function useSessionRefLines(session: Session, worktree: WorktreeMetadata 
           color: `var(--pr-${summary.visualState})`,
           url: summary.url,
           title: summary.title,
+          status: label,
           text: label ? `${reference} · ${label}` : reference,
         };
       });
@@ -119,6 +117,7 @@ export function useSessionRefLines(session: Session, worktree: WorktreeMetadata 
       color: item.color ?? undefined,
       url: item.url,
       title: item.title,
+      status: item.statusKey ? t(item.statusKey) : item.statusText,
       text: item.statusKey ? `${item.label} · ${t(item.statusKey)}` : item.statusText ? `${item.label} · ${item.statusText}` : item.label,
     }));
   }, [linkedIssues, linkedWorkItemStates, linkedPrsWithoutState, prSummaries, repositoryIssueStates, t, trackerDescriptors, uncolouredChanges, urlMatcher]);
