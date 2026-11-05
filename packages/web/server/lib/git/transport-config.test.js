@@ -68,4 +68,29 @@ describe('effective Git transport configuration', () => {
         message: 'Effective Git transport configuration is unavailable',
       });
   });
+
+  it('falls back to --show-origin without --show-scope on Git 2.20', async () => {
+    const raw = Buffer.from('file:/private/global.gitconfig\0credential.helper\nsecret-helper\0');
+    const checkoutObjects = Buffer.from(`100644 blob ${'a'.repeat(40)}\t.gitmodules\0`);
+    const execFileImpl = vi.fn(async (_binary, args) => {
+      if (args[0] === 'config' && args.includes('--show-scope')) {
+        throw Object.assign(new Error('unknown option'), {
+          code: 129,
+          stderr: Buffer.from("error: unknown option `show-scope'\n"),
+        });
+      }
+      return {
+        stdout: args[0] === 'config' ? raw : checkoutObjects,
+        stderr: Buffer.alloc(0),
+      };
+    });
+
+    await expect(readEffectiveGitTransportRevision('/repository', { execFileImpl }))
+      .resolves.toBe(hash(Buffer.concat([raw, Buffer.from([0]), checkoutObjects])));
+    expect(execFileImpl).toHaveBeenCalledTimes(3);
+    expect(execFileImpl.mock.calls[1][1]).toEqual([
+      'config', '--includes', '--show-origin', '--null',
+      '--get-regexp', expect.any(String),
+    ]);
+  });
 });

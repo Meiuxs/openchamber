@@ -520,11 +520,16 @@ export function createNetworkOperations({
     }
     return result.stdout.trim();
   };
-  const resolveRefImpl = resolveRef ?? ((directory, ref, options) => queryGit(
-    directory,
-    ['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`],
-    options,
-  ));
+  const resolveRefImpl = resolveRef ?? ((directory, ref, options) => {
+    if (!isString(ref) || !ref || ref.startsWith('-')) {
+      return Promise.reject(operationError('STALE_CONFIG', 'Git repository state is unavailable', 409));
+    }
+    return queryGit(
+      directory,
+      ['rev-parse', '--verify', `${ref}^{commit}`],
+      options,
+    );
+  });
   const resolveSymbolicRefImpl = resolveSymbolicRef ?? ((directory, options) => queryGit(
     directory,
     ['symbolic-ref', '-q', 'HEAD'],
@@ -1599,7 +1604,13 @@ export function createNetworkOperations({
     try {
       // Include historical pointers reachable from this commit, never unrelated refs.
       const objects = await localGit(plan.directory, ['rev-list', '--objects', '--no-object-names', plan.sourceSha, '--'], controls, deadline,
-        { maxOutputBytes: LFS_DISCOVERY_LIMITS.maxFilesBytes, rawOutput: true });
+        { maxOutputBytes: LFS_DISCOVERY_LIMITS.maxFilesBytes, rawOutput: true }).catch((error) => {
+        if (error?.code === 129 || /unknown (option|switch)|no-object-names/i.test(String(error?.stderr || error?.message || ''))) {
+          return localGit(plan.directory, ['rev-list', '--objects', plan.sourceSha, '--'], controls, deadline,
+            { maxOutputBytes: LFS_DISCOVERY_LIMITS.maxFilesBytes, rawOutput: true });
+        }
+        throw error;
+      });
       const pointers = await scanLfsPushObjects(objects, (args, input) => localGit(plan.directory, args, controls, deadline,
         { input, maxOutputBytes: LFS_DISCOVERY_LIMITS.maxBatchBytes, rawOutput: true }));
       if (!pointers.length) return false;
@@ -1796,7 +1807,15 @@ export function createNetworkOperations({
           await commandResult(plan, controls, [
             'fetch', '--atomic', '--no-tags', '--no-prune', '--no-prune-tags', '--no-recurse-submodules', '--refmap=',
             '--', plan.rawEndpoint, plan.fetchRefspec,
-          ], context, deadline, { transfer: true });
+          ], context, deadline, { transfer: true }).catch((error) => {
+            if (error?.code === 129 && !controls.isCancellationRequested()) {
+              return commandResult(plan, controls, [
+                'fetch', '--no-tags', '--no-prune', '--no-prune-tags', '--no-recurse-submodules', '--refmap=',
+                '--', plan.rawEndpoint, plan.fetchRefspec,
+              ], context, deadline, { transfer: true });
+            }
+            throw error;
+          });
           await controls.markStepCompleted('transferred');
           result = { state: 'succeeded' };
         } else {

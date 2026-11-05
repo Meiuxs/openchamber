@@ -58,7 +58,7 @@ async function changeIdOfMessage(directory, message, git) {
 /** Whether a ref exists; a Git failure other than "no such ref" still rejects. */
 const refExists = async (directory, ref, git) => {
   try {
-    await git(directory, ['rev-parse', '-q', '--verify', '--end-of-options', ref]);
+    await git(directory, ['rev-parse', '-q', '--verify', ref]);
     return true;
   } catch (error) {
     if (error?.code === 1) return false;
@@ -73,7 +73,7 @@ const refExists = async (directory, ref, git) => {
  */
 export async function readBranchTip(directory, branch, { git = runGit } = {}) {
   try {
-    const sha = (await git(directory, ['rev-parse', '-q', '--verify', '--end-of-options', `refs/heads/${refArgument(branch, 'branch')}^{commit}`])).trim();
+    const sha = (await git(directory, ['rev-parse', '-q', '--verify', `refs/heads/${refArgument(branch, 'branch')}^{commit}`])).trim();
     return SHA_RE.test(sha) ? sha : null;
   } catch {
     return null;
@@ -94,14 +94,14 @@ export async function readBranchChangeIds(directory, branch, base = null, { git 
   if (!(await refExists(directory, `${branchRef}^{commit}`, git))) {
     throw Object.assign(new Error(`Branch ${branch} does not exist`), { code: 'GIT_BRANCH_NOT_FOUND', status: 404 });
   }
-  const sha = (await git(directory, ['rev-parse', '--verify', '--end-of-options', `${branchRef}^{commit}`])).trim();
+  const sha = (await git(directory, ['rev-parse', '--verify', `${branchRef}^{commit}`])).trim();
   if (!SHA_RE.test(sha)) throw invalidInput('branch does not name a commit');
 
   let commits = [];
   let truncated = false;
   if (baseRef) {
     const listed = await git(directory, [
-      'log', '-z', `--max-count=${CHANGE_STACK_LIMIT + 1}`, '--format=%H%n%B', '--end-of-options', `${baseRef}..${sha}`,
+      'log', '-z', `--max-count=${CHANGE_STACK_LIMIT + 1}`, '--format=%H%n%B', `${baseRef}..${sha}`,
     ]);
     commits = listed.split('\0').filter((record) => record.trim()).map((record) => {
       const newline = record.indexOf('\n');

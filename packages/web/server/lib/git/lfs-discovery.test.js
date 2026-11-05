@@ -72,6 +72,19 @@ describe('LFS publication discovery', () => {
     expect(fixture.calls).toHaveLength(2 * Math.ceil(10_000 / LFS_DISCOVERY_LIMITS.fileBatchSize));
   });
 
+  it('accepts rev-list --objects output with trailing object names from Git 2.20', async () => {
+    const oid = '1'.padStart(40, '0');
+    const listing = Buffer.from(`${oid} dir/with space/model.bin\n`);
+    const calls = [];
+    const result = await scanLfsPushObjects(listing, async (args) => {
+      calls.push(args);
+      if (args[1] === '--batch-check') return Buffer.from(`${oid} blob ${Buffer.byteLength(pointer())}\n`);
+      return Buffer.concat([Buffer.from(`${oid} blob ${Buffer.byteLength(pointer())}\n`), Buffer.from(pointer()), Buffer.from('\n')]);
+    });
+    expect(result).toEqual([{ oid: OID, size: 42 }]);
+    expect(calls).toHaveLength(2);
+  });
+
   it('does not read large blobs or non-blob objects and tolerates small binary content', async () => {
     const fixture = scanFixture([
       { path: 'large', content: Buffer.alloc(2048) }, { path: 'binary', content: Buffer.from([0, 255, 254]) },

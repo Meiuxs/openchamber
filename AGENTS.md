@@ -57,6 +57,7 @@ Shared contracts must define intentional behavior for every applicable runtime: 
 - Several agent sessions often work in the same checkout at once. Never `git stash` to compare against a clean tree or to test something: a stash takes every session's uncommitted work, and a session writing to a stashed file meanwhile makes the pop fail. Compare in a detached worktree instead (`git worktree add --detach /tmp/<name> HEAD`, with `node_modules` symlinked).
 - `changelog/` is read-only, and a fix, feature, or merged PR lands without a changelog line. Release notes are written only when the maintainer asks to update the changelog, through the `update-changelog` skill.
 - Enforce security and correctness in core/runtime logic, not only UI visibility or prompts.
+- Host Git CLI invocations (outside isolated `spaces/`, which stays disabled on intranet and has its own `GIT_VERSION_FLOOR`) must remain compatible with Git 2.20.x (UnionTech UOS intranet environment). Do not rely on Git 2.21+ flags, subcommands, or pseudo-refs without a fallback (such as `git restore`, `git switch`, `--end-of-options`, `--pathspec-from-file`, `--pathspec-file-nul`, `--diff-merges`, `--show-scope`, `--no-object-names`, `--path-format=absolute`, `fetch --atomic`, or `REBASE_HEAD`).
 
 ## Correctness Invariants
 

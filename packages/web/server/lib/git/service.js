@@ -15,6 +15,7 @@ import { readProjectStartCommand } from '../opencode/project-start-command.js';
 import { normalizeGitOutputPath } from './output-path.js';
 import { overlayEnvironment } from '../environment/variables.js';
 import { primaryWorktreeRootFromGitDir, unsupportedRepositoryRootReason } from './repository-root.js';
+import { isString } from '../shared/guards.js';
 import { randomUUID } from 'crypto';
 
 const fsp = fs.promises;
@@ -3561,10 +3562,13 @@ export async function getUntrackedDiffs(directory, filePaths = [], { concurrency
   return results;
 }
 
-const refResolvesToCommit = async (git, ref) => git
-  .raw(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])
-  .then((value) => Boolean(String(value || '').trim()))
-  .catch(() => false);
+const refResolvesToCommit = async (git, ref) => {
+  if (!isString(ref) || !ref || ref.startsWith('-')) return false;
+  return git
+    .raw(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])
+    .then((value) => Boolean(String(value || '').trim()))
+    .catch(() => false);
+};
 
 /**
  * The branch list includes remote-only branches that `ls-remote` reported but
@@ -3603,7 +3607,7 @@ async function runWorkingTreeRangeDiff(context, baseRef, headRef, args, paths = 
   };
   const startingHead = await readHead();
   const [headCommit, currentRef] = startingHead.split('\n');
-  const requestedRef = (await git.raw(['rev-parse', '--verify', '--symbolic-full-name', '--end-of-options', headRef])).trim();
+  const requestedRef = (await git.raw(['rev-parse', '--verify', '--symbolic-full-name', headRef])).trim();
   if (requestedRef !== currentRef) {
     throw new Error('Working-tree comparisons require the checked-out branch. Refresh and try again.');
   }
@@ -3623,12 +3627,13 @@ async function runWorkingTreeRangeDiff(context, baseRef, headRef, args, paths = 
     const indexPath = (await git.raw(['rev-parse', '--git-path', 'index'])).trim();
     const temporaryIndex = path.join(temporaryDirectory, 'index');
     await fsp.copyFile(path.resolve(repoRoot, indexPath), temporaryIndex);
-    const pathspecFile = path.join(temporaryDirectory, 'paths');
-    await fsp.writeFile(pathspecFile, untracked);
     const comparisonGit = await createGit(repoRoot, {
       extraEnv: { GIT_INDEX_FILE: temporaryIndex, GIT_LITERAL_PATHSPECS: '1' },
     });
-    await comparisonGit.raw(['add', '--intent-to-add', '--pathspec-from-file=' + pathspecFile, '--pathspec-file-nul']);
+    const untrackedPaths = untracked.split('\0').filter(Boolean);
+    for (let index = 0; index < untrackedPaths.length; index += 128) {
+      await comparisonGit.raw(['add', '--intent-to-add', '--', ...untrackedPaths.slice(index, index + 128)]);
+    }
     return await readDiff(comparisonGit);
   } finally {
     await fsp.rm(temporaryDirectory, { recursive: true, force: true });
@@ -4496,7 +4501,11 @@ export async function commit(directory, message, options = {}) {
             .map((file) => file.path);
 
           if (temporarilyUnstagedFiles.length > 0) {
-            await git.raw(['restore', '--staged', '--', ...temporarilyUnstagedFiles]);
+            try {
+              await git.raw(['restore', '--staged', '--', ...temporarilyUnstagedFiles]);
+            } catch {
+              await git.raw(['reset', 'HEAD', '--', ...temporarilyUnstagedFiles]);
+            }
           }
         }
 
@@ -7220,8 +7229,11 @@ export async function getLog(directory, options = {}) {
     const resolvedFrom = await resolveBaseRefForLog(options.from, checkRef);
 
     if (options.to) {
+      if (String(options.to).startsWith('-')) {
+        throw Object.assign(new Error(`Revision '${options.to}' not found`), { code: 'revision_not_found' });
+      }
       // Inspect the exit status: Git errors are localized and simple-git treats silent exit 1 as success.
-      const probe = await runGitCommand(repoRoot, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${options.to}^{commit}`]);
+      const probe = await runGitCommand(repoRoot, ['rev-parse', '--verify', '--quiet', `${options.to}^{commit}`]);
       if (!probe.success && probe.exitCode === 1) {
         throw Object.assign(new Error(`Revision '${options.to}' not found`), { code: 'revision_not_found' });
       }
@@ -7483,10 +7495,10 @@ export async function canonicalizeWorktreeState(directory) {
 
 async function resolveCommitHash(git, hash) {
   if (!/^[0-9a-f]{7,64}$/i.test(hash)) throw new Error('A commit hash is required');
-  return (await git.raw(['rev-parse', '--verify', '--end-of-options', `${hash}^{commit}`])).trim();
+  return (await git.raw(['rev-parse', '--verify', `${hash}^{commit}`])).trim();
 }
 
-const commitShowArgs = (hash) => ['show', '--format=', '--root', '--diff-merges=first-parent', '--find-renames', hash];
+const commitShowArgs = (hash) => ['show', '--format=', '--root', '--first-parent', '-m', '--find-renames', hash];
 
 export async function getCommitDiff(directory, { hash, path: filePath, previousPath, contextLines = 3 } = {}) {
   const { git } = await createRepositoryGitContext(directory);
@@ -7874,6 +7886,21 @@ export async function getConflictDetails(directory) {
       if (rebaseHead) {
         operation = 'rebase';
         headInfo = `REBASE_HEAD: ${rebaseHead}`;
+      } else {
+        const [rebaseMergeDir, rebaseApplyDir] = await Promise.all([
+          resolveGitInternalPath(repoRoot, git, 'rebase-merge').catch(() => ''),
+          resolveGitInternalPath(repoRoot, git, 'rebase-apply').catch(() => ''),
+        ]);
+        const activeRebaseDir = [rebaseMergeDir, rebaseApplyDir].find((dir) => dir && fs.existsSync(dir));
+        if (activeRebaseDir) {
+          operation = 'rebase';
+          const stoppedSha = await fsp.readFile(path.join(activeRebaseDir, 'stopped-sha'), 'utf8')
+            .catch(() => fsp.readFile(path.join(activeRebaseDir, 'original-commit'), 'utf8'))
+            .catch(() => '');
+          if (stoppedSha.trim()) {
+            headInfo = `REBASE_HEAD: ${stoppedSha.trim()}`;
+          }
+        }
       }
     }
 

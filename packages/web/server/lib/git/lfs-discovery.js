@@ -273,7 +273,9 @@ export async function scanLfsPushObjects(objectIdsOutput, query) {
     const batch = [];
     while (offset < text.length && batch.length < limits.fileBatchSize) {
       const end = text.indexOf('\n', offset);
-      const oid = text.slice(offset, end);
+      const line = text.slice(offset, end);
+      const spaceIndex = line.indexOf(' ');
+      const oid = spaceIndex === -1 ? line : line.slice(0, spaceIndex);
       if (!/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(oid)) throw lfsError('Push object ID is invalid');
       batch.push(oid);
       offset = end + 1;

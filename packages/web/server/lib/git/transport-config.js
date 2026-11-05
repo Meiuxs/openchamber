@@ -41,12 +41,26 @@ export async function readEffectiveGitTransportRevision(directory, {
     let configOutput;
     try {
       ({ stdout: configOutput } = await execFileImpl(gitBinary, [
-      'config', '--includes', '--show-origin', '--show-scope', '--null',
-      '--get-regexp', TRANSPORT_CONFIG_PATTERN,
+        'config', '--includes', '--show-origin', '--show-scope', '--null',
+        '--get-regexp', TRANSPORT_CONFIG_PATTERN,
       ], options));
     } catch (error) {
-      if (error?.code === 1 && !error.killed && !error.signal) configOutput = Buffer.alloc(0);
-      else throw error;
+      const stderr = Buffer.from(error?.stderr ?? '').toString('utf8');
+      if (error?.code === 129 || /unknown (option|switch)|show-scope/i.test(stderr)) {
+        try {
+          ({ stdout: configOutput } = await execFileImpl(gitBinary, [
+            'config', '--includes', '--show-origin', '--null',
+            '--get-regexp', TRANSPORT_CONFIG_PATTERN,
+          ], options));
+        } catch (fallbackError) {
+          if (fallbackError?.code === 1 && !fallbackError.killed && !fallbackError.signal) configOutput = Buffer.alloc(0);
+          else throw fallbackError;
+        }
+      } else if (error?.code === 1 && !error.killed && !error.signal) {
+        configOutput = Buffer.alloc(0);
+      } else {
+        throw error;
+      }
     }
     let checkoutConfigObjects;
     try {

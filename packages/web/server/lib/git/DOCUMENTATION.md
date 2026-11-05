@@ -679,6 +679,7 @@ The branch list used to ask every remote by default, so a branch a collaborator 
 - Branches created for new worktrees use `openchamber/<worktree-name>` pattern.
 
 ### Cross-Platform Considerations
+- Host Git commands must stay compatible with Git 2.20.x (UnionTech UOS). Do not require Git 2.21+ options or pseudo-refs without a fallback (`--end-of-options`, `--pathspec-from-file`, `--diff-merges`, `--show-scope`, `--no-object-names`, `--path-format=absolute`, `git restore`, `git switch`, or `REBASE_HEAD`).
 - Use `normalizeDirectoryPath` for all directory inputs to handle `~` and path separators.
 - Use `canonicalPath` for path comparisons to handle case-insensitive filesystems (Windows).
 - MSYS2 Git can return `/c/repos/project` on Windows. Pass Git filesystem-path output through `normalizeGitOutputPath` before resolving it or using it with Node filesystem and process APIs. It converts drive mounts to `C:/repos/project` on Windows and preserves other paths, including POSIX paths on Linux and macOS.
