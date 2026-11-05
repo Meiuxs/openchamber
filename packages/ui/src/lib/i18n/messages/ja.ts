@@ -50,6 +50,15 @@ import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
 import { guestStatusViewI18n } from './guest-status-view.i18n';
+import { tooltipsDiffI18n } from './tooltips-diff.i18n';
+import { tooltipsFilesI18n } from './tooltips-files.i18n';
+import { tooltipsGitI18n } from './tooltips-git.i18n';
+import { tooltipsTrackerI18n } from './tooltips-tracker.i18n';
+import { tooltipsWalkthroughI18n } from './tooltips-walkthrough.i18n';
+import { tooltipsTerminalBrowserI18n } from './tooltips-terminal-browser.i18n';
+import { tooltipsWorkspaceI18n } from './tooltips-workspace.i18n';
+import { tooltipsPanelI18n } from './tooltips-panel.i18n';
+import { tooltipsChatI18n } from './tooltips-chat.i18n';
 
 export const dict: Record<I18nKey, string> = {
   'quota.family.zen': 'Zen モデル',
@@ -215,6 +224,15 @@ export const dict: Record<I18nKey, string> = {
   ...workflowsI18n['ja'],
   ...sessionReferencesI18n['ja'],
   ...guestStatusViewI18n['ja'],
+  ...tooltipsDiffI18n['ja'],
+  ...tooltipsFilesI18n['ja'],
+  ...tooltipsGitI18n['ja'],
+  ...tooltipsTrackerI18n['ja'],
+  ...tooltipsWalkthroughI18n['ja'],
+  ...tooltipsTerminalBrowserI18n['ja'],
+  ...tooltipsWorkspaceI18n['ja'],
+  ...tooltipsPanelI18n['ja'],
+  ...tooltipsChatI18n['ja'],
   'terminalView.actions.attachSelection': '選択した出力を添付',
   'terminalView.actions.copySelection': '選択した出力をコピー',
   'terminalView.toast.selectionCopied': '出力をコピーしました',
@@ -1696,7 +1714,6 @@ export const dict: Record<I18nKey, string> = {
   'sidebarFilesTree.actions.addMenuTitle': '新規ファイル・フォルダー、またはアップロード',
   'sidebarFilesTree.actions.refreshTitle': '更新',
   'sidebarFilesTree.actions.collapseAllTitle': 'すべてのフォルダを折りたたむ',
-  'sidebarFilesTree.actions.fileMenuTitle': 'ファイルメニュー',
   'sidebarFilesTree.state.searching': '検索中...',
   'sidebarFilesTree.state.loading': '読み込み中...',
   'sidebarFilesTree.dialog.createFile.title': 'ファイルを作成',
@@ -3767,6 +3784,9 @@ export const dict: Record<I18nKey, string> = {
   'chat.dispatchedSession.showAnswer': '回答を表示',
   'chat.dispatchedSession.hideAnswer': '回答を隠す',
   'chat.dispatchedSession.open': 'セッションを開く',
+  'chat.fileOpenRequest.toast.description': '{session} で表示',
+  'chat.fileOpenRequest.toast.descriptionUntitled': '別のセッションで表示',
+  'chat.fileOpenRequest.toast.openSession': 'セッションを開く',
   'chat.revertPopover.staged': '取り消し: {count}件',
   "chat.revertPopover.toast.restoreFailed": "取り消したメッセージを復元できませんでした",
   'chat.workStatus.mcp.needsAuthHint': '設定 → MCP からこの MCP サーバーにサインインしてください。',

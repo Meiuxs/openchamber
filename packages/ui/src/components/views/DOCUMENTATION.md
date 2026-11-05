@@ -242,6 +242,15 @@ one attribute per moved
 control; the menu reads them when it opens and shows a check beside each view
 option that is on.
 
+### Why the changes list shares one tooltip and not a Tooltip per button
+
+The changes list is not virtualized below 1000 rows and keeps its stage,
+unstage and folder buttons mounted, so a Tooltip per button would mount
+thousands of them. `DelegatedTooltip` (`ui/row-tooltip.tsx`) listens on the
+list and shows the `data-row-tooltip` label of the button under the pointer.
+Its state stays in its own component because a re-render of `ChangesPanel`
+re-renders every row.
+
 ## Files toolbar
 
 The Files editor's row (`renderFileToolbar`, an `ActionToolbar`) has the actions
@@ -325,11 +334,14 @@ in it still gets the edits), or a step took no snapshot. Each click therefore
 asks once (`pendingTurnDiffFile`, dropped when another session is on screen)
 whether the file is in the turn's diff. Until the list answers the session's
 current state the view shows loading; a failed read keeps its error and retry.
+A file that is there is expanded and scrolled to, on every click, since the
+chip's absolute path only matches the relative list through this request.
 A file that is not there opens Changed instead, in the repository holding the
 file, read afresh, expanded. A repository the picker drops again ends the
 attempt on the repository left on screen. Picking Last turn by hand asks
-nothing and stays there, empty or not. The phone is different: there the chip
-opens nothing at all, so no empty view exists to fall back from.
+nothing and stays there, empty or not. The phone's Changes surface
+(`apps/MobileChangesSurface.tsx`) answers the same way and opens the file's own
+diff screen, since it has no expanded list to scroll.
 
 ### Why the click is a one-shot request and not derived from the tab
 

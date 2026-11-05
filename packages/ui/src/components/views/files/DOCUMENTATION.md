@@ -130,6 +130,14 @@ the list, takes the widest as its width, and forgets rows that leave the
 tree. That keeps the sideways scroll when wide rows scroll out of view or
 another folder opens.
 
+### Why `FilesView`'s row menus share one tooltip
+
+`FilesView`'s tree mounts every row and each row's menu button stays mounted,
+so a tooltip per button would keep a root per file. `DelegatedTooltip`
+(`ui/row-tooltip.tsx`) listens on the list and anchors one tooltip to the button
+carrying `data-row-tooltip`. The sidebar tree keeps a tooltip per row because it
+mounts only the rows in view.
+
 ### Why the end lane paints the row's colour under a mask
 
 The fade has to cover the name with exactly the colour of the row behind it,
@@ -506,6 +514,15 @@ An agent can ask for a file to be shown (`file.open` on the managed
 `ContextPanel` answers it with `openContextFile`, `MobileApp` additionally
 opens the files drawer. VS Code has no shared file viewer and no managed
 tool, so the event never reaches it.
+
+On a phone the drawer covers the chat, so `MobileApp` opens it only for a request
+from the session on screen, a subagent or `/btw` side chat under it, or no session
+at all. Any other session gets a toast with "Open session", and the tap opens that
+session and the file; a tablet with the side panel does the same. The path is not
+staged before the tap, because `pendingFileFocusPath` is global and would send the
+current session's drawer to the other session's file. A session in a folder still
+waiting for the user's trust switches later or never, so that tap opens only the
+session.
 
 ## Editor aids
 

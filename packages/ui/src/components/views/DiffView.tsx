@@ -68,7 +68,7 @@ import { ReviewSubmitButton } from '@/components/review/ReviewSubmitButton';
 import { ChangeRequestReviewContext, useComparisonReview } from '@/components/review/useChangeRequestReview';
 import { toastContextFileOpenFailure, validateContextFileOpen } from '@/lib/contextFileOpenGuard';
 import { StatusImage } from '@/components/ui/status-image';
-import { isSameRepoFile, toAbsoluteFilePath } from '@/lib/path-utils';
+import { findRepoFile, isAbsoluteFilePath, toAbsoluteFilePath } from '@/lib/path-utils';
 import { findFileRepository } from '@/lib/nestedRepositories';
 import { sessionEvents } from '@/lib/sessionEvents';
 import { findDiffScrollAnchor, getRestoredDiffScrollTop, type DiffScrollAnchor } from './diffScrollAnchor';
@@ -93,6 +93,7 @@ import type { DiffFindMatch } from '@/lib/diff/diffFind';
 import { DiffFindBar } from './diffFind/DiffFindBar';
 import { resolveFindDiff, useDiffFind, type DiffFindLayout, type DiffFindNestedSources, type DiffFindSource } from './diffFind/useDiffFind';
 import { useDiffFindSurface } from './diffFind/useDiffFindSurface';
+import { useKeybinds } from '@/hooks/useKeybind';
 import { createFindDiffBatchReader } from './diffFind/findDiffBatch';
 import { diffCommentOriginFromSource, type DiffCommentOrigin } from '@/lib/diffCommentOrigin';
 import { useWholeFileComment, WholeFileCommentButton } from '@/components/comments';
@@ -817,9 +818,14 @@ const NestedRepositoryChanges = React.memo<NestedRepositoryChangesProps>(({
                         {t('diffView.nestedRepository.description')}
                     </div>
                 </div>
-                <Button variant="outline" size="sm" className="shrink-0" onClick={() => void openAsProject()}>
-                    {t('diffView.nestedRepository.openAsProject')}
-                </Button>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="outline" size="sm" className="shrink-0" onClick={() => void openAsProject()}>
+                            {t('diffView.nestedRepository.openAsProject')}
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent sideOffset={6}>{t('contextTooltips.diff.openAsProject')}</TooltipContent>
+                </Tooltip>
             </div>
             {status.kind === 'loading' ? (
                 <div className="flex items-center justify-center gap-2 px-4 py-4 typography-meta text-muted-foreground">
@@ -2248,7 +2254,9 @@ export const DiffView: React.FC<DiffViewProps> = ({
         }
 
         const normalizedTarget = targetFilePath?.trim();
-        if (!normalizedTarget) {
+        // Listings are relative, so a chip's absolute path names no row here.
+        // Its click resolves the row through pendingTurnDiffFile below.
+        if (!normalizedTarget || isAbsoluteFilePath(normalizedTarget)) {
             return;
         }
 
@@ -2261,6 +2269,15 @@ export const DiffView: React.FC<DiffViewProps> = ({
         setScrollRequestNonce((value) => value + 1);
     }, [activeDiffScope, expandStackedFile, targetFilePath]);
 
+    const revealListedFile = React.useCallback((path: string) => {
+        setDisplayFile(path);
+        setDisplayFileStaged(false);
+        shouldPinAfterAlignRef.current = true;
+        pendingScrollTargetRef.current = path;
+        expandStackedFile(path);
+        setScrollRequestNonce((value) => value + 1);
+    }, [expandStackedFile]);
+
     // A click asked for a file in the last turn's diff. Only an answer to the
     // session's current state decides: a list kept from an earlier turn would
     // send a file this turn did change to Changed, and a failed read keeps its
@@ -2271,15 +2288,20 @@ export const DiffView: React.FC<DiffViewProps> = ({
             setPendingTurnDiffFile(null);
             return;
         }
-        if (!turnDiffSettled) return;
+        // Entering the scope resets what is expanded, so wait for that first.
+        if (!turnDiffSettled || activeDiffScope !== 'turn') return;
         setPendingTurnDiffFile(null);
         const file = toAbsoluteFilePath(rootDirectory, pendingTurnDiffFile.file);
-        if (lastTurnDiffs.some((diff) => isSameRepoFile(file, rootDirectory, diff.file))) return;
+        const listed = findRepoFile(file, rootDirectory, lastTurnDiffs.flatMap((diff) => diff.file ?? []));
+        if (listed) {
+            revealListedFile(listed);
+            return;
+        }
         fallbackStatusRequestRef.current = null;
         setChangedFallback({ file, picked: false, statusReadFor: null });
         setActiveDiffScope('working');
         onDiffScopeChange?.('working');
-    }, [currentSessionId, diffScope, lastTurnDiffs, onDiffScopeChange, pendingTurnDiffFile, rootDirectory, setPendingTurnDiffFile, turnDiffSettled, visible]);
+    }, [activeDiffScope, currentSessionId, diffScope, lastTurnDiffs, onDiffScopeChange, pendingTurnDiffFile, revealListedFile, rootDirectory, setPendingTurnDiffFile, turnDiffSettled, visible]);
 
     // Changed reads one repository, and the status on hand may predate the
     // turn, so the file is looked for in its own repository's fresh status. A
@@ -2313,18 +2335,9 @@ export const DiffView: React.FC<DiffViewProps> = ({
             return;
         }
         setChangedFallback(null);
-        // The shortest match is the exact one when the listing is relative to the repository.
-        const [entry] = changedFiles
-            .filter((file) => isSameRepoFile(changedFallback.file, effectiveDirectory, file.path))
-            .sort((a, b) => a.path.length - b.path.length);
-        if (!entry) return;
-        setDisplayFile(entry.path);
-        setDisplayFileStaged(false);
-        shouldPinAfterAlignRef.current = true;
-        pendingScrollTargetRef.current = entry.path;
-        expandStackedFile(entry.path);
-        setScrollRequestNonce((value) => value + 1);
-    }, [activeDiffScope, changedFallback, changedFiles, effectiveDirectory, expandStackedFile, fetchStatus, git, repositoriesKnown, repositoryOptions, rootDirectory, rootIsGitRepo, selectNestedRepo, visible]);
+        const listed = findRepoFile(changedFallback.file, effectiveDirectory, changedFiles.map((file) => file.path));
+        if (listed) revealListedFile(listed);
+    }, [activeDiffScope, changedFallback, changedFiles, effectiveDirectory, fetchStatus, git, repositoriesKnown, repositoryOptions, revealListedFile, rootDirectory, rootIsGitRepo, selectNestedRepo, visible]);
 
     React.useEffect(() => {
         if (!displayFile) {
@@ -2568,38 +2581,34 @@ export const DiffView: React.FC<DiffViewProps> = ({
         scrollToFile(value);
     }, [cancelPendingScrollAlignment, expandStackedFile, isTreeMode, scrollToFile]);
 
-    // Step review to the adjacent changed file (alt+arrow): selects, expands
-    // a collapsed section, and scrolls to it. Window-level because the diff
-    // surface has no persistent focus target; guarded off editable fields.
-    React.useEffect(() => {
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (!visible) return;
-            if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
-            if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-            const target = event.target;
-            if (target instanceof HTMLElement && (
-                target.isContentEditable
-                || target.tagName === 'INPUT'
-                || target.tagName === 'TEXTAREA'
-                || target.closest('[role="dialog"]')
-            )) {
-                return;
-            }
-            event.preventDefault();
-            if (navigationFiles.length === 0) return;
-            const delta = event.key === 'ArrowDown' ? 1 : -1;
-            const currentPath = isTreeMode ? treeSelectedFile?.path : displayFile;
-            const index = currentPath ? navigationFiles.findIndex((file) => file.path === currentPath) : -1;
-            const nextIndex = index === -1
-                ? (delta > 0 ? 0 : navigationFiles.length - 1)
-                : index + delta;
-            const next = navigationFiles[nextIndex];
-            if (!next) return;
-            handleSelectFileAndScroll(next.path);
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [displayFile, handleSelectFileAndScroll, isTreeMode, navigationFiles, treeSelectedFile, visible]);
+    // Step review to the adjacent changed file: selects, expands a collapsed
+    // section, and scrolls to it. Guarded off editable fields, because the
+    // diff surface has no persistent focus target.
+    const stepChangedFile = (event: KeyboardEvent, delta: -1 | 1): boolean | void => {
+        if (!visible) return false;
+        const target = event.target;
+        if (target instanceof HTMLElement && (
+            target.isContentEditable
+            || target.tagName === 'INPUT'
+            || target.tagName === 'TEXTAREA'
+            || target.closest('[role="dialog"]')
+        )) {
+            return false;
+        }
+        if (navigationFiles.length === 0) return;
+        const currentPath = isTreeMode ? treeSelectedFile?.path : displayFile;
+        const index = currentPath ? navigationFiles.findIndex((file) => file.path === currentPath) : -1;
+        const nextIndex = index === -1
+            ? (delta > 0 ? 0 : navigationFiles.length - 1)
+            : index + delta;
+        const next = navigationFiles[nextIndex];
+        if (!next) return;
+        handleSelectFileAndScroll(next.path);
+    };
+    useKeybinds({
+        diff_next_file: (event) => stepChangedFile(event, 1),
+        diff_previous_file: (event) => stepChangedFile(event, -1),
+    });
 
     // ----- Find in diff -----
     // Files the bar can search. `load` mirrors the viewer's own read: the side
@@ -3296,29 +3305,42 @@ export const DiffView: React.FC<DiffViewProps> = ({
                 )}
                 {activeDiffScope === 'pr' && <>
                     <PullRequestComparisonSelector key={JSON.stringify([runtimeKey, effectiveDirectory, currentBranch])} comparison={prComparison} />
-                    {selectedPr && <Button variant="ghost" size="sm" disabled={comparison.loading}
-                        aria-label={t('session.githubIssuePicker.actions.refresh')} title={t('session.githubIssuePicker.actions.refresh')}
-                        onClick={() => void comparison.refresh()}><Icon name="refresh" className="size-4" /></Button>}
+                    {selectedPr && <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="inline-flex flex-shrink-0">
+                                <Button variant="ghost" size="sm" disabled={comparison.loading}
+                                    aria-label={t('session.githubIssuePicker.actions.refresh')}
+                                    onClick={() => void comparison.refresh()}><Icon name="refresh" className="size-4" /></Button>
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>{t('session.githubIssuePicker.actions.refresh')}</TooltipContent>
+                    </Tooltip>}
                 </>}
                 {changedFiles.length > 0 && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleExpandOrCollapseAll}
-                        className={cn(
-                            'diff-toolbar__expand-button h-7 flex-shrink-0 gap-1 px-1.5 text-muted-foreground hover:text-foreground',
-                            'ms-auto',
-                        )}
-                        title={expandedFiles.size > 0 ? t('diffView.actions.collapseAll') : t('diffView.actions.expandAll')}
-                    >
-                        <Icon
-                            name="expand-up-down"
-                            className="size-4"
-                        />
-                        <span className="diff-toolbar__expand-label typography-ui-label">
-                            {expandedFiles.size > 0 ? t('diffView.actions.collapseAll') : t('diffView.actions.expandAll')}
-                        </span>
-                    </Button>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleExpandOrCollapseAll}
+                                className={cn(
+                                    'diff-toolbar__expand-button h-7 flex-shrink-0 gap-1 px-1.5 text-muted-foreground hover:text-foreground',
+                                    'ms-auto',
+                                )}
+                            >
+                                <Icon
+                                    name="expand-up-down"
+                                    className="size-4"
+                                />
+                                <span className="diff-toolbar__expand-label typography-ui-label">
+                                    {expandedFiles.size > 0 ? t('diffView.actions.collapseAll') : t('diffView.actions.expandAll')}
+                                </span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>
+                            {expandedFiles.size > 0 ? t('contextTooltips.diff.collapseAll') : t('contextTooltips.diff.expandAll')}
+                        </TooltipContent>
+                    </Tooltip>
                 )}
                 {changeRequestReview && reviewProvider ? (
                     <ReviewSubmitButton
@@ -3329,37 +3351,49 @@ export const DiffView: React.FC<DiffViewProps> = ({
                     />
                 ) : null}
                 {changedFiles.length > 0 && showReviewAction && (
-                    <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => setReviewDialogOpen(true)}
-                        disabled={reviewFlowSubmitting}
-                        className="diff-toolbar__review-button h-7 flex-shrink-0 gap-1.5 px-2"
-                        aria-label={t('diffView.actions.reviewAria')}
-                    >
-                        {reviewFlowSubmitting ? (
-                            <Icon name="loader-4" className="size-4 animate-spin" />
-                        ) : (
-                            <Icon name="search-eye" className="size-4" />
-                        )}
-                        <span className="diff-toolbar__review-label typography-ui-label">
-                            {t('diffView.actions.review')}
-                        </span>
-                    </Button>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="inline-flex flex-shrink-0">
+                                <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={() => setReviewDialogOpen(true)}
+                                    disabled={reviewFlowSubmitting}
+                                    className="diff-toolbar__review-button h-7 flex-shrink-0 gap-1.5 px-2"
+                                    aria-label={t('diffView.actions.reviewAria')}
+                                >
+                                    {reviewFlowSubmitting ? (
+                                        <Icon name="loader-4" className="size-4 animate-spin" />
+                                    ) : (
+                                        <Icon name="search-eye" className="size-4" />
+                                    )}
+                                    <span className="diff-toolbar__review-label typography-ui-label">
+                                        {t('diffView.actions.review')}
+                                    </span>
+                                </Button>
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>{t('contextTooltips.diff.review')}</TooltipContent>
+                    </Tooltip>
                 )}
                 {showWalkthroughButton && (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={openWalkthrough}
-                        className={cn('diff-toolbar__walkthrough-button h-7 flex-shrink-0 gap-1.5 px-2', WALKTHROUGH_ACTION_CLASS)}
-                        aria-label={t('walkthrough.action.open')}
-                    >
-                        <Icon name="route" className="size-4" />
-                        <span className="diff-toolbar__walkthrough-label typography-ui-label">
-                            {t('walkthrough.action.open')}
-                        </span>
-                    </Button>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={openWalkthrough}
+                                className={cn('diff-toolbar__walkthrough-button h-7 flex-shrink-0 gap-1.5 px-2', WALKTHROUGH_ACTION_CLASS)}
+                                aria-label={t('walkthrough.action.open')}
+                            >
+                                <Icon name="route" className="size-4" />
+                                <span className="diff-toolbar__walkthrough-label typography-ui-label">
+                                    {t('walkthrough.action.open')}
+                                </span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>{t('contextTooltips.diff.walkthrough')}</TooltipContent>
+                    </Tooltip>
                 )}
                 {changedFiles.length > 0 && !isMobileLayout && (
                     <span className="diff-toolbar__tree-toggle flex flex-shrink-0">

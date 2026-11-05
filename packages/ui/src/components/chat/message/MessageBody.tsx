@@ -1,4 +1,5 @@
 import React from 'react';
+import { useMobileAppActions } from '@/apps/mobileAppContext';
 import type { FilePart, Part } from '@/lib/opencode/model';
 
 import { sessionMentionChipsOf } from './parts/sessionMentionChips';
@@ -64,6 +65,7 @@ import { useProjectContextStore } from '@/stores/useProjectContextStore';
 import { resolveProjectForSessionDirectory } from '@/lib/projectResolution';
 import { useSpaceProjectDirectory } from '@/lib/spaces/spaces-store';
 import { useEffectiveDirectory } from '@/hooks/useEffectiveDirectory';
+import { HoverTooltip } from '@/components/ui/row-tooltip';
 import { useI18n } from '@/lib/i18n';
 import { FileTypeIcon } from '@/components/icons/FileTypeIcon';
 import {
@@ -155,8 +157,14 @@ const InteractiveTurnChangedFilePills = React.memo(({ files }: { files: TurnChan
     const navigateToDiff = useUIStore((state) => state.navigateToDiff);
     const openContextDiff = useUIStore((state) => state.openContextDiff);
     const setPendingTurnDiffFile = useUIStore((state) => state.setPendingTurnDiffFile);
+    const mobileActions = useMobileAppActions();
 
     const openLastTurnDiff = React.useCallback((file: string) => {
+        if (mobileActions) {
+            mobileActions.openChanges({ diffPath: file, scope: 'turn' });
+            return;
+        }
+
         if (!isMobile && effectiveDirectory) {
             openContextDiff(effectiveDirectory, file, false, 'turn');
             setPendingTurnDiffFile({ file, sessionId: useSessionUIStore.getState().currentSessionId });
@@ -164,7 +172,7 @@ const InteractiveTurnChangedFilePills = React.memo(({ files }: { files: TurnChan
         }
 
         navigateToDiff(file, false, 'turn');
-    }, [effectiveDirectory, isMobile, navigateToDiff, openContextDiff, setPendingTurnDiffFile]);
+    }, [effectiveDirectory, isMobile, mobileActions, navigateToDiff, openContextDiff, setPendingTurnDiffFile]);
 
     return (
         <>
@@ -209,27 +217,28 @@ const TurnChangedFilePills = React.memo(({ files, isInteractive }: { files?: Tur
     return (
         <>
             <Pills files={expanded ? files : files.slice(0, CHANGED_FILE_CHIP_LIMIT)} />
-            <button
-                ref={toggleRef}
-                type="button"
-                className={CHANGED_FILE_CHIP_BUTTON_CLASS_NAME}
-                aria-expanded={expanded}
-                aria-label={label}
-                title={label}
-                onClick={(event) => {
-                    event.stopPropagation();
-                    setExpanded((value) => !value);
-                }}
-            >
-                <span className={cn(CHANGED_FILE_CHIP_CLASS_NAME, CHANGED_FILE_CHIP_HOVER_CLASS_NAME)} style={CHANGED_FILE_CHIP_STYLE}>
-                    {expanded ? (
-                        // A text line tall, so the icon-only chip matches the file chips.
-                        <span className="inline-flex h-[round(1.35em,1px)] items-center">
-                            <Icon name="arrow-up-s" className="h-3.5 w-3.5" />
-                        </span>
-                    ) : `+${hiddenCount}`}
-                </span>
-            </button>
+            <HoverTooltip label={label}>
+                <button
+                    ref={toggleRef}
+                    type="button"
+                    className={CHANGED_FILE_CHIP_BUTTON_CLASS_NAME}
+                    aria-expanded={expanded}
+                    aria-label={label}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        setExpanded((value) => !value);
+                    }}
+                >
+                    <span className={cn(CHANGED_FILE_CHIP_CLASS_NAME, CHANGED_FILE_CHIP_HOVER_CLASS_NAME)} style={CHANGED_FILE_CHIP_STYLE}>
+                        {expanded ? (
+                            // A text line tall, so the icon-only chip matches the file chips.
+                            <span className="inline-flex h-[round(1.35em,1px)] items-center">
+                                <Icon name="arrow-up-s" className="h-3.5 w-3.5" />
+                            </span>
+                        ) : `+${hiddenCount}`}
+                    </span>
+                </button>
+            </HoverTooltip>
         </>
     );
 });
@@ -601,7 +610,7 @@ const UserMessageBody = React.memo(({ parts, messageCreatedAt, isMobile, alwaysS
                 {timestamp && !alwaysShowActions ? (
                     <span
                         className="me-1 flex items-center gap-1 typography-meta tabular-nums text-muted-foreground"
-                        aria-label={`Message time: ${timestamp}`}
+                        aria-label={t('contextTooltips.chat.messageTime', { time: timestamp })}
                     >
                         <Icon name="time" className="h-3.5 w-3.5" />
                         <span>{timestamp}</span>

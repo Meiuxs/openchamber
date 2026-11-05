@@ -453,7 +453,8 @@ The config store owns default selection and discovery-gap behavior, documented
 in `packages/ui/src/stores/DOCUMENTATION.md`.
 
 Changing a draft's project or switching between Project and Chat applies the
-target's agent, model, and effort defaults immediately. Worktree refinement
+target's agent, model, and effort defaults immediately; a Chat target's are those
+of the managed Chats root. Worktree refinement
 within the same project preserves manual choices. Activation continuations
 check the runtime, draft identity, target revision, and manual-selection state
 before applying defaults again.
@@ -1376,8 +1377,14 @@ Chat folders follow the same shape through `session-folders-sync.ts`: the
 provider subscribes for the runtime it mounted with, a
 `session-folders-changed` control event with a newer revision reads the
 server's folders again, and every control-stream connection reads them and
-sends the changes still queued. `useSessionFoldersStore` owns the revision
-ordering, the queue and the first contact with a server.
+sends the changes still queued. A window that comes back does the same, at most
+once in 2 seconds: `visibilitychange` to visible, `focus`, `pageshow` and
+`openchamber:system-resume`, because its stream may be dead without it knowing
+and the heartbeat timer that would notice is throttled while hidden. `online`
+ignores that limit, since a read made just before it failed and has no timer
+behind it. A hidden window reads when it becomes visible.
+`useSessionFoldersStore` owns the revision ordering, the queue, the retry of a
+failed read and the first contact with a server.
 
 Keep this in sync with `handleDirectoryEvent` in `sync-context.tsx`:
 

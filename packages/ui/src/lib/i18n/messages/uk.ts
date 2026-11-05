@@ -50,6 +50,15 @@ import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
 import { guestStatusViewI18n } from './guest-status-view.i18n';
+import { tooltipsDiffI18n } from './tooltips-diff.i18n';
+import { tooltipsFilesI18n } from './tooltips-files.i18n';
+import { tooltipsGitI18n } from './tooltips-git.i18n';
+import { tooltipsTrackerI18n } from './tooltips-tracker.i18n';
+import { tooltipsWalkthroughI18n } from './tooltips-walkthrough.i18n';
+import { tooltipsTerminalBrowserI18n } from './tooltips-terminal-browser.i18n';
+import { tooltipsWorkspaceI18n } from './tooltips-workspace.i18n';
+import { tooltipsPanelI18n } from './tooltips-panel.i18n';
+import { tooltipsChatI18n } from './tooltips-chat.i18n';
 
 export const dict: Record<I18nKey, string> = {
   'quota.family.zen': 'Моделі Zen',
@@ -225,6 +234,15 @@ export const dict: Record<I18nKey, string> = {
   ...workflowsI18n['uk'],
   ...sessionReferencesI18n['uk'],
   ...guestStatusViewI18n['uk'],
+  ...tooltipsDiffI18n['uk'],
+  ...tooltipsFilesI18n['uk'],
+  ...tooltipsGitI18n['uk'],
+  ...tooltipsTrackerI18n['uk'],
+  ...tooltipsWalkthroughI18n['uk'],
+  ...tooltipsTerminalBrowserI18n['uk'],
+  ...tooltipsWorkspaceI18n['uk'],
+  ...tooltipsPanelI18n['uk'],
+  ...tooltipsChatI18n['uk'],
   'terminalView.actions.attachSelection': 'Прикріпити вибраний вивід',
   'terminalView.actions.copySelection': 'Скопіювати вибраний вивід',
   'terminalView.toast.selectionCopied': 'Вивід скопійовано',
@@ -1657,7 +1675,6 @@ export const dict: Record<I18nKey, string> = {
   "sidebarFilesTree.actions.addMenuTitle": "Новий файл, тека або завантаження",
   "sidebarFilesTree.actions.refreshTitle": "Оновити",
   "sidebarFilesTree.actions.collapseAllTitle": "Згорнути всі папки",
-  "sidebarFilesTree.actions.fileMenuTitle": "Меню файлу",
   "sidebarFilesTree.state.searching": "Пошук...",
   "sidebarFilesTree.state.loading": "Завантаження...",
   "sidebarFilesTree.dialog.createFile.title": "Створити файл",
@@ -3768,6 +3785,9 @@ export const dict: Record<I18nKey, string> = {
   'chat.dispatchedSession.showAnswer': 'Показати відповідь',
   'chat.dispatchedSession.hideAnswer': 'Сховати відповідь',
   'chat.dispatchedSession.open': 'Відкрити сесію',
+  'chat.fileOpenRequest.toast.description': 'Показано в сесії {session}',
+  'chat.fileOpenRequest.toast.descriptionUntitled': 'Показано в іншій сесії',
+  'chat.fileOpenRequest.toast.openSession': 'Відкрити сесію',
   'chat.revertPopover.staged': 'Відкочено: {count}',
   "chat.revertPopover.toast.restoreFailed": "Не вдалося відновити відкочені повідомлення",
   'chat.workStatus.mcp.needsAuthHint': 'Увійдіть до цього MCP-сервера в Налаштування → MCP.',
