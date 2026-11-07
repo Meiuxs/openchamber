@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   allowedInsecureGitOrigins,
@@ -13,6 +13,7 @@ import {
   readEnterprisePolicy,
   readNpmRegistry,
   readPinnedModelsDevUrl,
+  watchEnterprisePolicy,
 } from './enterprise-mode.js';
 
 const missing = () => {
@@ -39,6 +40,27 @@ const DATA_DIR = '/data';
 const PREFERENCES_FILE = path.join(path.resolve(DATA_DIR), 'preferences.json');
 
 describe('enterprise policy', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a watch calls back once the policy in effect changes, and stays quiet while it does not', () => {
+    vi.useFakeTimers();
+    const policies = [{ enterpriseMode: false }, { enterpriseMode: false }, { enterpriseMode: true, allowedExtensions: [] }, { enterpriseMode: true, allowedExtensions: [] }];
+    let reads = 0;
+    const onChange = vi.fn();
+    const stop = watchEnterprisePolicy({ onChange, intervalMs: 1000, read: () => policies[Math.min(reads++, policies.length - 1)] });
+    vi.advanceTimersByTime(1000);
+    expect(onChange).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(3000);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    stop();
+    vi.advanceTimersByTime(5000);
+    expect(reads).toBe(6);
+  });
+
   it('is off with no policy file and no environment variable', () => {
     expect(readEnterprisePolicy(machine({}))).toEqual({
       enterpriseMode: false,

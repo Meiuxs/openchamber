@@ -16,6 +16,7 @@ import { setRequestsInFlightTrackingEnabled } from '@/stores/utils/requestsInFli
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 // useEventStream removed — replaced by SyncProvider + SyncBridge
 import { useMenuActions } from '@/hooks/useMenuActions';
+import { useGuestInstallLinks } from '@/hooks/useGuestInstallLinks';
 import { useSessionStatusBootstrap } from '@/hooks/useSessionStatusBootstrap';
 import { useTraySync } from '@/hooks/useTraySync';
 import { useGlobalSessionsPolling } from '@/hooks/useGlobalSessionsPolling';
@@ -211,6 +212,7 @@ type AppProps = {
 };
 
 function App({ apis }: AppProps) {
+  useGuestInstallLinks();
   React.useEffect(() => startDiagnosticCapture(), []);
   React.useEffect(() => {
     markStartupTrace('App:mounted');

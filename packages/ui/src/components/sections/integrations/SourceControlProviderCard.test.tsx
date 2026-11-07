@@ -102,6 +102,8 @@ describe('SourceControlProviderCard', () => {
   // Where the listed login came from: the CLI, or a stored token.
   let accountSource: 'cli' | 'pat' = 'cli';
   let cliDisabled = false;
+  // A CLI switch the server keeps while the CLI cannot say whether its login exists.
+  let cliUnanswered = false;
   // The instance the server lists before anything is added (GitLab's default).
   let listedDefault: SourceControlIdentity[] = [];
   // The provider the mounted card is for: the server lists instances per provider.
@@ -112,6 +114,9 @@ describe('SourceControlProviderCard', () => {
     const user = { ...identity, id: 'user-one', username: 'cli-user' };
     if (cliDisabled) {
       return { ...identity, status: 'disconnected', connected: false, accounts: [], cli: { available: true, disabled: true, active: false } };
+    }
+    if (cliUnanswered) {
+      return { ...identity, status: 'disconnected', connected: false, accounts: [], cli: { available: false, disabled: false, active: true } };
     }
     const accounts = !withCliLogin || identity.instance === 'https://gitlab.com' ? [] : [{
       id: `${identity.instance}#cli:user-one`,
@@ -164,7 +169,11 @@ describe('SourceControlProviderCard', () => {
     },
     providers: unexpected, repositoryContext: unexpected, repositoryBinding: unexpected, resetRepositoryBinding: unexpected,
     repositoryProviderBindingMutate: unexpected, authStart: unexpected, authComplete: unexpected,
-    authDisconnect: unexpected, authSetCliDisabled: unexpected,
+    authDisconnect: unexpected,
+    authSetCliDisabled: async (_identity, disabled) => {
+      cliDisabled = disabled;
+      return { disabled };
+    },
     changeRequestStatus: unexpected, changeRequestCreate: unexpected, changeRequestUpdate: unexpected,
     changeRequestMerge: unexpected, changeRequestReady: unexpected, changeRequestComment: unexpected,
     changeRequestStartThread: unexpected, changeRequestReplyToThread: unexpected, changeRequestResolveThread: unexpected,
@@ -225,6 +234,7 @@ describe('SourceControlProviderCard', () => {
     withCliLogin = true;
     accountSource = 'cli';
     cliDisabled = false;
+    cliUnanswered = false;
     listedDefault = [{ provider: 'gitlab', instance: 'https://gitlab.com' }];
     useSourceControlAuthStore.getState().resetForRuntimeSwitch();
     registerRuntimeAPIs(apis);
@@ -531,6 +541,17 @@ describe('SourceControlProviderCard', () => {
       expect(instanceReads).toBe(1);
       expect(useSourceControlAuthStore.getState().entries).toEqual({});
       expect(useSourceControlAuthStore.getState().identities).toEqual([]);
+    });
+
+    test('lets the user turn off a kept CLI switch while the CLI cannot answer', async () => {
+      cliUnanswered = true;
+      await mount(gitlab);
+      await addInstance('https://gitlab.example.com', 'https://gitlab.example.com');
+
+      await click('Disable glab');
+
+      expect(cliDisabled).toBe(true);
+      expect(buttonLabels()).toContain('Enable glab');
     });
 
     test('offers the CLI switch only for a provider whose descriptor names a CLI', async () => {

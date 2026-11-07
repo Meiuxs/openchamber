@@ -275,6 +275,7 @@ export interface MarkdownContentProps {
   messageId?: string;
   enableFileReferences?: boolean;
   disableLinkSafety?: boolean;
+  tableWidthScope?: string;
   loopbackPreview?: boolean;
   documentAssets?: MarkdownDocumentAssets;
   onShowPopup?: (content: ToolPopupContent) => void;
@@ -310,6 +311,7 @@ export function MarkdownContent({
   messageId,
   enableFileReferences = true,
   disableLinkSafety,
+  tableWidthScope,
   loopbackPreview = false,
   documentAssets,
   onShowPopup,
@@ -442,6 +444,7 @@ export function MarkdownContent({
     uiBlocks: uiBlocks && !purpose,
     settledReply: uiBlocks && !purpose && settled && sessionId && messageId ? { sessionId, messageId } : null,
     disableLinkSafety,
+    tableWidthScope,
     theme,
     mermaidControls,
     onShowPopup,
@@ -449,7 +452,7 @@ export function MarkdownContent({
     confirmFile,
     code,
   }), [
-    directory, fileReferences, fileNavigation, loopbackPreview, settled, purpose, uiBlocks, sessionId, messageId, disableLinkSafety, theme,
+    directory, fileReferences, fileNavigation, loopbackPreview, settled, purpose, uiBlocks, sessionId, messageId, disableLinkSafety, tableWidthScope, theme,
     mermaidControls, onShowPopup, onExportCode, confirmFile, code,
   ]);
 

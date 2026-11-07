@@ -232,6 +232,24 @@ const isSafeTransferEndpoint = (value, providers = null, insecureOrigins = null)
 const assertSafeExistingEndpoint = (endpoint, providers = null, insecureOrigins = null) => {
   if (!isSafeTransferEndpoint(requiredString(endpoint, 'Git endpoint'), providers, insecureOrigins)) throw planError('Git endpoint is invalid');
 };
+// A repository remote refused only for its userinfo gets its own code, so the
+// client can say what to remove. The message never repeats the userinfo: it may be a token.
+const assertSafeRemoteEndpoint = (endpoint, providers, insecureOrigins = null) => {
+  try {
+    assertSafeExistingEndpoint(endpoint, providers, insecureOrigins);
+  } catch (error) {
+    let parsed = null;
+    try { parsed = new URL(endpoint); } catch { /* not a URL form */ }
+    if (parsed && parsed.protocol !== 'ssh:' && (parsed.username || parsed.password)) {
+      parsed.username = '';
+      parsed.password = '';
+      if (isSafeTransferEndpoint(parsed.href, providers, insecureOrigins)) {
+        throw planError('Git remote URL has a name before @', 400, 'INVALID_GIT_REMOTE_USERINFO');
+      }
+    }
+    throw error;
+  }
+};
 // Display URLs are redacted, so a URL-form display never carries userinfo.
 const assertSafeDisplayEndpoint = (endpoint) => {
   const value = requiredString(endpoint, 'Git endpoint');
@@ -494,7 +512,7 @@ export function createNetworkOperationPlanner({
     const pushAuthority = await validateGitTransportContext(authorityInput(pushRemote, 'push'));
     const validateAuthority = (authority, remote, transportMode) => {
       const transportRevision = parseDigest(authority.transportRevision, 'transportRevision');
-      assertSafeExistingEndpoint(authority.endpoint, sourceControlProviders, insecureGitOrigins());
+      assertSafeRemoteEndpoint(authority.endpoint, sourceControlProviders, insecureGitOrigins());
       if (transportMode === 'anonymous' && (authority.credentialId !== undefined
         || normalizeGitRemoteEndpoint(authority.endpoint).protocol !== 'https')) {
         throw planError('Anonymous Git transport requires credential-free HTTPS', 501, 'RUNTIME_UNSUPPORTED');
@@ -663,7 +681,7 @@ export function createNetworkOperationPlanner({
       endpointKind,
     });
     const transportRevision = parseDigest(authority.transportRevision, 'transportRevision');
-    assertSafeExistingEndpoint(authority.endpoint, sourceControlProviders, insecureGitOrigins());
+    assertSafeRemoteEndpoint(authority.endpoint, sourceControlProviders, insecureGitOrigins());
     if (transportMode === 'anonymous' && (authority.credentialId !== undefined
       || normalizeGitRemoteEndpoint(authority.endpoint).protocol !== 'https')) {
       throw planError('Anonymous Git transport requires credential-free HTTPS', 501, 'RUNTIME_UNSUPPORTED');
@@ -897,7 +915,7 @@ export function createNetworkOperationPlanner({
       remote: remote.name,
       endpointKind: 'fetch',
     });
-    assertSafeExistingEndpoint(authority.endpoint, sourceControlProviders, insecureGitOrigins());
+    assertSafeRemoteEndpoint(authority.endpoint, sourceControlProviders, insecureGitOrigins());
     if (authority.endpointFingerprint !== remote.endpoint.fingerprint
       || redactRemoteUrl(authority.endpoint) !== remote.endpoint.displayUrl) {
       throw planError('Git checkout hydration source changed', 409, 'GIT_NETWORK_OPERATION_AUTHORITY_CHANGED');
