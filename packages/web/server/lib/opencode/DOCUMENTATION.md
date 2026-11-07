@@ -837,10 +837,19 @@ into `OPENCODE_CONFIG_CONTENT`, which the child reads at launch; the route answe
 `requiresManualRestart`, and so does a rewrite that fails after the store write,
 because the store is the durable state.
 
-An unreadable store reports every switch `unavailable`, and `denials()` throws.
-A rewrite then keeps the managed file as it was, and a fresh managed launch fails
-with the store's path. Starting anyway would load every plugin the user switched
-off, and they would learn it from the plugin running.
+An unreadable store reports every switch `unreadable`. Every whole read of the
+store is copied to `plugin-switches.json.last-good` beside it, and `denials()`
+falls back to that copy, with a warning naming the store's path. A rewrite and a
+fresh launch, after a restart too, keep the plugins as they last were, and the
+page explains the switches stay put until the file is fixed or deleted.
+
+### Why a broken store keeps the applied denials and does not stop the launch
+
+Stopping OpenCode over one OpenChamber file took the whole app down for a plugin
+setting. An empty list would load every plugin the user switched off. The managed
+config file lives in a folder of the running server and goes with it, so the copy
+sits beside the store, in the data folder. Without a copy there is no earlier
+state, and the launch starts without denials.
 
 OpenCode decides by the earliest-loaded config with a matching statement, so a
 `plugin.use` allow that loads ahead of the denial beats it. The managed file loads
@@ -1313,6 +1322,17 @@ folder's project identity and config, and sessions created after a repair
 would keep them. Keeping only location-starting requests out leaves the
 recovery path (session list, binding reads, Download again, archive) working
 without that risk.
+
+### Why the proxy drops browser fetch metadata and not adds origins to OpenCode's CORS list
+
+Since 2.2.6 OpenCode answers 403 to an `/api` request whose `Sec-Fetch-Site`
+is `cross-site` or `same-site` unless its `Origin` is on OpenCode's CORS list.
+Packaged clients reach this server cross-site (`openchamber-ui://app`,
+`capacitor://localhost`, `https://localhost`), so every proxied call failed.
+OpenChamber vets its own clients before proxying, and to OpenCode the request
+comes from this server, so both forwarding paths drop `sec-fetch-*`
+(`proxy-headers.js`). Passing `--cors` for each packaged origin was weighed and
+rejected: it fails for an external OpenCode OpenChamber does not launch.
 
 ### Why the proxy deadline is configurable
 
