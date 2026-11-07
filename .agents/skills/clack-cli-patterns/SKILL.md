@@ -1,6 +1,7 @@
 ---
 name: clack-cli-patterns
-description: Use when creating or modifying OpenChamber CLI commands, prompts, terminal output, non-TTY behavior, `--quiet`, or `--json` behavior.
+description: Use when creating or modifying OpenChamber CLI commands, prompts,
+  terminal output, non-TTY behavior, `--quiet`, or `--json` behavior.
 license: MIT
 compatibility: opencode
 ---

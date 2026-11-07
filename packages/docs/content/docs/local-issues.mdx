@@ -56,9 +56,12 @@ In Settings under Integrations, the Local card has a **Session comments** switch
 
 ## Let an agent work on issues
 
-OpenChamber ships the agent command as a template: `.opencode/commands/local-issues.md` in the OpenChamber repository. Copy it into your project's `.opencode/commands/` directory, or into your OpenCode user command directory to have it in every project. The server never writes into your project's directories itself, so the copy is yours to keep and adjust.
+Two built-in composer commands ship with OpenChamber — no setup, available in every project:
 
-With the command in place, invoke `/local-issues` in a session to create, find or update issues. The agent numbers new issues after the highest one it finds, changes state through the frontmatter, and appends the file paths it touched to the issue body so they link in the preview. The command tells the agent to keep the `## Comments` section as it is.
+- `/local-issues` creates, finds, updates and deletes issues. The agent numbers new issues after the highest one it finds, changes state through the frontmatter, and appends the file paths it touched to the issue body so they link in the preview. The command tells the agent to keep the `## Comments` section as it is.
+- `/issue-work` drives the assigned issues toward a fix: it proposes a menu of candidates ordered by priority, checks for work already in flight, refuses to fix without a verified mechanism, and closes the loop with comments and a `done` state once the proof passes.
+
+Both accept an argument after the command name — `/local-issues create a login retry bug`, `/issue-work sync` narrows the menu to sync issues. The prompts live in Settings under Magic prompts (Session group), where each deployment can override the wording per project or globally.
 
 ## Triage roles
 

@@ -1,0 +1,96 @@
+{
+  // ==============================================================================
+  // OpenChamber 内网企业策略配置文件 (policy.json)
+  //
+  // 【存放位置】（普通用户即可修改，无需管理员权限）：
+  //   - Windows: %USERPROFILE%\.config\openchamber\policy.json
+  //   - Linux/macOS: ~/.config/openchamber/policy.json
+  //   （若设置了 OPENCHAMBER_DATA_DIR 环境变量，则存放在 $OPENCHAMBER_DATA_DIR/policy.json）
+  //
+  // 【特性说明】：
+  //   - 本文件每次使用时自动重新读取，修改保存后立即生效，无需重启服务。
+  //   - 支持 // 单行注释、/* 多行注释 */ 以及尾随逗号。
+  // ==============================================================================
+
+  // 1.【企业模式主开关】(必填，布尔值: true / false)
+  // 设为 true 开启企业安全模式：
+  // - 阻断 UI 中直接连接或添加外网模型提供商（API Key/OAuth）；
+  // - 禁用外部隧道（Cloudflare、ngrok、Tailscale）；
+  // - 禁用云端语音合成(TTS)，仅允许本机离线语音；
+  // - 外部推送通知脱敏（不含对话正文与项目名）；
+  // - 阻断 draw.io 在线第三方页面，仅以纯文本 XML 打开。
+  "enterpriseMode": true,
+
+  // 2.【组织/团队标识】(可选，字符串)
+  // 设置后将在 Web 界面“设置 -> 提供商”顶部展示为 “由 xxx 管理”。
+  "organization": "企业内网",
+
+  // 3.【网络监听与局域网访问】(可选，布尔值，默认 false)
+  // - false: 仅监听本机回环地址 127.0.0.1，外部设备无法直连访问；
+  // - true: 允许服务监听网络地址（如 0.0.0.0 或局域网 IP）。Docker 容器化部署时必须设为 true。
+  "allowNetworkAccess": true,
+
+  // 4.【内网 npm 镜像源】(可选，URL 字符串)
+  // 插件元数据查询、版本检测统一走该源，避免直连外网 registry.npmjs.org 超时挂起。
+  // 请替换为内部 Nexus、Verdaccio 或私有镜像地址。
+  "npmRegistry": "http://nexus.corp.internal/repository/npm-group/",
+
+  // 5.【模型元数据内网镜像地址】(可选，URL 字符串)
+  // 模型选择器的上下文窗口大小、价格与能力元数据原本读取外网 models.dev/api.json。
+  // 在完全断网环境下，请指向内网 Nginx 或静态服务器托管的 api.json 文件。
+  "modelsDevUrl": "http://nginx.corp.internal/models/api.json",
+
+  // 6.【信任的内网 HTTP Git 源白名单】(可选，字符串数组)
+  // 默认情况下，OpenChamber 对所有 Git 托管商、扩展/技能安装强制要求 HTTPS。
+  // 若公司内部搭建的 GitLab / Gitea / Gerrit / Forgejo 使用了明文 HTTP 协议，请在此列出精确来源。
+  // 列入的主机可正常进行 Git 交互、拉取分支、下载代码以及安装插件和技能。
+  "allowedInsecureGitOrigins": [
+    "http://gitlab.corp.internal",
+    "http://gitlab.corp.internal:8080"
+  ],
+
+  // 7.【高权限扩展/插件安装白名单】(可选，Git 仓库 URL 数组)
+  // 声明了网络请求 (network)、读取会话 (transcript)、后台服务 (service) 的敏感插件，
+  // 必须来自此处列出的 Git 仓库。支持以斜杠 '/' 结尾匹配整个组织下的所有仓库。
+  "allowedExtensions": [
+    "https://gitlab.corp.internal/ai-plugins/",
+    "http://gitlab.corp.internal/platform/"
+  ],
+
+  // 8.【是否允许从本地文件夹安装/加载扩展】(可选，布尔值，默认 false)
+  // 适合内网插件开发工程师进行本地调试。设为 true 时可在设置页面通过本地文件路径加载开发中的扩展。
+  "allowLocalExtensions": true,
+
+  // 9.【隐藏官方内置公开技能库】(可选，布尔值，默认 false)
+  // 设为 true 后，隐藏官方自带的 Anthropic、OpenAI、Cursor 等公开技能库，避免展示内网无法访问的外网技能。
+  "hideBuiltinSkillCatalogs": true,
+
+  // 10.【企业自建技能目录库】(可选，对象数组)
+  // 全量替换官方技能库为内部 Git 仓库。配置后开发者可在界面直接浏览并一键安装企业推荐的技能（Skills）。
+  "skillsCatalogSources": [
+    {
+      "id": "corp-skills",
+      "label": "企业内网技能库",
+      "description": "平台团队维护的企业开发规范与内网工具技能",
+      "source": "http://gitlab.corp.internal/platform/skills.git",
+      "defaultSubpath": "skills"
+    }
+  ],
+
+  // 11.【固定外部 OpenCode CLI 二进制路径】(可选，文件绝对路径字符串)
+  // 指定后，OpenChamber 将直接调用该路径的 OpenCode 可执行程序，并彻底禁用内置的自动下载与升级。
+  // 若留空或不填，则使用系统自带或 PATH 中的 OpenCode。
+  // "opencodeBinary": "/usr/local/bin/opencode",
+
+  // 12.【自建 Private Relay 中继服务地址】(可选，WebSocket URL 字符串)
+  // 开启企业模式后，公共中继被禁用。若内网搭建了私有 openchamber-relay 服务，填入此项以支持手机与外部设备配对。
+  // "relayUrl": "wss://relay.corp.internal/ws",
+
+  // 13.【自建 Jev 意图分类/智能路由端点】(可选，对象)
+  // 开启企业模式后，官方分类端点被禁用。若搭建了内网分类模型接口，填入此处。
+  // "jev": {
+  //   "url": "https://llm.corp.internal/v1/systemone",
+  //   "model": "qwen2.5-7b",
+  //   "apiKey": "your-api-key"
+  // }
+}

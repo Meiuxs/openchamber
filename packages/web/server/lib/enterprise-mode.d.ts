@@ -36,6 +36,7 @@ export interface EnterprisePolicy {
 
 export type PublicEnterprisePolicy = Pick<EnterprisePolicy, 'enterpriseMode' | 'source' | 'organization' | 'policyError' | 'opencodeBinary'> & { networkAccessBlocked: boolean; modelsDevUrlPinned: boolean };
 
+export function userPolicyFilePath(options?: Pick<EnterprisePolicyOptions, 'platform' | 'env'>): string;
 export function policyFilePaths(options?: Pick<EnterprisePolicyOptions, 'platform' | 'env'>): string[];
 export function readEnterprisePolicy(options?: EnterprisePolicyOptions): EnterprisePolicy;
 /** The validated model catalog URL pinned by the policy file, or null when unset or malformed. */

@@ -82,6 +82,7 @@ packages/intellij/
 
 # OS
 Thumbs.db
+~$*
 
 # Local runtime state (docker/dev)
 data/

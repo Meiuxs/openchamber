@@ -53,6 +53,10 @@ export type MagicPromptId =
   | 'session.weigh.instructions'
   | 'session.explore.visible'
   | 'session.explore.instructions'
+  | 'session.localIssues.visible'
+  | 'session.localIssues.instructions'
+  | 'session.issueWork.visible'
+  | 'session.issueWork.instructions'
   | 'session.fusion.visible'
   | 'session.fusion.instructions'
   | 'session.fusion.codeInstructions'
@@ -815,6 +819,94 @@ Then give a clear orientation covering:
 - Where to start: a few concrete pointers for finding your way around or making a first change.
 
 Keep it a readable orientation, not an exhaustive file-by-file dump — favor the structure and the mental model over listing everything. Lead with the big picture, then drill down. If the user named a specific area, focus the tour there.
+
+Respond in the same language the user uses.`,
+  },
+  {
+    id: 'session.localIssues.visible',
+    title: 'Local Issues Visible Prompt',
+    group: 'Session',
+    description: 'Visible user message sent by the /local-issues command.',
+    placeholders: [
+      { key: 'arguments_block', description: 'The arguments typed after the command, formatted as a request block, or empty string.' },
+    ],
+    template: `Manage local issues in this project.{{arguments_block}}`,
+  },
+  {
+    id: 'session.localIssues.instructions',
+    title: 'Local Issues Instructions',
+    group: 'Session',
+    description: 'Hidden instructions attached to the /local-issues command. The create/find/update/delete rules for the .issues/ markdown files.',
+    placeholders: [
+      { key: 'arguments_block', description: 'The arguments typed after the command, formatted as a request block, or empty string.' },
+    ],
+    template: `Manage local issues in this project. Issues live in \`.issues/\` as \`LOCAL-<n>-<slug>.md\` files.{{arguments_block}}
+
+Rules:
+
+1. Creating: use the project's issues directory — the \`issuesDir\` configured in Settings → Projects for that project, \`.issues\` when none is set. Read it, take the highest \`LOCAL-<n>\` number (1 to 6 digits), use n+1. If the target file already exists, increment and retry. File name \`LOCAL-<n>-<slug>.md\`, slug lowercase \`[a-z0-9-]\`, max 60 chars. Frontmatter (exactly these keys, in this order): \`identifier\` (must equal the \`LOCAL-<n>\` from the file name — a mismatch makes the file invisible on the board), \`title\`, \`state\` (one of \`triage\`, \`backlog\`, \`todo\`, \`in-progress\`, \`done\`, \`canceled\`), \`priority\` (\`urgent\`|\`high\`|\`medium\`|\`low\`, default \`low\` — a local issue always has one, never write \`null\`), \`labels\` (array), \`assignee\` (\`null\` or a name), \`createdAt\` and \`updatedAt\` (ISO), \`feature\` (\`null\`), \`blockedBy\` (array). Quote any scalar that would reparse as a non-string: a value that is literally \`null\`, \`true\` or \`false\`, starts with \`[\` or \`{\`, or contains \`: \`, \`#\`, quotes, commas or newlines goes in double quotes (\`title: "null case in retry loop"\`). Arrays stay bracketed (\`labels: [ui, sync]\`). The scanner skips a malformed file with only a server-log warning, so keep the frontmatter exact. The body below the frontmatter is the description.
+2. Finding: list the directory, match by identifier prefix or search titles and bodies.
+3. Updating state: edit the \`state\` frontmatter value only, and bump \`updatedAt\`.
+4. Code references: when a session fixed something, append the touched file paths (with \`:line\` when useful) to the issue body so the UI can link them.
+5. Never rename files: the identifier in the name is permanent.
+6. Deleting: removing the file deletes the issue — the board offers the same action from the edit dialog. Only do it when asked, and leave an issue that others name in \`blockedBy\` alone unless the deletion is the point: the waiting issues stop being blocked, but the reference they keep points at nothing.
+7. Comments: the board appends entries under a \`## Comments\` heading as \`### <ISO> · <source>\` sections. When you edit an issue body, keep that heading and every entry under it unchanged.
+8. Grouping and blockers: \`feature\` is a slug shared by related issues (\`login\`), \`blockedBy\` lists the identifiers an issue waits on. Set them when the work needs them and keep the existing values when you edit anything else. The board decides whether an issue is still blocked from the states of the issues it names, so settling a blocker needs no change to the issues waiting on it.
+9. Body template (required when you create an issue):
+
+   \`\`\`markdown
+   ## Symptom
+   <!-- one line: what the user sees -->
+   <!-- required -->
+   ## Reproduce
+   <!-- steps; if not reproducible, say why not -->
+   <!-- required -->
+   ## Environment
+   <!-- surface (web/desktop/vscode/mobile), OS, branch+commit where found; \`n/a\` for pure code-behavior issues -->
+   <!-- required -->
+   ## Evidence
+   <!-- error strings, file:line, source (which session / which log) -->
+   <!-- required -->
+   ## Mechanism
+   <!-- root-cause mechanism with file:line; omit the whole section until known -->
+   <!-- optional; may carry \`root-cause:found\` only when this section exists -->
+   \`\`\`
+
+   The \`<!-- ... -->\` lines in the template are instructions: replace each with the real content, never keep them. When you edit an issue body, keep the section headings and everything under \`## Comments\` unchanged, and bump \`updatedAt\`. Add \`root-cause:found\` to \`labels\` only when a \`## Mechanism\` section with file:line evidence exists. When the issue comes from your own debugging session, say which session it came from under \`## Evidence\`.
+
+Respond in the same language the user uses.`,
+  },
+  {
+    id: 'session.issueWork.visible',
+    title: 'Issue Work Visible Prompt',
+    group: 'Session',
+    description: 'Visible user message sent by the /issue-work command.',
+    placeholders: [
+      { key: 'focus_block', description: 'The arguments typed after the command, formatted as a focus clause, or empty string.' },
+    ],
+    template: `Work the assigned local issues.{{focus_block}}`,
+  },
+  {
+    id: 'session.issueWork.instructions',
+    title: 'Issue Work Instructions',
+    group: 'Session',
+    description: 'Hidden instructions attached to the /issue-work command. Drives assigned local issues from a menu through verified fixes.',
+    placeholders: [
+      { key: 'focus_block', description: 'The arguments typed after the command, or empty string.' },
+    ],
+    template: `Focus, if any:{{focus_block}}
+
+The maintainer assigned local issues (\`.issues/*.md\`, \`state: todo\` with a non-null \`assignee\`) and wants them driven toward a fix. Run this as a conversation, not a report.
+
+1. **Gather the menu.** Scan \`.issues/\` for issues where \`state\` is \`todo\` and \`assignee\` is set — never \`canceled\`. Order by \`priority\` (urgent first, null last); break ties by severity: data-loss and regression first. Propose 3–5 candidates, one line each: the user-visible symptom, the traced mechanism (file:line) from \`## Mechanism\`, and rough size. Ask which to take — batches of related small fixes in one area are welcome.
+2. **Check for work in flight.** Before proposing anything, drop a candidate that is already being worked: \`state\` is \`in-progress\`, or \`git log --grep "fixes LOCAL-<n>"\` finds commits (word boundary — \`LOCAL-1\` must not match \`LOCAL-11\`). Session comments are context, not proof of in-flight work: report them with the candidate, and drop on them only when they show an active fix session. Name what you dropped and why; the fix belongs to its session.
+3. **Route before fixing.** A candidate is fixable only when its \`labels\` include \`root-cause:found\` and its body has a \`## Mechanism\` section stating the mechanism with \`file:line\`.
+   - Fixable: continue at step 4.
+   - No repro, no mechanism, or the label without a mechanism: diagnose only, write the findings as a comment under \`## Comments\`, set \`state\` back to \`triage\`, bump \`updatedAt\`, and do not write code. Say why in the comment.
+   - The fix changes a default, adds a button or setting, or is anything two reasonable people could disagree about: stop and ask the maintainer. Product decisions are settled in this conversation, never inside the diff.
+4. **Verify the anchors.** The body's file:line cites age. The commit recorded under \`## Environment\` tells you how stale the report is; confirm the cited mechanism still exists on current main. If it is gone, say so, set \`state\` back to \`triage\` with a comment, and skip — never fix air.
+5. **Fix properly.** Follow AGENTS.md instruction order (matching skills — sync bugs demand \`sync-state-invariants\`, hot paths \`performance-engineering\`); minimal fix plus a regression test per local precedent; focused validation.
+6. **Close the loop.** Append the touched file paths (with \`:line\` when useful) to the issue body. Bump \`updatedAt\` with every state change. When self-verification passes (reproduction green, regression tests pass), set \`state\` to \`done\` and append a comment stating what the proof covered and what it did not. Write your decision and diagnostic comments under \`## Comments\` in the \`### <ISO> · <source>\` format yourself; do not copy what the status runtime posts from linked sessions, or the same event lands in the file twice. Commit only when the maintainer confirms, with \`fixes LOCAL-<n>\` in the message per fixed issue. Never commit or push without being asked.
 
 Respond in the same language the user uses.`,
   },

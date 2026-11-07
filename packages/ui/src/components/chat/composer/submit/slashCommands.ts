@@ -58,6 +58,18 @@ const ideaVariables = (idea: string) => ({
     visible: { idea_block: idea ? `\n\nHere is my initial idea:\n${idea}` : '' },
 });
 
+/** `/local-issues <request>` carries the request into both prompts. */
+const localIssuesVariables = (argument: string) => ({
+    visible: { arguments_block: argument ? `\n\nHere is what I want to do:\n${argument}` : '' },
+    instructions: { arguments_block: argument ? `\n\nThe user's request for this invocation:\n${argument}` : '' },
+});
+
+/** `/issue-work <focus>` narrows the menu to that focus. */
+const issueWorkVariables = (argument: string) => ({
+    visible: { focus_block: argument ? ` Focus: ${argument}.` : '' },
+    instructions: { focus_block: argument ? ` ${argument}` : '' },
+});
+
 export const MAGIC_PROMPT_COMMANDS: readonly MagicPromptCommand[] = [
     {
         name: 'summary',
@@ -125,6 +137,22 @@ export const MAGIC_PROMPT_COMMANDS: readonly MagicPromptCommand[] = [
         instructionsPrompt: 'session.explore.instructions',
         errorToastKey: 'chat.chatInput.toast.exploreFailed',
         requires: 'session-or-draft',
+    },
+    {
+        name: 'local-issues',
+        visiblePrompt: 'session.localIssues.visible',
+        instructionsPrompt: 'session.localIssues.instructions',
+        errorToastKey: 'chat.chatInput.toast.localIssuesFailed',
+        requires: 'session-or-draft',
+        buildVariables: localIssuesVariables,
+    },
+    {
+        name: 'issue-work',
+        visiblePrompt: 'session.issueWork.visible',
+        instructionsPrompt: 'session.issueWork.instructions',
+        errorToastKey: 'chat.chatInput.toast.issueWorkFailed',
+        requires: 'session-or-draft',
+        buildVariables: issueWorkVariables,
     },
 ];
 

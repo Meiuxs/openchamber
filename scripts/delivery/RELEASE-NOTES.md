@@ -1,26 +1,32 @@
 新功能
-  - 侧边栏自定义：可重排 Chats/Pinned/In work/Projects 分区，还能按状态、类型、
-    关联 PR/议题、标题或项目新建过滤分区（显示菜单 > Customize sections）
-  - 聊天富组件：agent 直接在回复里画表格、图表、步骤和表单，表单选择作为回答回传
-  - Canary 更新通道：Settings > About 选 Stable/Canary，每晚构建，含 Android/iOS 包
-  - Agent memory：跨会话记忆工具，记录显示在项目知识的 Memory 页
-  - Workflows：agent 可执行带计划审批的多步任务
-  - Secrets 卡片：agent 索要 API key/密码时走聊天里的私密卡片，值不进对话记录
-  - 计划任务可在指定分支的独立 worktree 运行、可移到其他项目
-  - 设置 > Sessions 新增 Compaction 区：自动压缩、剩余空间、保留上下文、后台压缩
-  - Git：子模块/嵌套仓库项目可在 Git 和 Changes 视图切换选择
-  - Composer：Ctrl+Up 打开历史提示词搜索；Header 布局常驻上下文环与项目操作
+  - 代码评审：直接在 PR/MR 的 diff 中按行、范围或文件添加评论与修改建议，草稿跨设备同步
+    （支持 GitHub、GitLab、Gerrit、Gitea、Forgejo）
+  - GitHub PR 自动合并：检查运行中的 PR 可开启就绪后自动合并或入队，状态变更发送通知
+  - 会话迁移（Move session...）：支持将会话迁移到其他目录，或恢复目录已重命名/删除的会话
+  - 跨仓库关联条目：在应用内直接查看其他仓库的 Issue/PR 详情、检查与 diff，并附加到会话
+  - 聊天代码块一键运行：回复中的 bash/sh/shell/zsh 代码块可直接点击运行并回传输出
+  - 文件预览与表格编辑：直接预览 Office 文档（docx / pptx / xlsx）；支持打开超大表格/数据库、
+    排序与编辑表格（含公式）并与智能体协作编辑文档
+  - 主题、字号与快捷键：新增 Aurora 亮/暗主题，支持自定义聊天字号；Shortcuts 页面支持搜索、
+    绑定命令面板动作及清空快捷键；统计面板新增 Today（今日）范围
+  - 侧边栏与粘贴引用：所有列表展示目录结构；粘贴 session id 自动转为会话引用；/btw 支持切换
+    智能体、模型与思考深度
+  - 插件与扩展：支持不删除配置直接开关插件；支持扩展内嵌 OpenCode 插件与宿主服务通信
+  - Git：支持配置独立 SSH 地址的 Gitea / Forgejo 实例；Worktree 支持删除前执行 teardown 命令
 
 改进
-  - iOS 键盘联动重做，点击/抽屉/面板即时响应；手机侧边栏采用桌面外观
-  - 界面降噪：更少边框、状态色、统一阴影、弹簧动画；消息底栏显示模型/agent/耗时
-  - 长会话打开更快，长回答只绘制可见区域，iOS 上滚不再抖动
+  - 空闲与 Git 性能大幅优化：空闲时后台请求与 CPU 占用显著下降；Worktree 列表与侧边栏探测提速
+  - 移动端全面重做：统一顶栏、弹窗与搜索栏样式，重做手机端 Git 面板
+  - 添加项目弹窗重做：统一展示主目录、项目目录、克隆仓库与从 OpenCode 导入
+  - Goal Mode：引导智能体在单轮运行内完成全部目标（含要求的提交或 PR）
 
 修复（节选）
-  - Windows 网络共享路径在 OpenCode 下正常工作
-  - Files 的 CSV 预览只渲染可见行
-  - macOS arm64 按需 ad hoc 重签名；Intel 构建改用无 AVX 的 runner
+  - Worktrees：合并后自动归档恢复正常；智能体创建的 Worktree 自动执行项目 setup 命令；
+    SSH 远程自动推导 LFS 端点
+  - Git：新建聊天与打开 Git 面板不再触发安全密钥 PIN 弹窗；非 Latin-1（中文）目录请求头保真
+  - Chat：后台消息到达或打开 Activity 时保留等待回答的提问/表单；@ 文件列表不再卡顿；
+    Shift+Enter 自动延续有序列表编号
 
 说明
-  - 上述为上游 v2.6.0 内容；内网定制功能（本地议题、企业模式 Git http 白名单
-    环境变量、git 低版本兼容、GitLab 老实例探测）随本包一同交付
+  - 上述为上游 v2.6.1 及主分支最新内容；内网定制功能（本地议题、企业模式 Git http 白名单
+    环境变量、git 低版本兼容、GitLab 老实例探测、内网 npm 镜像配置）随本包一同交付

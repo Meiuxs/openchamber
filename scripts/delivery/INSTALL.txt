@@ -1,106 +1,123 @@
-OpenChamber npm deliverable
-===========================
-The version follows the tarball names (openchamber-*-<version>.tgz); the
-install scripts read it from the bundled SDK tarball, so a new release zip
-needs no script edit.
+﻿OpenChamber 离线交付包
+=======================
 
-Contents
-========
-- openchamber-web-<version>.tgz  @openchamber/web  - OpenChamber server + `openchamber` CLI
-- openchamber-sdk-<version>.tgz  @openchamber/sdk  - guest SDK, required dependency of the web package
-- RELEASE-NOTES.md               what this release changes
+版本号以 tarball 文件名为准（openchamber-*-<version>.tgz）。安装脚本从随包的
+SDK tarball 读取版本号，换新版本 zip 不需要改脚本。
 
-Requirements: Node.js >= 24.14.0 (engines field enforces this).
+包内容
+======
+- openchamber-web-<version>.tgz  @openchamber/web，服务端 + `openchamber` 命令，
+                                已把 @openchamber/sdk 打进包内
+- openchamber-sdk-<version>.tgz  @openchamber/sdk，带类型定义的 guest SDK
+- install.ps1 / install.sh       Windows / Linux、macOS 一键安装与原地更新脚本
+- RELEASE-NOTES.md               本版本更新内容
+- INSTALL.txt                    本说明
 
-Quick install / update (recommended)
-====================================
-Unzip this package and run the script for your platform.
+要求：Node.js >= 24.14.0（engines 字段会强制检查）。除包内自带的 SDK 外，
+其余运行时依赖（@opencode/client、@opencode/schema、express、node-pty 等）
+需要能从本机 npm 缓存或内部镜像解析，见“安装”。
 
-Windows (PowerShell 5.1 or later, install.ps1):
+快速安装 / 更新（推荐）
+=======================
+解压后按平台执行脚本。脚本会安装 tarball（缓存优先，失败回退常规安装）、
+创建数据目录、可选写入机器策略文件和环境变量、打印更新内容和启动命令；
+检测到已有安装时原地更新。
+
+Windows（PowerShell 5.1 及以上）：
 
     powershell -ExecutionPolicy Bypass -File .\install.ps1
 
-Linux / macOS (bash, install.sh):
+Linux / macOS（bash）：
 
     bash install.sh
 
-The script installs both tarballs (cache-first, with registry fallback),
-prepares the data directory, optionally writes the machine policy file and
-environment variables, prints the release notes (RELEASE-NOTES.md) and the
-service start commands, and works as an in-place updater when a previous
-OpenChamber is installed.
+参数说明：Windows 用 `install.ps1 -?`，Linux 用 `bash install.sh -h`。
+常用参数：
 
-Windows switches (Linux uses the --kebab-case form shown in `bash install.sh -h`):
+    -Registry / --registry <url>        通过内部 npm registry 安装
+    -NpmRegistry / --npm-registry <url> 固定内网 npm 镜像（写策略文件和环境变量）
+    -Organization / --organization <名> 生成企业模式策略
+    -PolicyFile / --policy-file <path>  放入组织提供的 policy.json（需管理员/root）
+    -Port / --port <n>                  持久化 OPENCHAMBER_PORT
+    -UiPassword / --ui-password <密码>  持久化 OPENCHAMBER_UI_PASSWORD
+    -OpenCodeHost / --opencode-host <url>
+    -OpenCodePort / --opencode-port <n> 连接外部 OpenCode 服务
+    -Start / --start                    安装后拉起服务
+    -DryRun / --dry-run                 只打印动作，不做修改
 
-    -Registry <url>       install through the internal npm registry instead of
-                          the offline cache path
-    -Organization <name>  write the machine policy file with
-                          enterpriseMode + organization (admin/root needed)
-    -NpmRegistry <url>    pin the intranet npm mirror (policy file + env)
-    -PolicyFile <path>    copy an org-provided policy.json into the
-                          system policy path
-    -Port <n>             persist OPENCHAMBER_PORT (user environment)
-    -UiPassword <pwd>     persist OPENCHAMBER_UI_PASSWORD (plain text; use
-                          --ui-password at start instead if you do not want
-                          it on disk)
-    -OpenCodeHost/-OpenCodePort   persist OPENCODE_HOST / OPENCODE_PORT
-    -Start                launch the server after installing
-    -DryRun / --dry-run   print what would happen, change nothing
+安装
+====
+web 包自带 @openchamber/sdk，只装 tarball 即可，不需要先发布 SDK，
+内部 registry 没收录 @openchamber/sdk 也不影响：
 
-Install
-=======
-The web tarball declares "@openchamber/sdk": "<version>" as an exact dependency,
-so the SDK package must be resolvable from a registry at install time.
+    npm install -g ./openchamber-web-<version>.tgz
 
-Option A - publish both into the internal npm registry (recommended for intranet):
+其余依赖仍要从 registry 解析。内网环境二选一：
 
-    npm publish openchamber-sdk-<version>.tgz --registry <internal-registry-url>
-    npm publish openchamber-web-<version>.tgz --registry <internal-registry-url>
-    npm install -g @openchamber/web --registry <internal-registry-url>
+A. 内部 npm 镜像（推荐）
+    npm install -g ./openchamber-web-<version>.tgz --registry <内部镜像地址>
 
-Option B - direct install from files, with the SDK already visible in the registry:
+B. 预填 npm 缓存
+    在能联网的机器上安装一次同一版本，把 npm 缓存目录复制到内网机器，
+    再用缓存优先模式安装：
+    npm install -g --prefer-offline ./openchamber-web-<version>.tgz
 
-    npm install -g .\openchamber-web-<version>.tgz
+也可以先把两个包发布到内部 registry，再按包名安装：
 
-Configuration
-=============
-1. Data directory (created on first start):
-   Default: %USERPROFILE%\.config\openchamber (Linux/macOS: ~/.config/openchamber)
-   Override with OPENCHAMBER_DATA_DIR.
-   Holds settings.json (app settings, written by the UI),
-   extensions\ (installed guest extensions), secrets\, remote-clients.json.
+    npm publish openchamber-sdk-<version>.tgz --registry <内部镜像地址>
+    npm publish openchamber-web-<version>.tgz --registry <内部镜像地址>
+    npm install -g @openchamber/web@<version> --registry <内部镜像地址>
 
-2. Machine policy file (optional; enables intranet/enterprise lockdown).
-   Fixed paths, most authoritative first:
-   - Windows: C:\ProgramData\OpenChamber\policy.json
-   - Linux:   /etc/openchamber/policy.json
-   - macOS:   /Library/Application Support/OpenChamber/policy.json
-   Recognized keys include: enterpriseMode, organization, npmRegistry
-   (intranet npm mirror), allowNetworkAccess, allowedExtensions,
-   allowLocalExtensions, modelsDevUrl, relayUrl, jev { url, ... },
-   opencodeBinary, skillsCatalogSources.
-   The file is re-read on every use (no restart needed) and a broken
-   policy fails closed: it enables enterprise mode but pins nothing.
+配置
+====
+1. 数据目录（首次启动自动创建）
+   默认：Windows %USERPROFILE%\.config\openchamber，Linux/macOS ~/.config/openchamber
+   可用 OPENCHAMBER_DATA_DIR 覆盖。
+   内含 settings.json（应用设置，由 UI 写入）、extensions\（已装插件）、
+   secrets\、remote-clients.json。
 
-3. Environment variables / CLI flags (all optional):
-   OPENCHAMBER_PORT or --port      listen port (default 3000)
-   OPENCHAMBER_HOST                bind address (default 127.0.0.1)
-   OPENCHAMBER_UI_PASSWORD or --ui-password
-                                   UI password; required when the server
-                                   is reachable from other machines
+2. 策略文件（配置内网环境与企业参数）
+   首次安装时，安装脚本会自动在用户数据目录生成带完整中文注释的 policy.json，
+   默认开启企业模式，并预留内网常见配置（可直接用普通文本编辑器修改并保存，热重载生效）。
+   安装包内随附 policy.example.json 样例文件供随时对照参考。
+
+   查找优先级：
+   - 用户数据目录（优先，无需管理员权限）：
+     Windows：%USERPROFILE%\.config\openchamber\policy.json（或 $OPENCHAMBER_DATA_DIR\policy.json）
+     Linux/macOS：~/.config/openchamber/policy.json（或 $OPENCHAMBER_DATA_DIR/policy.json）
+   - 系统管理员路径（回退）：
+     Windows：C:\ProgramData\OpenChamber\policy.json
+     Linux：/etc/openchamber/policy.json
+     macOS：/Library/Application Support/OpenChamber/policy.json
+
+   支持的键包括：enterpriseMode、organization、npmRegistry（内网 npm 镜像）、
+   allowedInsecureGitOrigins、modelsDevUrl、skillsCatalogSources、
+   allowNetworkAccess、allowedExtensions、allowLocalExtensions、
+   relayUrl、jev { url, ... }、opencodeBinary、hideBuiltinSkillCatalogs。
+   文件支持 // 与 /* */ 注释，每次使用时重新读取（改完不用重启）；内容损坏时按“全部关闭”处理。
+
+3. 环境变量 / 命令行参数（都可选）
+   OPENCHAMBER_PORT 或 --port       监听端口（默认 3000）
+   OPENCHAMBER_HOST                 绑定地址（默认 127.0.0.1）
+   OPENCHAMBER_UI_PASSWORD 或 --ui-password
+                                    UI 密码；对其他机器可达时必须设置
    OPENCODE_HOST / OPENCODE_PORT / OPENCODE_SKIP_START
-                                   connect to an external OpenCode server
-   OPENCHAMBER_NPM_REGISTRY        npm registry used for plugin metadata
-                                   and version checks (intranet mirror)
+                                    连接外部 OpenCode 服务
+   OPENCHAMBER_NPM_REGISTRY         插件元数据与版本检查使用的 npm 镜像
    OPENCHAMBER_TUNNEL_MODE / OPENCHAMBER_TUNNEL_TOKEN / OPENCHAMBER_TUNNEL_CONFIG
-                                   Cloudflare tunnel options (refused in
-                                   enterprise mode)
+                                    Cloudflare tunnel 选项（企业模式下拒绝启用）
 
-Start
-=====
-    openchamber                                   # port 3000, localhost only
-    openchamber serve --lan --port 3000 --ui-password <password>
-    OPENCODE_HOST=https://host:4096 OPENCODE_SKIP_START=true openchamber
+启动
+====
+    openchamber                                   # 3000 端口，仅本机访问
+    openchamber serve --lan --port 3000 --ui-password <密码>
+    OPENCODE_HOST=http://host:4096 OPENCODE_SKIP_START=true openchamber
 
-OpenCode must be running (opencode serve) or OpenChamber starts a managed
-instance itself. After start, open http://localhost:3000.
+开机自启：openchamber startup enable --port 3000
+（Linux 写 systemd 用户服务，macOS 写 LaunchAgent，Windows 注册计划任务。）
+
+自己写系统级 systemd 单元时必须用 serve --foreground 启动：默认模式下 CLI
+派生后台进程后立即退出，配合 Restart=always 会不停拉起新实例。
+
+OpenCode 需已在运行（opencode serve），或由 OpenChamber 自行拉起托管实例。
+启动后打开 http://localhost:3000。

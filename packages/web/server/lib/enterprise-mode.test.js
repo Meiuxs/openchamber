@@ -13,6 +13,7 @@ import {
   readEnterprisePolicy,
   readNpmRegistry,
   readPinnedModelsDevUrl,
+  userPolicyFilePath,
   watchEnterprisePolicy,
 } from './enterprise-mode.js';
 
@@ -114,6 +115,29 @@ describe('enterprise policy', () => {
       npmRegistry: null,
       skillsCatalogSources: [],
     });
+  });
+
+  it('supports single-line, multi-line comments and trailing commas in policy.json', () => {
+    const content = `
+      // 头部注释：企业策略配置
+      {
+        /* 模式控制 */
+        "enterpriseMode": true,
+        "organization": "Acme Corp", // 行尾注释
+        // URL 中包含 // 不应被当成注释截断
+        "npmRegistry": "http://nexus.corp.internal/repository/npm/",
+        "allowedInsecureGitOrigins": [
+          "http://gitlab.corp.internal:8080", // 列表项注释
+        ],
+      }
+    `;
+    const policy = readEnterprisePolicy(machine({
+      [LINUX_POLICY]: content,
+    }));
+    expect(policy.enterpriseMode).toBe(true);
+    expect(policy.organization).toBe('Acme Corp');
+    expect(policy.npmRegistry).toBe('http://nexus.corp.internal/repository/npm/');
+    expect(policy.allowedInsecureGitOrigins).toEqual(['http://gitlab.corp.internal:8080']);
   });
 
   describe('pinned model catalog URL', () => {
@@ -451,15 +475,53 @@ describe('enterprise policy', () => {
   });
 
   describe('file location', () => {
-    it('is fixed per platform', () => {
-      expect(policyFilePaths({ platform: 'darwin', env: {} })).toEqual(['/Library/Application Support/OpenChamber/policy.json']);
-      expect(policyFilePaths({ platform: 'linux', env: {} })).toEqual([LINUX_POLICY]);
-      expect(policyFilePaths({ platform: 'win32', env: {} })).toEqual(['C:\\ProgramData\\OpenChamber\\policy.json']);
+    it('checks user config directory first, then system path per platform', () => {
+      const darwinPaths = policyFilePaths({ platform: 'darwin', env: { HOME: '/Users/test' } });
+      expect(darwinPaths).toEqual([
+        '/Users/test/.config/openchamber/policy.json',
+        '/Library/Application Support/OpenChamber/policy.json',
+      ]);
+
+      const linuxPaths = policyFilePaths({ platform: 'linux', env: { HOME: '/home/test' } });
+      expect(linuxPaths).toEqual([
+        '/home/test/.config/openchamber/policy.json',
+        LINUX_POLICY,
+      ]);
+
+      const winPaths = policyFilePaths({ platform: 'win32', env: { USERPROFILE: 'C:\\Users\\test' } });
+      expect(winPaths).toEqual([
+        'C:\\Users\\test\\.config\\openchamber\\policy.json',
+        'C:\\ProgramData\\OpenChamber\\policy.json',
+      ]);
     });
 
-    it('on Windows reads C:\\ProgramData first, so redirecting ProgramData cannot hide the policy', () => {
-      const env = { ProgramData: 'D:\\Elsewhere' };
+    it('respects OPENCHAMBER_DATA_DIR for the user policy path', () => {
+      const paths = policyFilePaths({
+        platform: 'linux',
+        env: { OPENCHAMBER_DATA_DIR: '/custom/data/dir' },
+      });
+      expect(paths[0]).toBe('/custom/data/dir/policy.json');
+      expect(userPolicyFilePath({ platform: 'linux', env: { OPENCHAMBER_DATA_DIR: '/custom/data/dir' } }))
+        .toBe('/custom/data/dir/policy.json');
+    });
+
+    it('reads policy from user config directory without requiring administrator/root paths', () => {
+      const userPolicy = '/home/test/.config/openchamber/policy.json';
+      const options = machine({
+        [userPolicy]: '{"enterpriseMode": true, "organization": "UserOrg", "modelsDevUrl": "http://models.corp/api.json"}',
+      }, { platform: 'linux', env: { HOME: '/home/test' } });
+
+      const policy = readEnterprisePolicy(options);
+      expect(policy.enterpriseMode).toBe(true);
+      expect(policy.organization).toBe('UserOrg');
+      expect(policy.modelsDevUrl).toBe('http://models.corp/api.json');
+      expect(policy.source).toBe('policy-file');
+    });
+
+    it('on Windows reads user policy, then C:\\ProgramData, then ProgramData env redirect', () => {
+      const env = { USERPROFILE: 'C:\\Users\\test', ProgramData: 'D:\\Elsewhere' };
       expect(policyFilePaths({ platform: 'win32', env })).toEqual([
+        'C:\\Users\\test\\.config\\openchamber\\policy.json',
         'C:\\ProgramData\\OpenChamber\\policy.json',
         'D:\\Elsewhere\\OpenChamber\\policy.json',
       ]);

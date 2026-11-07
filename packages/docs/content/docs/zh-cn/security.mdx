@@ -40,17 +40,18 @@ passkey 与当前密码绑定。如果你更改或移除密码，已保存的 pa
 
 如果你的团队只能把对话内容发送给你在 OpenCode 中配置的模型提供商，请开启企业模式。有两种方式，任选其一即可。
 
-### 机器上的策略文件
+### 策略文件
 
-在你管理的笔记本电脑上应使用这种方式。把一个名为 `policy.json` 的文件放到只有管理员才能写入的文件夹中：
+OpenChamber 会优先在**当前用户的数据目录**中查找 `policy.json`，普通用户即可维护与修改，无需管理员权限；若用户目录下不存在，再回退到系统管理员目录：
 
-| 系统 | 路径 |
-|---|---|
-| macOS | `/Library/Application Support/OpenChamber/policy.json` |
-| Windows | `C:\ProgramData\OpenChamber\policy.json` |
-| Linux | `/etc/openchamber/policy.json` |
+| 类型 | 系统 | 路径 |
+|---|---|---|
+| **用户目录（优先，无需管理员权限）** | 通用 / 跨平台 | `~/.config/openchamber/policy.json`<br/>*(Windows: `%USERPROFILE%\.config\openchamber\policy.json`，或 `$OPENCHAMBER_DATA_DIR/policy.json`)* |
+| 系统目录（回退） | macOS | `/Library/Application Support/OpenChamber/policy.json` |
+| 系统目录（回退） | Windows | `C:\ProgramData\OpenChamber\policy.json` |
+| 系统目录（回退） | Linux | `/etc/openchamber/policy.json` |
 
-路径与 OpenChamber 的安装方式无关。桌面应用、通过 npm 启动的 Web 服务器、CLI 和 VS Code 扩展都读取同一个文件。你可以用设备管理工具（Jamf、Intune 等）分发它。对于在 Docker 中运行的服务器，把文件挂载到 Linux 路径即可。
+路径与 OpenChamber 的安装方式无关。桌面应用、通过 npm 启动的 Web 服务器、CLI 和 VS Code 扩展都读取同一个文件。对于在 Docker 中运行的服务器，把文件挂载到 Linux 路径即可。
 
 ```json
 {

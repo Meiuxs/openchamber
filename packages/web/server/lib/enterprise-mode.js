@@ -145,22 +145,57 @@ import { z } from 'zod';
 
 const WINDOWS_PROGRAM_DATA = 'C:\\ProgramData';
 
+const defaultHomedir = () => os.homedir();
+
 /**
- * Where the machine policy may live, most authoritative first. The paths are
- * fixed on purpose: a location a user could redirect (an environment variable,
- * a setting) would let them point it at an empty file. On Windows the
- * `ProgramData` variable is consulted only after the fixed location, so
- * redirecting it cannot hide a policy the administrator placed there.
+ * Resolves the user-writable policy file path under the OpenChamber data directory
+ * (default `~/.config/openchamber/policy.json`, or `$OPENCHAMBER_DATA_DIR/policy.json`).
  */
-export const policyFilePaths = ({ platform = process.platform, env = process.env } = {}) => {
-  if (platform === 'darwin') return ['/Library/Application Support/OpenChamber/policy.json'];
+export const userPolicyFilePath = ({ platform = process.platform, env = process.env, homedir = defaultHomedir } = {}) => {
+  const p = platform === 'win32' ? path.win32 : path.posix;
+  const dataDir = (env.OPENCHAMBER_DATA_DIR ?? '').trim();
+  if (dataDir) {
+    return p.join(p.resolve(dataDir), 'policy.json');
+  }
+  let home = platform === 'win32'
+    ? (env.USERPROFILE ?? env.HOME ?? '').trim()
+    : (env.HOME ?? '').trim();
+  if (!home) {
+    if (platform === process.platform) {
+      home = typeof homedir === 'function' ? homedir() : os.homedir();
+    } else {
+      home = platform === 'win32' ? 'C:\\Users\\user' : '/home/user';
+    }
+  }
+  return p.join(home, '.config', 'openchamber', 'policy.json');
+};
+
+/**
+ * Where the policy file may live, checked in order:
+ * 1. The user configuration directory (`~/.config/openchamber/policy.json` or
+ *    `OPENCHAMBER_DATA_DIR`), which requires no administrator/root privileges;
+ * 2. System administrator paths (`/Library/Application Support/...`,
+ *    `C:\ProgramData\...`, `/etc/openchamber/...`) for machine-level policies.
+ */
+export const policyFilePaths = ({ platform = process.platform, env = process.env, homedir = defaultHomedir } = {}) => {
+  const userPath = userPolicyFilePath({ platform, env, homedir });
+  const paths = [userPath];
+  if (platform === 'darwin') {
+    paths.push('/Library/Application Support/OpenChamber/policy.json');
+    return paths;
+  }
   if (platform === 'win32') {
     const fixed = path.win32.join(WINDOWS_PROGRAM_DATA, 'OpenChamber', 'policy.json');
     const programData = (env.ProgramData ?? '').trim();
     const fromEnv = programData ? path.win32.join(programData, 'OpenChamber', 'policy.json') : null;
-    return fromEnv && fromEnv.toLowerCase() !== fixed.toLowerCase() ? [fixed, fromEnv] : [fixed];
+    paths.push(fixed);
+    if (fromEnv && fromEnv.toLowerCase() !== fixed.toLowerCase()) {
+      paths.push(fromEnv);
+    }
+    return paths;
   }
-  return ['/etc/openchamber/policy.json'];
+  paths.push('/etc/openchamber/policy.json');
+  return paths;
 };
 
 // A blank string counts as unset, so a template with empty fields pins nothing.
@@ -204,12 +239,25 @@ const policyFileSchema = z.object({
   path: ['jev'],
 });
 
+/**
+ * Strips single-line (`//`) and multi-line (`/* ... * /`) comments and trailing
+ * commas from JSON text, allowing human-friendly annotated policy files while
+ * preserving string literals (such as URLs containing `//`).
+ */
+export const stripJsonComments = (text) => {
+  const withoutComments = String(text).replace(/("(?:\\.|[^"\\])*")|\/\/[^\r\n]*|\/\*[\s\S]*?\*\//g, (match, stringLiteral) =>
+    stringLiteral ?? ''
+  );
+  return withoutComments.replace(/,(\s*[}\]])/g, '$1');
+};
+
 /** The file's content; throws an Error saying what is wrong with it. */
 const parsePolicyFile = (text) => {
   let raw;
   try {
     // Windows PowerShell 5 writes UTF-8 with a byte-order mark.
-    raw = JSON.parse(text.replace(/^\uFEFF/, ''));
+    const cleaned = stripJsonComments(text.replace(/^\uFEFF/, ''));
+    raw = JSON.parse(cleaned);
   } catch (error) {
     throw new Error(`not valid JSON (${error.message})`);
   }

@@ -103,7 +103,9 @@
 
 ### 4.2 `policy.json`
 
-路径固定且不在仓库里：Linux `/etc/openchamber/policy.json`，Windows `C:\ProgramData\OpenChamber\policy.json`，macOS `/Library/Application Support/OpenChamber/policy.json`。容器里请挂载进去。
+查找顺序（优先读取用户数据目录，便于普通用户维护；不存在时回退到系统路径）：
+1. **用户目录（推荐，无需管理员/root）**：`~/.config/openchamber/policy.json`（Windows 为 `%USERPROFILE%\.config\openchamber\policy.json`；若设置了 `OPENCHAMBER_DATA_DIR` 则为该目录下的 `policy.json`）。
+2. **系统目录（可选）**：Linux `/etc/openchamber/policy.json`，Windows `C:\ProgramData\OpenChamber\policy.json`，macOS `/Library/Application Support/OpenChamber/policy.json`。容器里可直接将配置文件挂载到上述任一路径。
 
 内网最小集：
 

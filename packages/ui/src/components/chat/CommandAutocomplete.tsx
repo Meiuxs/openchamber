@@ -38,7 +38,7 @@ export interface CommandInfo {
 // these names is dropped before it reaches the list.
 const LOCAL_COMMAND_NAMES = [
   'init', 'review', 'undo', 'redo', 'timeline', 'compact', 'fork', 'btw', 'summary', 'workspace-review', 'handoff-review',
-  'plan-feature', 'craft-goal', 'schedule-task', 'catch-up', 'debug', 'weigh', 'explore',
+  'plan-feature', 'craft-goal', 'schedule-task', 'catch-up', 'debug', 'weigh', 'explore', 'local-issues', 'issue-work',
 ];
 
 export interface CommandAutocompleteHandle {
@@ -197,6 +197,14 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
       ),
       ...(canStartSessionCommand
         ? [{ id: 'openchamber:explore', name: 'explore', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.exploreDescription'), isOpenChamber: true }]
+        : []
+      ),
+      ...(canStartSessionCommand
+        ? [{ id: 'openchamber:local-issues', name: 'local-issues', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.localIssuesDescription'), isOpenChamber: true }]
+        : []
+      ),
+      ...(canStartSessionCommand
+        ? [{ id: 'openchamber:issue-work', name: 'issue-work', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.issueWorkDescription'), isOpenChamber: true }]
         : []
       ),
     ];
