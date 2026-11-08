@@ -24,6 +24,9 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { usageToolI18n } from './usage-tool.i18n';
+import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
+import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
 import { agentStatusI18n } from './agent-status.i18n';
 import { selectionApprovalI18n } from './selection-approval.i18n';
 import { snippetsI18n } from './snippets.i18n';
@@ -716,6 +719,9 @@ export const dict = {
   'chat.backgroundShells.stopAll': 'עצור הכול',
   'chat.backgroundShells.stopAria': 'עצור את {command}',
   'chat.backgroundShells.elapsed': 'פועלת כבר {duration}',
+  'chat.backgroundWork.aria': 'עבודה ברקע',
+  'chat.backgroundWork.count': 'ברקע: {count}',
+  'chat.backgroundImages.generating': 'יוצר תמונה',
   'sessions.sidebar.session.menu.share': 'שתף',
   'sessions.sidebar.session.menu.copied': 'הועתק',
   'sessions.sidebar.session.menu.copyLink': 'העתק קישור',
@@ -755,6 +761,7 @@ export const dict = {
   'sessions.sidebar.session.status.unread': 'עדכונים שלא נקראו',
   'sessions.sidebar.session.status.backgroundSubagent': 'סוכן משנה פועל ברקע',
   'sessions.sidebar.session.status.backgroundCommand': 'פקודה פועלת ברקע',
+  'sessions.sidebar.session.status.backgroundImage': 'תמונה נוצרת ברקע',
   'sessions.sidebar.session.status.waitingOnPullRequest': 'ממתין לבדיקות או לסקירה',
   'sessions.sidebar.session.status.pinned': 'הפעלה מוצמדת',
   'sessions.sidebar.session.status.movingToWorktree': 'ההפעלה מועברת לעץ עבודה חדש',
@@ -1192,6 +1199,9 @@ export const dict = {
   'magicPrompts.toast.loadFailed': 'לא ניתן לטעון את הנחיות הקסם. דבר לא נשלח.',
   'gitView.empty.notGitRepository': 'התיקייה הזו אינה מאגר Git',
   'gitView.empty.notGitRepositoryDescription': 'אפשר לאתחל Git בתיקייה הזו או לפתוח מאגר.',
+  'gitView.empty.repositoryUnreadable': 'Git לא הצליח לקרוא את התיקייה הזו',
+  'gitView.empty.repositoryUnreadableDescription': 'זה מה ש-Git אמר. אפשר לתקן ולנסות שוב.',
+  'gitView.empty.repositoryUnreadableRetry': 'לנסות שוב',
   'gitView.empty.selectSessionOrDirectory': 'יש לבחור הפעלה או תיקייה כדי לראות את מצב Git',
   'gitView.empty.worktreeFeaturesUnavailable': 'תכונות עץ העבודה לא זמינות במצב סביבת העבודה הזה.',
   'gitView.empty.worktreeSetupDescription': 'מסיים את הגדרת עץ העבודה ומכין את מצב המאגר.',
@@ -1768,6 +1778,7 @@ export const dict = {
   'contextSidebar.empty.openSession': 'יש לפתוח הפעלה כדי לבדוק את ההקשר.',
   'contextSidebar.section.context': 'הקשר',
   'contextSidebar.section.lastAssistantMessage': 'ההודעה האחרונה של העוזר',
+  'contextSidebar.section.sessionTotals': 'סיכום ההפעלה',
   'contextSidebar.section.rawMessages': 'הודעות גולמיות',
   'contextSidebar.context.percentUsed': '{percent}% בשימוש',
   'contextSidebar.breakdown.user': 'משתמש',
@@ -2434,6 +2445,10 @@ export const dict = {
   'chat.commandAutocomplete.command.debugDescription': 'חקירה מודרכת של שורש הבאג לפני הצעת תיקון.',
   'chat.commandAutocomplete.command.weighDescription': 'השוואה בין 2-3 גישות, עם יתרונות, חסרונות והמלצה, לפני שמחליטים.',
   'chat.commandAutocomplete.command.exploreDescription': 'היכרות עם בסיס הקוד: סיור כללי בארכיטקטורה ובחלקים העיקריים.',
+  'chat.commandAutocomplete.command.localIssuesDescription': 'Manage local issues (.issues/ markdown files): create, find, update, delete.',
+  'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
+  'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
+  'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
   'chat.commandAutocomplete.command.btwDescription': 'שאלה צדדית בהפעלת משנה זמנית, בלי להסיט את הצ\'אט הזה.',
   'chat.commandAutocomplete.command.forkDescription': 'פיצול הצ\'אט מהתגובה האחרונה שהסתיימה והמשך שם; טקסט אחרי /fork נשלח להפעלה המפוצלת.',
   'chat.commandAutocomplete.empty': 'לא נמצאו פקודות',
@@ -3917,6 +3932,9 @@ export const dict = {
   ...heapSnapshotI18n.he,
   ...consoleBudgetsI18n.he,
   ...imageToolI18n.he,
+  ...usageToolI18n.he,
+  ...openchamberToolOutputI18n.he,
+  ...opencodeToolOutputI18n.he,
   ...agentStatusI18n.he,
   ...snippetsI18n.he,
   ...sidebarWorkI18n.he,

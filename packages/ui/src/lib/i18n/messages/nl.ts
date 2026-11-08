@@ -24,6 +24,9 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { usageToolI18n } from './usage-tool.i18n';
+import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
+import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
 import { agentStatusI18n } from './agent-status.i18n';
 import { selectionApprovalI18n } from './selection-approval.i18n';
 import { snippetsI18n } from './snippets.i18n';
@@ -199,6 +202,9 @@ export const dict = {
   ...heapSnapshotI18n.nl,
   ...consoleBudgetsI18n.nl,
   ...imageToolI18n.nl,
+  ...usageToolI18n.nl,
+  ...openchamberToolOutputI18n.nl,
+  ...opencodeToolOutputI18n.nl,
   ...agentStatusI18n.nl,
   ...snippetsI18n.nl,
   ...sidebarWorkI18n.nl,
@@ -776,6 +782,9 @@ export const dict = {
   'chat.backgroundShells.stopAll': 'Alles stoppen',
   'chat.backgroundShells.stopAria': '{command} stoppen',
   'chat.backgroundShells.elapsed': 'Loopt al {duration}',
+  'chat.backgroundWork.aria': 'Werk op de achtergrond',
+  'chat.backgroundWork.count': 'Op de achtergrond: {count}',
+  'chat.backgroundImages.generating': 'Afbeelding wordt gemaakt',
   'sessions.sidebar.session.menu.share': 'Delen',
   'sessions.sidebar.session.menu.copied': 'Gekopieerd',
   'sessions.sidebar.session.menu.copyLink': 'Link kopiëren',
@@ -815,6 +824,7 @@ export const dict = {
   'sessions.sidebar.session.status.unread': 'Ongelezen updates',
   'sessions.sidebar.session.status.backgroundSubagent': 'Subagent draait op de achtergrond',
   'sessions.sidebar.session.status.backgroundCommand': 'Opdracht draait op de achtergrond',
+  'sessions.sidebar.session.status.backgroundImage': 'Afbeelding wordt op de achtergrond gemaakt',
   'sessions.sidebar.session.status.waitingOnPullRequest': 'Wacht op controles of een review',
   'sessions.sidebar.session.status.pinned': 'Vastgezette sessie',
   'sessions.sidebar.session.status.movingToWorktree': 'Sessie wordt verplaatst naar een nieuwe worktree',
@@ -1253,6 +1263,9 @@ export const dict = {
   'magicPrompts.toast.loadFailed': 'Magic Prompts konden niet worden geladen. Er is niets verzonden.',
   'gitView.empty.notGitRepository': 'Deze map is geen Git-repository',
   'gitView.empty.notGitRepositoryDescription': 'Initialiseer Git in deze map of open een repository.',
+  'gitView.empty.repositoryUnreadable': 'Git kon deze map niet lezen',
+  'gitView.empty.repositoryUnreadableDescription': 'Dit is wat Git meldde. Los het op en probeer het opnieuw.',
+  'gitView.empty.repositoryUnreadableRetry': 'Opnieuw proberen',
   'gitView.empty.selectSessionOrDirectory': 'Selecteer een sessie of map om de Git-status te bekijken',
   'gitView.empty.worktreeFeaturesUnavailable': 'Worktree-functies zijn niet beschikbaar in deze werkruimt-modus.',
   'gitView.empty.worktreeSetupDescription': 'Worktree-inrichting wordt afgerond en de repositorystatus wordt voorbereid.',
@@ -1844,6 +1857,7 @@ export const dict = {
   'contextSidebar.empty.openSession': 'Open een sessie om de context te bekijken.',
   'contextSidebar.section.context': 'Context',
   'contextSidebar.section.lastAssistantMessage': 'Laatste assistentbericht',
+  'contextSidebar.section.sessionTotals': 'Sessietotalen',
   'contextSidebar.section.rawMessages': 'Ruwe berichten',
   'contextSidebar.context.percentUsed': '{percent}% gebruikt',
   'contextSidebar.breakdown.user': 'Gebruiker',
@@ -2518,6 +2532,10 @@ export const dict = {
   'chat.commandAutocomplete.command.debugDescription': 'Begeleid onderzoek naar de hoofdoorzaak van een bug, vóór het voorstellen van een oplossing.',
   'chat.commandAutocomplete.command.weighDescription': 'Weeg 2-3 aanpakken met afwegingen en een aanbeveling af voordat u commit.',
   'chat.commandAutocomplete.command.exploreDescription': 'Krijg greep op deze codebase: een rondleiding op hoog niveau door de architectuur en de belangrijkste onderdelen.',
+  'chat.commandAutocomplete.command.localIssuesDescription': 'Manage local issues (.issues/ markdown files): create, find, update, delete.',
+  'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
+  'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
+  'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
   'chat.commandAutocomplete.command.btwDescription': 'Stel een bijvraag in een tijdelijke subsessie zonder deze chat uit de koers te halen.',
   'chat.commandAutocomplete.command.forkDescription': 'Fork deze chat vanaf het laatst afgeronde antwoord en ga daar verder; tekst na /fork wordt naar de fork gestuurd.',
   'chat.commandAutocomplete.empty': 'Geen opdrachten gevonden',

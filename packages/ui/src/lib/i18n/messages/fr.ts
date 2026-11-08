@@ -24,6 +24,9 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { usageToolI18n } from './usage-tool.i18n';
+import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
+import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
 import { agentStatusI18n } from './agent-status.i18n';
 import { selectionApprovalI18n } from './selection-approval.i18n';
 import { snippetsI18n } from './snippets.i18n';
@@ -199,6 +202,9 @@ export const dict = {
   ...heapSnapshotI18n.fr,
   ...consoleBudgetsI18n.fr,
   ...imageToolI18n.fr,
+  ...usageToolI18n.fr,
+  ...openchamberToolOutputI18n.fr,
+  ...opencodeToolOutputI18n.fr,
   ...agentStatusI18n.fr,
   ...snippetsI18n.fr,
   ...sidebarWorkI18n.fr,
@@ -614,6 +620,9 @@ export const dict = {
   'chat.backgroundShells.stopAll': 'Tout arrêter',
   'chat.backgroundShells.stopAria': 'Arrêter {command}',
   'chat.backgroundShells.elapsed': 'En cours depuis {duration}',
+  'chat.backgroundWork.aria': 'Travail en arrière-plan',
+  'chat.backgroundWork.count': 'En arrière-plan : {count}',
+  'chat.backgroundImages.generating': 'Génération d\'une image',
   'sessions.sidebar.session.menu.share': 'Partager',
   'sessions.sidebar.session.menu.copied': 'Copié',
   'sessions.sidebar.session.menu.copyLink': 'Copier le lien',
@@ -653,6 +662,7 @@ export const dict = {
   'sessions.sidebar.session.status.unread': 'Mises à jour non lues',
   'sessions.sidebar.session.status.backgroundSubagent': 'Sous-agent en cours en arrière-plan',
   'sessions.sidebar.session.status.backgroundCommand': 'Commande en cours en arrière-plan',
+  'sessions.sidebar.session.status.backgroundImage': 'Image en cours de génération en arrière-plan',
   'sessions.sidebar.session.status.waitingOnPullRequest': "En attente de vérifications ou d'une revue",
   'sessions.sidebar.session.status.pinned': 'Session épinglée',
   'sessions.sidebar.session.status.movingToWorktree': 'Déplacement de la session vers un nouveau worktree',
@@ -1083,6 +1093,9 @@ export const dict = {
   'magicPrompts.toast.loadFailed': 'Impossible de charger les prompts magiques. Rien n’a été envoyé.',
   'gitView.empty.notGitRepository': 'Ce répertoire n\'est pas un dépôt Git',
   'gitView.empty.notGitRepositoryDescription': 'Initialisez Git dans ce répertoire ou ouvrez un dépôt.',
+  'gitView.empty.repositoryUnreadable': 'Git n\'a pas pu lire ce dossier',
+  'gitView.empty.repositoryUnreadableDescription': 'Voici ce que Git a répondu. Corrigez le problème, puis réessayez.',
+  'gitView.empty.repositoryUnreadableRetry': 'Réessayer',
   'gitView.empty.selectSessionOrDirectory': 'Sélectionnez une session ou un répertoire pour afficher l\'état de Git',
   'gitView.empty.worktreeFeaturesUnavailable': 'Les fonctionnalités Worktree ne sont pas disponibles dans ce mode d’espace de travail.',
   'gitView.empty.worktreeSetupDescription': 'Terminez la configuration du worktree et préparez l\'état du dépôt.',
@@ -1603,6 +1616,7 @@ export const dict = {
   'contextSidebar.empty.openSession': 'Ouvrez une session pour inspecter le contexte.',
   'contextSidebar.section.context': 'Contexte',
   'contextSidebar.section.lastAssistantMessage': 'Dernier message de l\'assistant',
+  'contextSidebar.section.sessionTotals': 'Totaux de la session',
   'contextSidebar.section.rawMessages': 'Messages bruts',
   'contextSidebar.context.percentUsed': '{percent}% utilisé',
   'contextSidebar.breakdown.user': 'Utilisateur',
@@ -3553,6 +3567,10 @@ export const dict = {
   'chat.commandAutocomplete.command.btwDescription': 'Posez une question annexe dans une session enfant temporaire sans interrompre cette conversation.',
   'chat.commandAutocomplete.command.forkDescription': 'Dupliquer cette conversation à partir de la dernière réponse terminée et continuer là-bas ; le texte après /fork est envoyé à la copie.',
   'chat.commandAutocomplete.command.exploreDescription': 'Vous orienter dans ce codebase : tour d’ensemble de l’architecture et des parties principales.',
+  'chat.commandAutocomplete.command.localIssuesDescription': 'Manage local issues (.issues/ markdown files): create, find, update, delete.',
+  'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
+  'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
+  'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
   'chat.questionCard.submitFailed': 'Impossible d’envoyer la réponse',
   'chat.questionCard.dismissFailed': 'Impossible d’ignorer la question',
   'chat.questionCard.noLongerPending': 'Cette question n’attend plus de réponse.',

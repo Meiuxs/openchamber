@@ -25,6 +25,9 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { usageToolI18n } from './usage-tool.i18n';
+import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
+import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
 import { agentStatusI18n } from './agent-status.i18n';
 import { selectionApprovalI18n } from './selection-approval.i18n';
 import { snippetsI18n } from './snippets.i18n';
@@ -210,6 +213,9 @@ export const dict: Record<I18nKey, string> = {
   ...heapSnapshotI18n.es,
   ...consoleBudgetsI18n.es,
   ...imageToolI18n.es,
+  ...usageToolI18n.es,
+  ...openchamberToolOutputI18n.es,
+  ...opencodeToolOutputI18n.es,
   ...agentStatusI18n.es,
   ...snippetsI18n.es,
   ...sidebarWorkI18n.es,
@@ -786,6 +792,9 @@ export const dict: Record<I18nKey, string> = {
   "chat.backgroundShells.stopAll": "Detener todos",
   "chat.backgroundShells.stopAria": "Detener {command}",
   "chat.backgroundShells.elapsed": "En ejecución desde hace {duration}",
+  "chat.backgroundWork.aria": "Trabajo en segundo plano",
+  "chat.backgroundWork.count": "En segundo plano: {count}",
+  "chat.backgroundImages.generating": "Generando una imagen",
   "sessions.sidebar.session.menu.share": "Compartir",
   "sessions.sidebar.session.menu.copied": "Copiado",
   "sessions.sidebar.session.menu.copyLink": "Copiar enlace",
@@ -825,6 +834,7 @@ export const dict: Record<I18nKey, string> = {
   "sessions.sidebar.session.status.unread": "Actualizaciones no leídas",
   "sessions.sidebar.session.status.backgroundSubagent": "Subagente en ejecución en segundo plano",
   "sessions.sidebar.session.status.backgroundCommand": "Comando en ejecución en segundo plano",
+  "sessions.sidebar.session.status.backgroundImage": "Imagen generándose en segundo plano",
   'sessions.sidebar.session.status.waitingOnPullRequest': 'Esperando comprobaciones o una revisión',
   "sessions.sidebar.session.status.pinned": "Sesión anclada",
   "sessions.sidebar.session.status.movingToWorktree": "Moviendo la sesión a un worktree nuevo",
@@ -1253,6 +1263,9 @@ export const dict: Record<I18nKey, string> = {
   "magicPrompts.toast.loadFailed": "No se pudieron cargar los prompts mágicos. No se envió nada.",
   "gitView.empty.notGitRepository": "Este directorio no es un repositorio Git",
   "gitView.empty.notGitRepositoryDescription": "Inicializa Git en este directorio o abre un repositorio.",
+  "gitView.empty.repositoryUnreadable": "Git no pudo leer esta carpeta",
+  "gitView.empty.repositoryUnreadableDescription": "Esto es lo que dijo Git. Corrígelo y vuelve a intentarlo.",
+  "gitView.empty.repositoryUnreadableRetry": "Reintentar",
   "gitView.empty.selectSessionOrDirectory": "Selecciona una sesión o directorio para ver el estado de Git",
   "gitView.empty.worktreeFeaturesUnavailable": "Las características de worktree no están disponibles en este modo de espacio de trabajo.",
   "gitView.empty.worktreeSetupDescription": "Finalizando la configuración de worktree y preparando el estado del repositorio.",
@@ -1805,6 +1818,7 @@ export const dict: Record<I18nKey, string> = {
   "contextSidebar.empty.openSession": "Abrir una sesión para inspeccionar el contexto.",
   "contextSidebar.section.context": "Contexto",
   "contextSidebar.section.lastAssistantMessage": "Último mensaje del asistente",
+  "contextSidebar.section.sessionTotals": "Totales de la sesión",
   "contextSidebar.section.rawMessages": "Mensajes brutos",
   "contextSidebar.context.percentUsed": "{percent}% usado",
   "contextSidebar.breakdown.user": "Usuario",
@@ -2488,6 +2502,10 @@ export const dict: Record<I18nKey, string> = {
   'chat.commandAutocomplete.command.btwDescription': 'Haz una pregunta paralela en una sesión hija temporal sin desviar este chat.',
   'chat.commandAutocomplete.command.forkDescription': 'Bifurca este chat desde la última respuesta terminada y continúa allí; el texto tras /fork se envía a la bifurcación.',
   "chat.commandAutocomplete.command.exploreDescription": "Oriéntate en este código: un recorrido general de la arquitectura y las partes principales.",
+  "chat.commandAutocomplete.command.localIssuesDescription": "Manage local issues (.issues/ markdown files): create, find, update, delete.",
+  "chat.commandAutocomplete.command.issueWorkDescription": "Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.",
+  "chat.chatInput.toast.localIssuesFailed": "Failed to run the local issues command",
+  "chat.chatInput.toast.issueWorkFailed": "Failed to start issue work",
   "chat.commandAutocomplete.empty": "No se encontraron comandos",
   "chat.agentMentionAutocomplete.badge.system": "sistema",
   "chat.agentMentionAutocomplete.empty": "No se encontraron agentes",

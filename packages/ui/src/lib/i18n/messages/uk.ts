@@ -25,6 +25,9 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { usageToolI18n } from './usage-tool.i18n';
+import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
+import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
 import { agentStatusI18n } from './agent-status.i18n';
 import { selectionApprovalI18n } from './selection-approval.i18n';
 import { snippetsI18n } from './snippets.i18n';
@@ -210,6 +213,9 @@ export const dict: Record<I18nKey, string> = {
   ...heapSnapshotI18n.uk,
   ...consoleBudgetsI18n.uk,
   ...imageToolI18n.uk,
+  ...usageToolI18n.uk,
+  ...openchamberToolOutputI18n.uk,
+  ...opencodeToolOutputI18n.uk,
   ...agentStatusI18n.uk,
   ...snippetsI18n.uk,
   ...sidebarWorkI18n.uk,
@@ -786,6 +792,9 @@ export const dict: Record<I18nKey, string> = {
   "chat.backgroundShells.stopAll": "Зупинити всі",
   "chat.backgroundShells.stopAria": "Зупинити {command}",
   "chat.backgroundShells.elapsed": "Працює {duration}",
+  "chat.backgroundWork.aria": "Робота у фоні",
+  "chat.backgroundWork.count": "У фоні: {count}",
+  "chat.backgroundImages.generating": "Генерується картинка",
   "sessions.sidebar.session.menu.share": "Поділитися",
   "sessions.sidebar.session.menu.copied": "Скопійовано",
   "sessions.sidebar.session.menu.copyLink": "Копіювати посилання",
@@ -825,6 +834,7 @@ export const dict: Record<I18nKey, string> = {
   "sessions.sidebar.session.status.unread": "Непрочитані оновлення",
   "sessions.sidebar.session.status.backgroundSubagent": "Субагент працює у фоні",
   "sessions.sidebar.session.status.backgroundCommand": "Команда працює у фоні",
+  "sessions.sidebar.session.status.backgroundImage": "Картинка генерується у фоні",
   'sessions.sidebar.session.status.waitingOnPullRequest': 'Чекає на перевірки або ревʼю',
   "sessions.sidebar.session.status.pinned": "Закріплена сесія",
   "sessions.sidebar.session.status.movingToWorktree": "Перенесення сесії в новий worktree",
@@ -1253,6 +1263,9 @@ export const dict: Record<I18nKey, string> = {
   "magicPrompts.toast.loadFailed": "Не вдалося завантажити магічні промпти. Нічого не надіслано.",
   "gitView.empty.notGitRepository": "Цей каталог не є репозиторієм Git",
   "gitView.empty.notGitRepositoryDescription": "Ініціалізуйте Git у цьому каталозі або відкрийте сховище.",
+  "gitView.empty.repositoryUnreadable": "Git не зміг прочитати цю теку",
+  "gitView.empty.repositoryUnreadableDescription": "Ось що відповів Git. Виправте це й спробуйте ще раз.",
+  "gitView.empty.repositoryUnreadableRetry": "Спробувати ще раз",
   "gitView.empty.selectSessionOrDirectory": "Виберіть сесію або каталог, щоб переглянути статус Git",
   "gitView.empty.worktreeFeaturesUnavailable": "У цьому режимі робочої області функції worktree недоступні.",
   "gitView.empty.worktreeSetupDescription": "Завершення налаштування worktree та підготовка стану сховища.",
@@ -1805,6 +1818,7 @@ export const dict: Record<I18nKey, string> = {
   "contextSidebar.empty.openSession": "Відкрийте сесію, щоб перевірити контекст.",
   "contextSidebar.section.context": "Контекст",
   "contextSidebar.section.lastAssistantMessage": "Останнє повідомлення асистента",
+  "contextSidebar.section.sessionTotals": "Підсумки сесії",
   "contextSidebar.section.rawMessages": "Необроблені повідомлення",
   "contextSidebar.context.percentUsed": "{percent}% використано",
   "contextSidebar.breakdown.user": "Користувач",
@@ -2488,6 +2502,10 @@ export const dict: Record<I18nKey, string> = {
   'chat.commandAutocomplete.command.btwDescription': 'Поставте побічне питання в тимчасовій дочірній сесії, не відволікаючи цей чат.',
   'chat.commandAutocomplete.command.forkDescription': 'Відгалузити цей чат від останньої завершеної відповіді й продовжити там; текст після /fork надсилається у відгалуження.',
   "chat.commandAutocomplete.command.exploreDescription": "Зорієнтуватись у кодовій базі: високорівневий тур архітектурою й основними частинами.",
+  "chat.commandAutocomplete.command.localIssuesDescription": "Manage local issues (.issues/ markdown files): create, find, update, delete.",
+  "chat.commandAutocomplete.command.issueWorkDescription": "Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.",
+  "chat.chatInput.toast.localIssuesFailed": "Failed to run the local issues command",
+  "chat.chatInput.toast.issueWorkFailed": "Failed to start issue work",
   "chat.commandAutocomplete.empty": "Команди не знайдено",
   "chat.agentMentionAutocomplete.badge.system": "система",
   "chat.agentMentionAutocomplete.empty": "Агентів не знайдено",
