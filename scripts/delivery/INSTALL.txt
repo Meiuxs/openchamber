@@ -94,7 +94,8 @@ B. 预填 npm 缓存
    allowedInsecureGitOrigins、modelsDevUrl、skillsCatalogSources、
    allowNetworkAccess、allowedExtensions、allowLocalExtensions、
    relayUrl、jev { url, ... }、opencodeBinary、hideBuiltinSkillCatalogs。
-   文件支持 // 与 /* */ 注释，每次使用时重新读取（改完不用重启）；内容损坏时按“全部关闭”处理。
+   文件采用标准 JSON 格式（使用 _comment* 字段提供中文配置说明与示例，同时兼容 // 与 /* */ 注释），
+   可选字段留空（"" 或 []）即表示不启用；每次使用时重新读取（改完不用重启），内容损坏时按“全部关闭”处理。
 
 3. 环境变量 / 命令行参数（都可选）
    OPENCHAMBER_PORT 或 --port       监听端口（默认 3000）

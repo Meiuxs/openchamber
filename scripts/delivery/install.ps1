@@ -187,10 +187,18 @@ if ($PolicyFile) {
   Write-Host "使用指定策略文件：$PolicyFile"
 }
 elseif ($Organization -or $NpmRegistry) {
-  $policy = [ordered]@{}
-  if ($Organization) { $policy.enterpriseMode = $true; $policy.organization = $Organization }
-  if ($NpmRegistry) { $policy.npmRegistry = $NpmRegistry }
-  $writePolicy = ($policy | ConvertTo-Json)
+  if (Test-Path -LiteralPath $exampleFile) {
+    $policyObj = Get-Content -LiteralPath $exampleFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($Organization) { $policyObj.enterpriseMode = $true; $policyObj.organization = $Organization }
+    if ($NpmRegistry) { $policyObj.npmRegistry = $NpmRegistry }
+    $writePolicy = ($policyObj | ConvertTo-Json -Depth 10)
+  }
+  else {
+    $policy = [ordered]@{}
+    if ($Organization) { $policy.enterpriseMode = $true; $policy.organization = $Organization }
+    if ($NpmRegistry) { $policy.npmRegistry = $NpmRegistry }
+    $writePolicy = ($policy | ConvertTo-Json)
+  }
 }
 elseif (-not (Test-Path -LiteralPath $PolicyPath)) {
   if (Test-Path -LiteralPath $exampleFile) {

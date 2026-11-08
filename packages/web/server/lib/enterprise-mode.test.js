@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -138,6 +139,27 @@ describe('enterprise policy', () => {
     expect(policy.organization).toBe('Acme Corp');
     expect(policy.npmRegistry).toBe('http://nexus.corp.internal/repository/npm/');
     expect(policy.allowedInsecureGitOrigins).toEqual(['http://gitlab.corp.internal:8080']);
+  });
+
+  it('validates scripts/delivery/policy.example.json as strict standard JSON with _comment* field descriptions and safe empty defaults', () => {
+    const examplePath = path.resolve(import.meta.dirname, '../../../../scripts/delivery/policy.example.json');
+    const rawText = fs.readFileSync(examplePath, 'utf8');
+    // Must be valid strict JSON without requiring comment stripping
+    const parsedJson = JSON.parse(rawText);
+    expect(parsedJson._comment).toBeDefined();
+    expect(parsedJson.enterpriseMode).toBe(true);
+
+    const policy = readEnterprisePolicy(machine({ [LINUX_POLICY]: rawText }));
+    expect(policy.policyError).toBeNull();
+    expect(policy.enterpriseMode).toBe(true);
+    expect(policy.organization).toBe('企业内网');
+    expect(policy.modelsDevUrl).toBeNull();
+    expect(policy.npmRegistry).toBeNull();
+    expect(policy.relayUrl).toBeNull();
+    expect(policy.jev).toBeNull();
+    expect(policy.allowedInsecureGitOrigins).toEqual([]);
+    expect(policy.allowedExtensions).toEqual([]);
+    expect(policy.skillsCatalogSources).toEqual([]);
   });
 
   describe('pinned model catalog URL', () => {

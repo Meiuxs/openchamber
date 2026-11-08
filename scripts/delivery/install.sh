@@ -198,15 +198,25 @@ if [[ -n "$POLICY_FILE" ]]; then
   write_policy="$(cat "$POLICY_FILE")"
   echo "使用指定策略文件：$POLICY_FILE"
 elif [[ -n "$ORGANIZATION" || -n "$NPM_REGISTRY" ]]; then
-  json="{"
-  sep=""
-  if [[ -n "$ORGANIZATION" ]]; then
-    json="$json\"enterpriseMode\": true, \"organization\": \"$(json_escape "$ORGANIZATION")\""; sep=", "
+  if [[ -f "$EXAMPLE_FILE" ]]; then
+    write_policy="$(node -e '
+      const fs = require("fs");
+      const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+      if (process.argv[2]) { data.enterpriseMode = true; data.organization = process.argv[2]; }
+      if (process.argv[3]) { data.npmRegistry = process.argv[3]; }
+      process.stdout.write(JSON.stringify(data, null, 2));
+    ' "$EXAMPLE_FILE" "$ORGANIZATION" "$NPM_REGISTRY")"
+  else
+    json="{"
+    sep=""
+    if [[ -n "$ORGANIZATION" ]]; then
+      json="$json\"enterpriseMode\": true, \"organization\": \"$(json_escape "$ORGANIZATION")\""; sep=", "
+    fi
+    if [[ -n "$NPM_REGISTRY" ]]; then
+      json="$json$sep\"npmRegistry\": \"$(json_escape "$NPM_REGISTRY")\""
+    fi
+    write_policy="$json}"
   fi
-  if [[ -n "$NPM_REGISTRY" ]]; then
-    json="$json$sep\"npmRegistry\": \"$(json_escape "$NPM_REGISTRY")\""
-  fi
-  write_policy="$json}"
 elif [[ ! -f "$POLICY_PATH" && -f "$EXAMPLE_FILE" ]]; then
   write_policy="$(cat "$EXAMPLE_FILE")"
   is_default_created=1
