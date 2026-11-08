@@ -1126,6 +1126,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
   const canRename = Boolean(files.rename);
   const canDelete = Boolean(files.delete);
   const canReveal = Boolean(files.revealPath);
+  const canRevealPath = canReveal && !isBrowserClient;
   const openInApps = useOpenInAppsStore((state) => state.availableApps);
   const openInCacheStale = useOpenInAppsStore((state) => state.isCacheStale);
   const initializeOpenInApps = useOpenInAppsStore((state) => state.initialize);
@@ -4584,6 +4585,15 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
         label: t('filesView.editor.openInDesktopApp'),
         icon: 'external-link',
         menu: openInAppMenuItems,
+      },
+      canRevealPath && Boolean(selectedFile?.path) && {
+        id: 'reveal-in-folder',
+        label: t(getRevealLabelKey()),
+        icon: 'folder-received',
+        onSelect: () => {
+          if (!selectedFile?.path) return;
+          handleRevealPath(selectedFile.path);
+        },
       },
       canCopy && {
         id: 'copy-contents',
