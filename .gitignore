@@ -3,8 +3,8 @@
 .box-agent/
 .box-agent-scratch/
 
-# Agent scratch output (screenshots from verification runs)
-.workbuddy/tmp/
+# Agent workspace data (memory, scratch output, screenshots)
+.workbuddy/
 
 # A disposable baseline clone kept for side-by-side QA, not part of the tree
 .qa-baseline-wt/
