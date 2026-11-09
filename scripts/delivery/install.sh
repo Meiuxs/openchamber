@@ -95,6 +95,16 @@ json_escape() { # 转义反斜杠和双引号，组织名或 URL 里带引号也
   printf '%s' "${s//\"/\\\"}"
 }
 
+dir_writable() { # 目录可写；尚不存在时看最近的已存在祖先能否创建它
+  local p="$1" parent
+  while [[ ! -d "$p" ]]; do
+    parent="$(dirname "$p")"
+    [[ "$parent" == "$p" ]] && return 1
+    p="$parent"
+  done
+  [[ -w "$p" ]]
+}
+
 title "OpenChamber $VERSION 内网安装/更新"
 
 # --- 前置检查 --------------------------------------------------------------
@@ -116,15 +126,36 @@ if command -v openchamber >/dev/null 2>&1; then
 else
   echo "未检测到已有安装，执行全新安装"
 fi
-# 全局前缀不可写时 npm 会报 EACCES；先给出可执行的处置办法。
+# --- 全局前缀：只复用已有的用户级 npm 目录，不改任何 npm 配置 -----------------
+# 目标机器本来就有用户级 npm 全局目录。即使 npm 默认前缀指向不可写的系统目录，
+# 也只用 NPM_CONFIG_PREFIX 在本次会话临时指过去：不写 ~/.npmrc、不重建已有目录、
+# 不需要 sudo；后续安装与 SDK 校验都落在用户目录。
+USER_PREFIX=""
+NEED_PATH_PERSIST=0
 if [[ $DRY_RUN -eq 0 ]]; then
   GLOBAL_ROOT="$(npm root -g)"
-  if [[ ! -w "$GLOBAL_ROOT" ]] && { [[ -d "$GLOBAL_ROOT" ]] || [[ ! -w "$(dirname "$GLOBAL_ROOT")" ]]; }; then
-    echo "npm 全局目录不可写：$GLOBAL_ROOT" >&2
-    echo "  用 sudo bash install.sh，或把全局前缀改到自己家目录：" >&2
-    echo "  npm config set prefix ~/.npm-global && export PATH=~/.npm-global/bin:\$PATH" >&2
-    exit 1
+  if ! dir_writable "$GLOBAL_ROOT"; then
+    USER_PREFIX="$HOME/.npm-global"
+    if [[ ! -d "$USER_PREFIX" ]]; then
+      mkdir -p "$USER_PREFIX" || { echo "无法创建用户级 npm 目录：$USER_PREFIX" >&2; exit 1; }
+      echo "用户级 npm 目录不存在，已创建空目录：$USER_PREFIX"
+    fi
+    export NPM_CONFIG_PREFIX="$USER_PREFIX"
+    GLOBAL_ROOT="$(npm root -g)"
+    echo "npm 全局目录不可写，本次安装复用已有的用户级 npm 目录：$USER_PREFIX（无需 root，不修改 npm 配置）"
+    case ":$PATH:" in
+      *":$USER_PREFIX/bin:"*)
+        echo "  $USER_PREFIX/bin 已在 PATH，未改动任何配置文件。"
+        ;;
+      *)
+        export PATH="$USER_PREFIX/bin:$PATH"
+        NEED_PATH_PERSIST=1
+        echo "  $USER_PREFIX/bin 不在 PATH，已加入本次会话并写入 ~/.bashrc。"
+        ;;
+    esac
   fi
+else
+  GLOBAL_ROOT='<npm-global-root>'
 fi
 
 # --- 安装 / 更新 ----------------------------------------------------------
@@ -149,9 +180,6 @@ fi
 # 删掉它反而会让服务启动时报 "Cannot find package '@openchamber/sdk'"。
 # 因此只在版本不匹配（上一次安装残留的旧副本）时删除，并交给重装修复。
 title "SDK 校验"
-if [[ $DRY_RUN -eq 1 ]]; then
-  GLOBAL_ROOT='<npm-global-root>'
-fi
 NESTED_SDK="$GLOBAL_ROOT/@openchamber/web/node_modules/@openchamber/sdk"
 nested_version=""
 [[ $DRY_RUN -eq 0 && -f "$NESTED_SDK/package.json" ]] && nested_version="$(pkg_version "$NESTED_SDK/package.json")"
@@ -252,10 +280,12 @@ fi
 # %q 生成能原样回读的 shell 转义：密码和 URL 里的空格、$()、#、单引号都不会
 # 打断 export，也不会在 source 时被求值。
 sh_quote() { printf '%q' "$1"; }
-if [[ -n "$PORT$UI_PASSWORD$OPENCODE_HOST$OPENCODE_PORT$NPM_REGISTRY" ]]; then
+if [[ -n "$PORT$UI_PASSWORD$OPENCODE_HOST$OPENCODE_PORT$NPM_REGISTRY" || $NEED_PATH_PERSIST -eq 1 ]]; then
   title "环境变量（写入 ~/.bashrc）"
-  echo "  只用 zsh 的机器请把这行搬到 ~/.zshrc（bashrc 不会被 zsh 读取）。"
+  echo "  只用 zsh 的机器请把这块搬到 ~/.zshrc（bashrc 不会被 zsh 读取）。"
   exports=()
+  # 只在 PATH 确实缺这个目录时补写；幂等，重复 source 不会反复追加。
+  [[ $NEED_PATH_PERSIST -eq 1 ]] && exports+=("[[ \":\$PATH:\" == *\":$USER_PREFIX/bin:\"* ]] || export PATH=\"$USER_PREFIX/bin:\$PATH\"")
   [[ -n "$PORT" ]] && exports+=("export OPENCHAMBER_PORT=$(sh_quote "$PORT")")
   [[ -n "$NPM_REGISTRY" ]] && exports+=("export OPENCHAMBER_NPM_REGISTRY=$(sh_quote "$NPM_REGISTRY")")
   [[ -n "$OPENCODE_HOST" ]] && exports+=("export OPENCODE_HOST=$(sh_quote "$OPENCODE_HOST")")
@@ -308,28 +338,19 @@ cat <<'CMD'
   OPENCODE_HOST=http://host:4096 OPENCODE_SKIP_START=true openchamber   # 连接外部 OpenCode
   openchamber --help                                             # 全部选项
 
-  常驻运行优先用自带命令（Linux 生成 systemd 用户服务，macOS 生成 LaunchAgent）：
+  常驻运行优先用自带命令（Linux 生成 systemd 用户服务，macOS 生成 LaunchAgent，
+  都写在当前用户目录下，无需 root）：
   openchamber startup enable --port 3000
   openchamber startup status
 
-  要写系统级 systemd 单元，服务必须用 serve --foreground 启动：默认模式下
+  自建服务单元时（含 systemd 用户服务）必须用 serve --foreground 启动：默认模式下
   CLI 会 fork 后台进程后退出，配合 Restart=always 会不停拉起新实例。
-  ExecStart 填 which openchamber 的实际路径，前面加 node 的绝对路径：
-
-    [Service]
-    Type=simple
-    ExecStart=/usr/bin/node /home/you/.npm-global/bin/openchamber serve --foreground --port 3000
-    WorkingDirectory=/home/you
-    Restart=always
-    RestartSec=5
-    SuccessExitStatus=143
 
   后续更新：新版本包解开后重跑本 install.sh 即可原地更新；
   配好内部 registry 后也可直接执行 openchamber update。
 
-  重要：更新后必须重启 OpenChamber 服务（systemctl restart openchamber，
-  或 openchamber restart），旧进程仍运行旧代码，否则新功能如本地议题会"消失"，
-  重启即恢复。
+  重要：更新后必须重启 OpenChamber 服务（openchamber restart），旧进程仍运行
+  旧代码，否则新功能如本地议题会"消失"，重启即恢复。
 CMD
 
 # --- 后台启动 -----------------------------------------------------------

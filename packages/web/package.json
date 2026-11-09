@@ -112,5 +112,8 @@
     "public",
     "package.json",
     "README.md"
+  ],
+  "bundledDependencies": [
+    "@openchamber/sdk"
   ]
 }

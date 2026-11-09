@@ -5,8 +5,8 @@
 
 .DESCRIPTION
   安装与本脚本同目录的两个 npm tarball，准备配置文件，打印更新内容
-  （RELEASE-NOTES.md）和服务启动命令。对已有安装重复执行即为原地更新，
-  首次安装和更新走同一条路径。
+  （RELEASE-NOTES.md）和服务启动命令。全程以当前用户身份运行，不需要管理员权限。
+  对已有安装重复执行即为原地更新，首次安装和更新走同一条路径。
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File .\install.ps1
@@ -74,6 +74,44 @@ function Set-UserEnv([string]$Name, [string]$Value) {
   Set-Item -LiteralPath "env:$Name" -Value $Value
   Write-Host "  $Name = $Value 已写入用户环境变量"
 }
+function Test-WritableDirectory([string]$Path) {
+  # 目录尚不存在时 npm 会自行创建；判断最近的已存在祖先能不能写。
+  $probe = $Path
+  while ($probe -and -not (Test-Path -LiteralPath $probe)) {
+    $parent = Split-Path -Parent $probe
+    if (-not $parent -or $parent -eq $probe) { return $false }
+    $probe = $parent
+  }
+  if (-not $probe) { return $false }
+  $tmp = Join-Path $probe ('.openchamber-write-test-' + [guid]::NewGuid().ToString('N'))
+  try {
+    New-Item -ItemType File -Path $tmp -ErrorAction Stop | Out-Null
+    Remove-Item -LiteralPath $tmp -Force -ErrorAction Stop
+    return $true
+  }
+  catch { return $false }
+}
+function Add-UserPath([string]$Dir) {
+  # 本会话先加上，保证本次 -Start 拉起服务时能找到 openchamber。
+  if (@($env:PATH -split ';') -notcontains $Dir) { $env:PATH = $Dir + ';' + $env:PATH }
+  # 只改当前用户的 PATH，保留原有条目和值的注册表类型（ExpandString 里可能含 %TOKEN%）。
+  $current = [Environment]::GetEnvironmentVariable('PATH', 'User')
+  if ($current -and @($current -split ';') -contains $Dir) { return }
+  $newPath = if ($current) { $Dir + ';' + $current.TrimEnd(';') } else { $Dir }
+  $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+  if ($null -ne $key) {
+    try {
+      try { $kind = $key.GetValueKind('PATH') }
+      catch { $kind = [Microsoft.Win32.RegistryValueKind]::ExpandString }
+      $key.SetValue('PATH', $newPath, $kind)
+    }
+    finally { $key.Close() }
+  }
+  else {
+    [Environment]::SetEnvironmentVariable('PATH', $newPath, 'User')
+  }
+  Write-Host "  PATH 已加入 $Dir（用户级，无需管理员）"
+}
 
 Write-Title "OpenChamber $Version 内网安装/更新"
 
@@ -90,6 +128,39 @@ foreach ($tgz in @($SdkTgz, $WebTgz)) {
 $existing = Get-Command openchamber -ErrorAction SilentlyContinue
 if ($existing) { Write-Host "检测到已安装的 OpenChamber，本脚本将原地更新到 $Version" }
 else { Write-Host '未检测到已有安装，执行全新安装' }
+
+# --- npm 全局前缀：只复用已有的用户级 npm 目录，不改任何 npm 配置 -------------
+# 目标机器本来就有用户级 npm 全局目录。即使 prefix 被指向 C:\Program Files\nodejs
+# 这类系统目录，也只用 NPM_CONFIG_PREFIX 在本次会话临时指过去：不写 .npmrc、
+# 不重建已有目录，不需要管理员。
+if ($DryRun) {
+  $globalRoot = '<npm-global-root>'
+}
+else {
+  $globalRoot = (& npm root -g)
+  if ($LASTEXITCODE -ne 0 -or -not $globalRoot) {
+    throw "无法确定 npm 全局目录：npm root -g 失败（exit $LASTEXITCODE）。请确认 npm 可用后重跑本脚本。"
+  }
+  # npm 可能在前几行打印警告，全局目录是最后一行。
+  $globalRoot = ($globalRoot | Select-Object -Last 1).Trim()
+  if (-not (Test-WritableDirectory $globalRoot)) {
+    $userPrefix = Join-Path $env:APPDATA 'npm'
+    if (-not (Test-Path -LiteralPath $userPrefix)) {
+      New-Item -ItemType Directory -Force -Path $userPrefix | Out-Null
+      Write-Host "用户级 npm 目录不存在，已创建空目录：$userPrefix"
+    }
+    $env:NPM_CONFIG_PREFIX = $userPrefix
+    $globalRoot = ((& npm root -g) | Select-Object -Last 1).Trim()
+    Write-Host "npm 全局目录不可写，本次安装复用已有的用户级 npm 目录：$userPrefix（无需管理员，不修改 npm 配置）" -ForegroundColor Yellow
+    # Windows 的全局命令直接放在 prefix 目录本身；只在 PATH 里确实缺失时才补写用户 PATH。
+    if (@($env:PATH -split ';') -notcontains $userPrefix) {
+      Add-UserPath $userPrefix
+    }
+    else {
+      Write-Host "  $userPrefix 已在 PATH，未改动任何配置文件。"
+    }
+  }
+}
 
 # --- 安装 / 更新 -----------------------------------------------------------
 Write-Title '安装 npm 包'
@@ -116,17 +187,6 @@ else {
 # 删掉它反而会让服务启动时报 "Cannot find package '@openchamber/sdk'"。
 # 因此只在版本不匹配（上一次安装残留的旧副本）时删除，并交给重装修复。
 Write-Title 'SDK 校验'
-if ($DryRun) {
-  $globalRoot = '<npm-global-root>'
-}
-else {
-  $globalRoot = (& npm root -g)
-  if ($LASTEXITCODE -ne 0 -or -not $globalRoot) {
-    throw "无法确定 npm 全局目录：npm root -g 失败（exit $LASTEXITCODE）。请确认 npm 可用后重跑本脚本。"
-  }
-  # npm 可能在前几行打印警告，全局目录是最后一行。
-  $globalRoot = ($globalRoot | Select-Object -Last 1).Trim()
-}
 $nestedSdk = Join-Path $globalRoot '@openchamber\web\node_modules\@openchamber\sdk'
 $nestedPackageJson = Join-Path $nestedSdk 'package.json'
 $nestedVersion = if (-not $DryRun -and (Test-Path -LiteralPath $nestedPackageJson)) {
@@ -264,7 +324,7 @@ Write-Host '  openchamber serve --lan --port 3000 --ui-password <密码>      # 
 Write-Host '  OPENCODE_HOST=http://host:4096 OPENCODE_SKIP_START=true openchamber   # 连接外部 OpenCode'
 Write-Host '  openchamber --help                                            # 全部选项'
 Write-Host ''
-Write-Host '  开机自启（注册计划任务，登录后拉起）：openchamber startup enable --port 3000'
+Write-Host '  开机自启（注册当前用户的登录任务，无需管理员）：openchamber startup enable --port 3000'
 Write-Host ''
 Write-Host '  后续更新：新版本 zip 解开后重跑本 install.ps1 即可原地更新；'
 Write-Host '  配好内部 registry 后也可直接执行 openchamber update。'

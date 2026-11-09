@@ -20,8 +20,12 @@ SDK tarball 读取版本号，换新版本 zip 不需要改脚本。
 快速安装 / 更新（推荐）
 =======================
 解压后按平台执行脚本。脚本会安装 tarball（缓存优先，失败回退常规安装）、
-创建数据目录、可选写入机器策略文件和环境变量、打印更新内容和启动命令；
-检测到已有安装时原地更新。
+创建数据目录、可选写入策略文件和环境变量、打印更新内容和启动命令；
+检测到已有安装时原地更新。两个脚本全程以当前用户身份运行，不需要管理员/root：
+策略文件写用户数据目录；不传环境变量参数且 PATH 已配好时，脚本不改任何配置文件。
+若 npm 全局前缀指向不可写的系统目录，脚本只在本次会话复用已有的用户级 npm 目录
+（Linux ~/.npm-global，Windows %APPDATA%\npm），不改写 ~/.npmrc 等 npm 配置、
+不重建已有目录；仅当该目录的 bin 不在 PATH 时才加入本次会话并补写用户级 PATH。
 
 Windows（PowerShell 5.1 及以上）：
 
@@ -37,7 +41,7 @@ Linux / macOS（bash）：
     -Registry / --registry <url>        通过内部 npm registry 安装
     -NpmRegistry / --npm-registry <url> 固定内网 npm 镜像（写策略文件和环境变量）
     -Organization / --organization <名> 生成企业模式策略
-    -PolicyFile / --policy-file <path>  放入组织提供的 policy.json（需管理员/root）
+    -PolicyFile / --policy-file <path>  放入组织提供的 policy.json（写入用户数据目录，无需管理员/root）
     -Port / --port <n>                  持久化 OPENCHAMBER_PORT
     -UiPassword / --ui-password <密码>  持久化 OPENCHAMBER_UI_PASSWORD
     -OpenCodeHost / --opencode-host <url>
@@ -85,7 +89,7 @@ B. 预填 npm 缓存
    - 用户数据目录（优先，无需管理员权限）：
      Windows：%USERPROFILE%\.config\openchamber\policy.json（或 $OPENCHAMBER_DATA_DIR\policy.json）
      Linux/macOS：~/.config/openchamber/policy.json（或 $OPENCHAMBER_DATA_DIR/policy.json）
-   - 系统管理员路径（回退）：
+   - 系统管理员路径（回退，仅兼容已有部署；安装脚本不写入这些路径）：
      Windows：C:\ProgramData\OpenChamber\policy.json
      Linux：/etc/openchamber/policy.json
      macOS：/Library/Application Support/OpenChamber/policy.json
@@ -115,9 +119,10 @@ B. 预填 npm 缓存
     OPENCODE_HOST=http://host:4096 OPENCODE_SKIP_START=true openchamber
 
 开机自启：openchamber startup enable --port 3000
-（Linux 写 systemd 用户服务，macOS 写 LaunchAgent，Windows 注册计划任务。）
+（Linux 写 systemd 用户服务，macOS 写 LaunchAgent，Windows 注册当前用户的登录任务；
+均无需管理员/root。）
 
-自己写系统级 systemd 单元时必须用 serve --foreground 启动：默认模式下 CLI
+自建服务单元时（含 systemd 用户服务）必须用 serve --foreground 启动：默认模式下 CLI
 派生后台进程后立即退出，配合 Restart=always 会不停拉起新实例。
 
 OpenCode 需已在运行（opencode serve），或由 OpenChamber 自行拉起托管实例。
