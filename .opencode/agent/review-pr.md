@@ -1,6 +1,9 @@
 ---
+description: "Verdicts on pull requests, as the maintainer's proxy: one block
+  per PR (DECLINE / PUSH-BACK / MERGE-THEN-FIX / MERGE) with its ready action.
+  Hand it PR numbers, one or several; batch triage fans it out. A local diff, a
+  commit or the worktree goes to review-changes. Never posts, merges, or edits."
 mode: subagent
-description: "Verdicts on pull requests, as the maintainer's proxy: one block per PR (DECLINE / PUSH-BACK / MERGE-THEN-FIX / MERGE) with its ready action. Hand it PR numbers, one or several; batch triage fans it out. A local diff, a commit or the worktree goes to review-changes. Never posts, merges, or edits."
 color: "#d08770"
 ---
 
