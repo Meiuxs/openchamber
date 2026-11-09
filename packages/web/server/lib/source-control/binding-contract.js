@@ -1,4 +1,4 @@
-import { isProviderId, isProviderUsername } from './provider-id.js';
+import { isProviderId, isProviderUserId, isProviderUsername } from './provider-id.js';
 
 // Persisted parsers validate a provider id's syntax only; the provider
 // registry decides at read time whether that provider is available. A record
@@ -34,9 +34,6 @@ const normalizedPresentationInstance = (value, insecureOrigins) => {
       && (parsed.protocol === 'https:' || parsed.protocol === 'http:' && (loopback || insecureOrigins.includes(parsed.origin)));
   } catch { return false; }
 };
-// A provider user is `<instance>#<numeric id>` on every provider.
-const providerUserIdentityMatches = (value) => value.providerUserId.startsWith(`${value.instance}#`)
-  && /^\d+$/.test(value.providerUserId.slice(value.instance.length + 1));
 const keys = (value, required, optional = []) => plain(value)
   && required.every((key) => Object.hasOwn(value, key))
   && Object.keys(value).every((key) => required.includes(key) || optional.includes(key));
@@ -80,7 +77,7 @@ const credentialPresentation = (value, insecureOrigins) => plain(value) && Objec
       && value.transport === 'https' && isProviderId(value.provider)
       && ['oauth', 'pat', 'cli'].includes(value.source) && safePresentationText(value.instance, 2048)
       && isProviderUsername(value.username) && safePresentationText(value.providerUserId)
-      && normalizedPresentationInstance(value, insecureOrigins) && providerUserIdentityMatches(value)
+      && normalizedPresentationInstance(value, insecureOrigins) && isProviderUserId(value.provider, value.instance, value.providerUserId)
   ));
 const unique = (entries, key) => new Set(entries.map(key)).size === entries.length;
 const invalid = () => Object.assign(new Error('Source control binding storage is invalid'), { code: 'INVALID_SOURCE_CONTROL_BINDINGS' });

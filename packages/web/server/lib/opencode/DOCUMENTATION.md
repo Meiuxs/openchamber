@@ -110,6 +110,11 @@ in that user's sessions. On the fallback path the same rules are merged into
   `theme-catalog.js` owns POST catalog search/package routes under
   `/api/config/themes/catalog/`. It fetches only Open VSX and its Eclipse CDN over
   HTTPS, validates redirects and checksums, and verifies packaged identity.
+  An empty search query returns the most downloaded color themes; the catalog
+  opens on them. The Themes category also holds icon themes, VS Code's built-ins
+  and tools that ship a theme on the side, so the popular list keeps entries
+  outside the `vscode` namespace whose name has no "icon" and whose name or
+  description speaks of a theme or colors.
   `theme-archive.js` reads selected JSON entries in memory with bounded decompression.
   JSON includes and token references stay inside the package. Each failed variant
   is reported separately so valid siblings remain available. No extension code runs.
@@ -563,7 +568,7 @@ ConPTY or Console Window Host behavior.
   - `sanitizeSkillCatalogs(input)`
   - `sanitizeProjects(input)`
 
-Persistence path normalization (`normalizePathForPersistence` / `normalizeSettingsPaths` / `sanitizeProjects`, reached via the `readSettingsFromDiskMigrated` migration and `persistSettings`) resolves symlinks with `realpathSync` and, on case-insensitive filesystems (`win32`, `darwin`), also recovers the on-disk casing of each path component via `readdirSync` (exact-name match preferred so case-sensitive volumes are never rewritten). `realpathSync` alone does not report on-disk casing on these volumes, so without the readdir step a project stored with the wrong case would never match the real-case `directory` opencode reports for its sessions (issue #1913). A corrected path is flagged `changed` and written back to `settings.json`. A path `realpathSync` cannot resolve (missing, no permission) is kept exactly as stored, so case recovery can never swap in a different existing sibling. On macOS only `/` separates components; a backslash is a legal name character.
+Persistence path normalization (`normalizePathForPersistence` / `normalizeSettingsPaths` / `sanitizeProjects`, reached via the `readSettingsFromDiskMigrated` migration and `persistSettings`) resolves symlinks with `realpathSync` and, on case-insensitive filesystems (`win32`, `darwin`), also recovers the on-disk casing of each path component via `readdirSync` (exact-name match preferred so case-sensitive volumes are never rewritten). `realpathSync` alone does not report on-disk casing on these volumes, so without the readdir step a project stored with the wrong case would never match the real-case `directory` opencode reports for its sessions (issue #1913). A corrected path is flagged `changed` and written back to `settings.json`. A path `realpathSync` cannot resolve (missing, no permission) is kept exactly as stored, so case recovery can never swap in a different existing sibling. On macOS only `/` separates components; a backslash is a legal name character. Every settings read runs `sanitizeProjects` three times, so one pass over the project list reads each directory at most once: projects share their ancestors, and reading `/`, `/Users` and the rest again per project made a 71-project settings read about 1,280 synchronous readdirs (#6084). The listings live only for that one synchronous pass, so a later read always sees the disk as it is; a longer-lived cache would need invalidation on a case rename and was not needed once a pass reads each folder once.
 
 `sanitizeProjects` also validates the per-project `issuesDir` (the local tracker's issues-directory override): a present value is kept, trimmed, only when it is a relative path on either separator family with no `..` segment; otherwise it is stored as `null`, and an absent key stays omitted. This is the settings-layer defense so a stored `issuesDir` can never point the scanner outside the project; the scanner re-validates independently and falls back to its default directory. The per-project `autoDispatchIssues` flag (the issue auto-dispatch watcher's switch) is kept only when exactly `true`; anything else, and an absent key, read as off.
 
@@ -663,8 +668,9 @@ OpenCode's MCP client listens on `127.0.0.1` and, without configuration, registe
 a loopback redirect. That is correct when the browser runs on the OpenCode
 machine, and wrong when OpenChamber is opened from another one: the provider
 sends the browser to the viewer's own `127.0.0.1`, and nothing reaches the
-listener. A browser with a direct connection to OpenChamber, with an OpenCode
-on the same machine as OpenChamber, finishes on its own. Everywhere else the
+listener. A browser on loopback or with a direct https connection to
+OpenChamber, with an OpenCode on the same machine as OpenChamber, finishes on
+its own. Everywhere else the
 user pastes the address the browser landed on into the waiting sign-in, which
 OpenCode accepts since 2.2.6 (an attempt marked `paste`).
 
@@ -681,13 +687,21 @@ name from OpenCode's integration and then takes one of these paths:
 | Relay client, nothing configured | Started on OpenCode's own redirect, unbound, for the user to paste. |
 | Either of the two above, OpenCode without `paste` | The attempt is cancelled and the start answers 400 naming the problem, before consent. |
 | Browser on loopback, nothing generated | Forwarded untouched, so CIMD and the ephemeral listener stay. This includes an SSH-forwarded address. |
-| Browser on another machine | `oauth.redirect_uri` becomes `<origin>/api/mcp/oauth/<name>/callback` and `oauth.callback_port` a free loopback port. The attempt is then bound. |
+| Browser on another machine over plain http, nothing generated | Started on OpenCode's own redirect, unbound and with the config unchanged, for the user to paste. OpenCode without `paste` gets the generated redirect of the next row instead, which works with a provider that accepts http. |
+| Browser on another machine over https | `oauth.redirect_uri` becomes `<origin>/api/mcp/oauth/<name>/callback` and `oauth.callback_port` a free loopback port. The attempt is then bound. |
 | Generated redirect already in place, any browser | The attempt is bound, so a loopback or relay browser follows the address generated last. |
 
 Same-machine is decided from the address OpenChamber connects to: loopback or
 one of this machine's interface addresses. A hostname that resolves here counts
 as another machine, because the mistake then is a clear error and the other way
 round is a callback sent to the wrong listener.
+
+A plain-http origin on another machine gets no generated redirect. The MCP
+authorization spec allows http redirects only on loopback, and Linear rejects
+`http://192.168.x.x/...` at client registration, before consent. OpenCode's
+own redirect is loopback, which those providers accept, so the browser lands
+on a page that does not open and the user pastes its address. A redirect
+generated earlier for that entry stays bound, as for the relay.
 
 The relay is detected by `x-openchamber-relay-connection`, which the dispatcher
 sets on every request it forwards. Its requests arrive with a loopback `host`,
@@ -1202,8 +1216,29 @@ within a ten-minute overall deadline.
       channel through `checkForUpdates`. The desktop app keeps its own
       `desktopUpdateChannel`. The Android app ships only as Canary until it
       has a store release: every Android build, an APK from an earlier release
-      included, is offered the newest APK of the `canary` GitHub pre-release. Other app types stay on releases.
+      included, is offered the newest APK of the `canary` GitHub pre-release, downloaded from the R2 mirror (`downloads.openchamber.dev/desktop/canary/`) once canary.yml put it there. Other app types stay on releases.
+  - `GET /api/openchamber/release-notes?version=&since=`
+    - Settings → About shows these. The answer is the releases of `version` as data, `{ releases: [{ version, date, title, intro, groups: [{ key, bullets }] }] }`,
+      read from the website API's `/v1/changelog/full`, which keeps the last
+      good copy through a GitHub outage, else from `changelog/index.json` on
+      `main`; a Canary version reads the Canary nights
+      (`lib/changelog/update-notes.js`). With an older `since`
+      it lists what an update brings, `(since, version]`; otherwise `version`
+      alone. An empty list means the changelog has no notes for it; 502 means
+      no source could be read, so the page never shows an outage as "no notes".
   - `POST /api/openchamber/update-install`
+    - A release that needs a newer OpenCode than this server runs answers 409
+      `OPENCODE_TOO_OLD` before any command runs, and the update check marks
+      it `installBlocked: 'opencode-version'` with `requiredOpenCodeVersion`
+      and `openCodeVersion`, ahead of the other blocks; clients keep the Update
+      button disabled with the reason under it. The new build would refuse to
+      start against that OpenCode, and an external one cannot be updated from
+      the app. The requirement is `engines.opencode` (`>=2.2.4`) in the
+      release's published `package.json`, which repeats
+      `MINIMUM_OPENCODE_VERSION` (a test keeps the two equal). A release
+      without the field, a registry that cannot be read, or an OpenCode
+      version that cannot be read blocks nothing. Desktop-managed hosts update
+      through `electron-updater`, whose feed carries no requirement.
     - A copy no package manager installed answers 409 before any command
       runs: a global install would add a second copy and leave the running
       one as it is. Detection reports such a copy as `unmanaged-install` when
@@ -1242,6 +1277,15 @@ within a ten-minute overall deadline.
       in use" and the update ended with no server.
   - `GET /api/openchamber/models-metadata`
   - `GET /api/zen/models`
+
+### Why the OpenCode requirement rides in `package.json` and not in the update check's answer
+
+The running build cannot know what a later release needs, so the release has to
+say it. The npm server installs that release from the registry, so
+`engines.opencode` in the published `package.json` reaches the check through
+`bun publish`, with no change to the website API, the R2 mirror or the release
+workflows. npm (even with `engine-strict`) and bun install a package whose
+`engines` names OpenCode.
 
 ## Public exports (pwa-manifest-routes.js)
 - `registerPwaManifestRoute(app, dependencies)`: registers PWA manifest endpoint with dynamic app-name resolution and recent-session shortcuts:

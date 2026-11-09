@@ -16,6 +16,8 @@ import { htmlRenderI18n } from './html-render.i18n';
 import { documentToolbarI18n } from './document-toolbar.i18n';
 import { uiBlocksI18n } from './ui-blocks.i18n';
 import { updateDialogCanaryI18n } from './update-dialog-canary.i18n';
+import { aboutReleaseNotesI18n } from './about-release-notes.i18n';
+import { updateCheckErrorsI18n } from './update-check-errors.i18n';
 import { secretRequestI18n } from './secret-request.i18n';
 import { sessionNoticesI18n } from './session-notices.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
@@ -26,6 +28,7 @@ import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
+import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
 import { agentStatusI18n } from './agent-status.i18n';
@@ -194,6 +197,8 @@ export const dict: Record<I18nKey, string> = {
   ...documentToolbarI18n.ko,
   ...uiBlocksI18n.ko,
   ...updateDialogCanaryI18n.ko,
+  ...aboutReleaseNotesI18n.ko,
+  ...updateCheckErrorsI18n.ko,
   ...secretRequestI18n.ko,
   ...sessionNoticesI18n.ko,
   ...usageStatsI18n.ko,
@@ -204,6 +209,7 @@ export const dict: Record<I18nKey, string> = {
   ...consoleBudgetsI18n.ko,
   ...imageToolI18n.ko,
   ...usageToolI18n.ko,
+  ...openchamberToolsLayoutI18n.ko,
   ...openchamberToolOutputI18n.ko,
   ...opencodeToolOutputI18n.ko,
   ...agentStatusI18n.ko,
@@ -3456,6 +3462,7 @@ export const dict: Record<I18nKey, string> = {
   'updateDialog.status.autoReloadHint': '업데이트가 완료되면 페이지가 자동으로 새로고침됩니다.',
   'updateDialog.fallback.updateViaTerminal': '또는 터미널에서 업데이트:',
   'updateDialog.desktopHostInstall': 'OpenChamber {version}을(를) 사용할 수 있습니다. 실행 중인 컴퓨터에서 업데이트하세요.',
+  'updateDialog.openCodeTooOld': 'OpenChamber {version}에는 OpenCode {required}이(가) 필요합니다. 이 서버는 {current}입니다. 먼저 OpenCode를 업데이트하세요.',
   'updateDialog.actions.copyCommand': '명령어 복사',
   'updateDialog.actions.copied': '복사 완료!',
   'updateDialog.status.downloadingPayload': '업데이트 패키지 다운로드 중…',
@@ -3717,6 +3724,9 @@ export const dict: Record<I18nKey, string> = {
   'chat.workStatus.breakdown.skillCountPlural': '스킬 {count}개',
   'chat.workStatus.breakdown.mcpCountSingle': 'MCP {count}개',
   'chat.workStatus.breakdown.mcpCountPlural': 'MCP {count}개',
+  'chat.workStatus.breakdown.planCountSingle': '계획 {count}개',
+  'chat.workStatus.breakdown.planCountPlural': '계획 {count}개',
+  'chat.workStatus.linkedPlans.open': '{title} 계획 열기',
   'chat.workStatus.sections.open': '섹션 선택',
   'chat.workStatus.sections.dialogTitle': '패널 섹션',
   'chat.workStatus.sections.reorder': '{label} 드래그하여 순서 변경',

@@ -16,6 +16,8 @@ import { htmlRenderI18n } from './html-render.i18n';
 import { documentToolbarI18n } from './document-toolbar.i18n';
 import { uiBlocksI18n } from './ui-blocks.i18n';
 import { updateDialogCanaryI18n } from './update-dialog-canary.i18n';
+import { aboutReleaseNotesI18n } from './about-release-notes.i18n';
+import { updateCheckErrorsI18n } from './update-check-errors.i18n';
 import { secretRequestI18n } from './secret-request.i18n';
 import { sessionNoticesI18n } from './session-notices.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
@@ -26,6 +28,7 @@ import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
+import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
 import { agentStatusI18n } from './agent-status.i18n';
@@ -204,6 +207,8 @@ export const dict: Record<I18nKey, string> = {
   ...documentToolbarI18n.es,
   ...uiBlocksI18n.es,
   ...updateDialogCanaryI18n.es,
+  ...aboutReleaseNotesI18n.es,
+  ...updateCheckErrorsI18n.es,
   ...secretRequestI18n.es,
   ...sessionNoticesI18n.es,
   ...usageStatsI18n.es,
@@ -214,6 +219,7 @@ export const dict: Record<I18nKey, string> = {
   ...consoleBudgetsI18n.es,
   ...imageToolI18n.es,
   ...usageToolI18n.es,
+  ...openchamberToolsLayoutI18n.es,
   ...openchamberToolOutputI18n.es,
   ...opencodeToolOutputI18n.es,
   ...agentStatusI18n.es,
@@ -3412,6 +3418,7 @@ export const dict: Record<I18nKey, string> = {
   "updateDialog.status.autoReloadHint": "La página se recargará automáticamente cuando la actualización finalice.",
   "updateDialog.fallback.updateViaTerminal": "O actualiza desde la terminal:",
   "updateDialog.desktopHostInstall": "OpenChamber {version} está disponible. Actualízalo en el ordenador donde se ejecuta.",
+  "updateDialog.openCodeTooOld": "OpenChamber {version} necesita OpenCode {required}. Este servidor tiene {current}. Actualiza OpenCode primero.",
   "updateDialog.actions.copyCommand": "Copiar comando",
   "updateDialog.actions.copied": "Copiado!",
   "updateDialog.status.downloadingPayload": "Descargando el payload de actualización...",
@@ -3708,6 +3715,9 @@ export const dict: Record<I18nKey, string> = {
   'chat.workStatus.breakdown.skillCountPlural': '{count} habilidades',
   'chat.workStatus.breakdown.mcpCountSingle': '{count} MCP',
   'chat.workStatus.breakdown.mcpCountPlural': '{count} MCP',
+  'chat.workStatus.breakdown.planCountSingle': '{count} plan',
+  'chat.workStatus.breakdown.planCountPlural': '{count} planes',
+  'chat.workStatus.linkedPlans.open': 'Abrir el plan {title}',
   'chat.workStatus.sections.open': 'Elegir secciones',
   'chat.workStatus.sections.dialogTitle': 'Secciones del panel',
   'chat.workStatus.sections.reorder': 'Arrastra {label} para reordenar',

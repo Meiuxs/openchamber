@@ -152,6 +152,7 @@ import { selectAvailableSkillsForDirectory, useSkillsStore } from '@/stores/useS
 import { selectCommandsForComposer, useCommandsStore } from '@/stores/useCommandsStore';
 import { useComposerConfigDirectory } from '@/hooks/useComposerConfigDirectory';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
+import { useRetryModelPick } from '@/hooks/useRetryModelPick';
 import { useEffectiveDirectory } from '@/hooks/useEffectiveDirectory';
 import { usePermissionStore } from '@/stores/permissionStore';
 import { cyclePermissionMode } from './permissionAutoAccept';
@@ -605,6 +606,10 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         ? btwPendingComposerKey(currentSessionId)
         : btwSessionId;
     const isBtwActive = Boolean(btwComposerSessionId) && !btwPanel.collapsed;
+    useRetryModelPick(
+        isBtwActive ? btwSessionId : currentSessionId,
+        (isBtwActive ? btwDirectory : null) ?? currentSessionDirectoryForSync ?? currentDirectory ?? undefined,
+    );
     const isBtwPanelVisible = btwHoldsDock(btwPanel, hasPendingForm);
     const immediateBtwSubmitRef = React.useRef<{ identity: ChatDraftIdentity; text: string } | null>(null);
     const draftCaretModeRef = React.useRef({ btw: isBtwActive, atEnd: isBtwActive });
@@ -842,7 +847,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     const enterToSend = useUIStore((state) => state.enterToSend);
     const enterToSendConfigured = useUIStore((state) => state.enterToSendConfigured);
     const mobileReturnKeySends = useUIStore((state) => state.mobileReturnKeySends);
-    const { enabled: isTabletLayout } = useTabletLayout();
+    const { enabled: isTabletLayout, roomyForOnePanel } = useTabletLayout();
     const setImagePreviewOpen = useUIStore((state) => state.setImagePreviewOpen);
     const inputBarOffset = useUIStore((state) => state.inputBarOffset);
     const inputSpellcheckEnabled = useUIStore((state) => state.inputSpellcheckEnabled);
@@ -1326,8 +1331,10 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         editorRef: composerRef,
         formRef: composerFormRef,
         setExpandedInput,
-        // Without a soft keyboard, keep the full composer up.
-        alwaysExpanded: hasHardwareKeyboard || isTabletLayout,
+        // Without a soft keyboard, keep the full composer up. So does a tablet,
+        // except where only one side panel fits (an unfolded iPhone Duo, a
+        // 13-inch iPad in portrait), which keeps the phone's pill.
+        alwaysExpanded: hasHardwareKeyboard || (isTabletLayout && !roomyForOnePanel),
         holders: {
             controlsPanelOpen: Boolean(mobileControlsPanel),
             attachMenuOpen: mobileAttachMenuOpen,

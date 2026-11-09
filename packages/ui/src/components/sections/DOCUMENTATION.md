@@ -67,6 +67,8 @@ writes when the dialog closes, while a new file is only created on confirm.
 
 ## Providers
 
+Source-control cards whose descriptor carries `auth.login` show its service-owned sign-in hint when that instance has no account. With no PAT method, the instance renders its signed-in user without token, add-account or CLI-switch controls. The service owns sign-in outside the app. Opening that card rechecks status; a failed read keeps the auth store's prior account metadata and reports an error, while only a successful empty result removes the displayed login. The same card is used by the web, desktop and mobile Integrations pages.
+
 `providers/` is not an autosave page. Connecting a provider is an action, not a
 setting: an API key is submitted, an OAuth flow is completed, a credential is
 removed. OpenCode owns the credential store and announces every change
@@ -210,6 +212,16 @@ per Location) and mounts the shared `providers/ProviderOAuthMethods.tsx`
 with that directory. While the server reports `needs_auth`, the status card
 shows its sign-in row; once the credential is stored, the page connects the
 server again, which is what moves it out of `needs_auth` or `failed`.
+
+A started sign-in keeps its row until it completes or fails, whatever the
+status says (`onActiveChange`). A failed one stays only while the status
+itself offers a sign-in, so its error never lingers on a connected server.
+A sign-in from another machine writes the server's redirect first
+(`packages/web/server/lib/opencode/mcp-oauth.js`), OpenCode reconnects the
+server and reports `pending` for about a second, and
+unmounting the row then cancelled the attempt: the first Connect did nothing
+visible and only the second one opened the consent page. The Integrations
+catalog keeps its sign-in row the same way.
 
 The detail page looks up the integration for a failed server or a configured
 remote server with `oauth !== false`. An absent `oauth` field is included:
@@ -688,3 +700,38 @@ Project colours are six-digit hex from the same presets as agents
 (`iconBackgroundForProjectColor`). Projects saved by older builds may carry a
 theme key; `resolveProjectColor` in `lib/projectMeta.ts` still paints those,
 and the colour field shows them as a selected swatch until the user picks again.
+
+## Appearance: color mode and theme list
+
+`openchamber/ThemeAppearancePicker.tsx` owns the color mode cards and the
+theme list; `openchamber/ThemeSchematic.tsx` draws the app on the cards.
+
+- The schematic paints each part with the token the real component uses, with
+  `cssGenerator`'s fallback chain and the opacity the component puts on top
+  (message text at 90%, the selected session row at 70%, the effort label at
+  75%, inline code and its background). A component that changes its token or
+  opacity changes the schematic in the same change, or the cards stop showing
+  what the theme looks like.
+- Colours come from the `Theme` object, never from CSS variables: the cards
+  show themes that are not active.
+- The drawing follows the device: the phone layout under `isMobile`, the
+  desktop layout elsewhere.
+- Hovering a theme previews it on the cards and applies nothing. Touch has no
+  hover, so a tap selects at once.
+- The list keeps the chosen theme in view when it opens, when the tab changes
+  and when its column count changes; a scroll that reaches its end goes on to
+  the page.
+- Imported themes show their delete action in the list at rest, so it is
+  clear which themes are imported.
+
+### Why one variant at a time and not both swatches per row
+
+Each row once held a light and a dark swatch with four status dots each; at
+thirty themes the list became a wall of dots. A Light / Dark switch shows one
+column of choices, the cards above carry the preview, and each row needs only
+the theme's canvas and accent.
+
+### Why the list scrolls on its own
+
+Imported themes add up quickly (the catalog, a themes folder). Without a cap
+the page below the list moves further down with every import.
