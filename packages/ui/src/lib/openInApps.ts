@@ -1,4 +1,5 @@
 import type { IconName } from '@/components/icon/icons';
+import { isMacOS, isWindows } from '@/lib/utils';
 
 export type OpenInApp = {
   id: string;
@@ -6,6 +7,8 @@ export type OpenInApp = {
   appName: string;
   /** The app's monochrome mark from the sprite (see scripts/icons/open-in-apps.mjs). */
   icon: IconName;
+  /** CLI command for the server-side open route; macOS launches by appName instead. */
+  command?: string;
 };
 
 export const OPEN_IN_APPS: OpenInApp[] = [
@@ -61,4 +64,34 @@ export const getOpenInAppById = (id: string | null | undefined): OpenInApp | nul
   }
   const app = OPEN_IN_APPS.find((candidate) => candidate.id === id) ?? null;
   return app ? getPlatformOpenInApp(app) : null;
+};
+
+// Mirrors the Electron discovery maps (windows-app-discovery.mjs,
+// linux-app-discovery.mjs): the display name is not the launchable command.
+const BROWSER_APP_COMMANDS = new Map<string, { win32?: string; linux?: string }>([
+  ['vscode', { win32: 'code.cmd', linux: 'code' }],
+  ['vscode-insiders', { win32: 'code-insiders.cmd', linux: 'code-insiders' }],
+  ['cursor', { win32: 'cursor.cmd', linux: 'cursor' }],
+  ['vscodium', { win32: 'codium.cmd', linux: 'codium' }],
+  ['windsurf', { win32: 'windsurf.cmd', linux: 'windsurf' }],
+  ['zed', { win32: 'zed.cmd', linux: 'zed' }],
+  ['sublime-text', { win32: 'subl.exe', linux: 'subl' }],
+  ['visual-studio', { win32: 'devenv.exe' }],
+  ['kiro', { win32: 'kiro.cmd', linux: 'kiro' }],
+  ['antigravity', { win32: 'antigravity.cmd', linux: 'antigravity' }],
+  ['trae', { win32: 'trae.cmd', linux: 'trae' }],
+]);
+
+// The browser cannot scan installed apps, so it offers a fixed list filtered
+// by the client OS. macOS opens any app by name; Windows/Linux need a CLI
+// command on PATH. An app that is not installed fails with a toast.
+export const getBrowserOpenInApps = (): OpenInApp[] => {
+  if (isMacOS()) {
+    return OPEN_IN_APPS.filter((app) => !OPEN_IN_ALWAYS_AVAILABLE_APP_IDS.has(app.id));
+  }
+  const platform = isWindows() ? 'win32' : 'linux';
+  return OPEN_IN_APPS.flatMap((app) => {
+    const command = BROWSER_APP_COMMANDS.get(app.id)?.[platform];
+    return command ? [{ ...app, command }] : [];
+  });
 };

@@ -15,6 +15,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -22,6 +25,9 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { OverlayScrollbar } from '@/components/ui/OverlayScrollbar';
@@ -141,10 +147,10 @@ import { Icon } from "@/components/icon/Icon";
 import { useMessageTTS } from '@/hooks/useMessageTTS';
 import { DIFFS_HIGHLIGHTER, toDiffsLanguage } from '@/lib/shiki/diffsHighlighter';
 import { getDefaultTheme } from '@/lib/theme/themes';
-import { isBrowserClientRuntime, isDesktopLocalOriginActive, openDesktopFileInApp, openDesktopPath } from '@/lib/desktop';
+import { isBrowserClientRuntime, isDesktopLocalOriginActive, openDesktopPath } from '@/lib/desktop';
 import { registerCloseTabTarget } from '@/lib/closeTabTarget';
 import { isFileMissingError } from '@/lib/api/files-errors';
-import { useOpenInAppsStore } from '@/stores/useOpenInAppsStore';
+import { useOpenWithMenu } from './files/useOpenWithMenu';
 import { useKeybind, useKeybinds } from '@/hooks/useKeybind';
 import { isEditableEventTarget } from '@/hooks/keyboard-shortcut-dom';
 import { formatShortcutForDisplay, getEffectiveShortcutCombo } from '@/lib/shortcuts';
@@ -394,6 +400,7 @@ interface FileRowProps {
     canCreateFolder: boolean;
     canDelete: boolean;
     canReveal: boolean;
+    canOpenWith: boolean;
   };
   downloadFile?: (path: string) => Promise<void>;
   contextMenuPath: string | null;
@@ -403,6 +410,7 @@ interface FileRowProps {
   onSelect: (node: FileNode) => void;
   onToggle: (path: string) => void;
   onRevealPath: (path: string) => void;
+  renderOpenWithItems: (path: string, components: { Item: React.ElementType; Separator: React.ElementType }) => React.ReactNode;
   onOpenDialog: (type: 'createFile' | 'createFolder' | 'rename' | 'delete', data: { path: string; name?: string; type?: 'file' | 'directory' }) => void;
   canUpload: boolean;
   onPickFiles: (directory: string) => void;
@@ -431,17 +439,17 @@ const FileRow: React.FC<FileRowProps> = ({
   onSelect,
   onToggle,
   onRevealPath,
+  renderOpenWithItems,
   onOpenDialog,
   canUpload,
   onPickFiles,
 }) => {
   const { t } = useI18n();
   const isDir = node.type === 'directory';
-  const { canRename, canCreateFile, canCreateFolder, canDelete, canReveal } = permissions;
+  const { canRename, canCreateFile, canCreateFolder, canDelete, canReveal, canOpenWith } = permissions;
   const canDownload = !isDir && Boolean(downloadFile);
-  const canRevealPath = canReveal && !isBrowserClient;
   const canUploadHere = isDir && canUpload;
-  const hasMenuActions = canRename || canCreateFile || canCreateFolder || canUploadHere || canDelete || canDownload || canRevealPath;
+  const hasMenuActions = canRename || canCreateFile || canCreateFolder || canUploadHere || canDelete || canDownload || canReveal || canOpenWith;
 
   const handleContextMenu = React.useCallback((event?: React.MouseEvent) => {
     if (!hasMenuActions) {
@@ -470,9 +478,15 @@ const FileRow: React.FC<FileRowProps> = ({
   const renderMenuItems = ({
     Item,
     Separator,
+    Sub,
+    SubTrigger,
+    SubContent,
   }: {
     Item: React.ElementType;
     Separator: React.ElementType;
+    Sub: React.ElementType;
+    SubTrigger: React.ElementType;
+    SubContent: React.ElementType;
   }) => (
     <>
       {canRename && (
@@ -516,21 +530,20 @@ const FileRow: React.FC<FileRowProps> = ({
           <Icon name="download" className="me-2 size-4" /> {t(isBrowserClient ? 'sidebarFilesTree.menu.download' : 'sidebarFilesTree.menu.save')}
         </Item>
       )}
-      {canRevealPath && (
+      {canReveal && (
         <Item onClick={(e: React.MouseEvent) => { e.stopPropagation(); onRevealPath(node.path); }}>
           <Icon name="folder-received" className="me-2 size-4" /> {t(getRevealLabelKey())}
         </Item>
       )}
-      {/* The OS opens it with whatever app owns the type: Word for a .docx, Typora for a .md. */}
-      {!isDir && canRevealPath && isDesktopLocalOriginActive() && (
-        <Item onClick={(e: React.MouseEvent) => {
-          e.stopPropagation();
-          void openDesktopPath(node.path).then((opened) => {
-            if (!opened) toast.error(t('sidebarFilesTree.toast.operationFailed'));
-          });
-        }}>
-          <Icon name="external-link" className="me-2 size-4" /> {t('sidebarFilesTree.menu.openInDefaultApp')}
-        </Item>
+      {canOpenWith && (
+        <Sub>
+          <SubTrigger>
+            <Icon name="external-link" className="me-2 size-4" /> {t('filesView.menu.openWith')}
+          </SubTrigger>
+          <SubContent>
+            {renderOpenWithItems(node.path, { Item, Separator })}
+          </SubContent>
+        </Sub>
       )}
       {fileActions.length > 0 && <Separator />}
       {fileActions.map((entry) => (
@@ -634,14 +647,14 @@ const FileRow: React.FC<FileRowProps> = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" side="bottom" onCloseAutoFocus={() => setContextMenuPath(null)}>
-              {renderMenuItems({ Item: DropdownMenuItem, Separator: DropdownMenuSeparator })}
+              {renderMenuItems({ Item: DropdownMenuItem, Separator: DropdownMenuSeparator, Sub: DropdownMenuSub, SubTrigger: DropdownMenuSubTrigger, SubContent: DropdownMenuSubContent })}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       )}
       </ContextMenuTrigger>
       <ContextMenuContent className="min-w-[180px]">
-        {renderMenuItems({ Item: ContextMenuItem, Separator: ContextMenuSeparator })}
+        {renderMenuItems({ Item: ContextMenuItem, Separator: ContextMenuSeparator, Sub: ContextMenuSub, SubTrigger: ContextMenuSubTrigger, SubContent: ContextMenuSubContent })}
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -1130,15 +1143,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
   const canRename = Boolean(files.rename);
   const canDelete = Boolean(files.delete);
   const canReveal = Boolean(files.revealPath);
-  const canRevealPath = canReveal && !isBrowserClient;
-  const openInApps = useOpenInAppsStore((state) => state.availableApps);
-  const openInCacheStale = useOpenInAppsStore((state) => state.isCacheStale);
-  const initializeOpenInApps = useOpenInAppsStore((state) => state.initialize);
-  const loadOpenInApps = useOpenInAppsStore((state) => state.loadInstalledApps);
-
-  React.useEffect(() => {
-    initializeOpenInApps();
-  }, [initializeOpenInApps]);
+  const { canOpenWith, renderOpenWithItems, openWithDialog } = useOpenWithMenu(root);
 
   const handleRevealPath = React.useCallback((targetPath: string) => {
     if (!files.revealPath) return;
@@ -1146,31 +1151,6 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
       toast.error(t('sidebarFilesTree.toast.revealFailed'));
     });
   }, [files, t]);
-
-  const handleOpenInApp = React.useCallback(async (app: { id: string; appName: string }) => {
-    if (!selectedFile?.path) {
-      return;
-    }
-
-    const openedInApp = await openDesktopFileInApp(selectedFile.path, app.id, app.appName);
-    if (openedInApp) {
-      return;
-    }
-
-    const openedFile = await openDesktopPath(selectedFile.path, app.appName);
-    if (openedFile) {
-      return;
-    }
-
-    const fileDirectory = getParentDirectoryPath(selectedFile.path) || root;
-    if (fileDirectory) {
-      const openedDirectory = await openDesktopPath(fileDirectory, app.appName);
-      if (openedDirectory) {
-        return;
-      }
-    }
-    toast.error(t('filesView.toast.openInAppFailed', { app: app.appName }));
-  }, [root, selectedFile?.path, t]);
 
   const handleOpenDialog = React.useCallback((type: 'createFile' | 'createFolder' | 'rename' | 'delete', data: { path: string; name?: string; type?: 'file' | 'directory' }) => {
     setActiveDialog(type);
@@ -2660,8 +2640,8 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
   }, [loadDirectory, root, toggleExpandedPath, toggleWithMotion]);
 
   const fileRowPermissions = React.useMemo(
-    () => ({ canRename, canCreateFile, canCreateFolder, canDelete, canReveal }),
-    [canRename, canCreateFile, canCreateFolder, canDelete, canReveal]
+    () => ({ canRename, canCreateFile, canCreateFolder, canDelete, canReveal, canOpenWith }),
+    [canRename, canCreateFile, canCreateFolder, canDelete, canReveal, canOpenWith]
   );
 
   function renderTree(dirPath: string, depth: number): React.ReactNode {
@@ -2696,6 +2676,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
             onSelect={handleSelectFile}
             onToggle={toggleDirectory}
             onRevealPath={handleRevealPath}
+            renderOpenWithItems={renderOpenWithItems}
             onOpenDialog={handleOpenDialog}
             canUpload={canUpload && !isUploading}
             onPickFiles={pickFiles}
@@ -4404,43 +4385,9 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
       }
     };
 
-    const openInAppMenuItems = (
-      <>
-        {/* Always first: whatever app the OS has for this file type. */}
-        <DropdownMenuItem
-          className="flex items-center gap-2"
-          onClick={() => {
-            if (!selectedFile?.path) return;
-            void openDesktopPath(selectedFile.path).then((opened) => {
-              if (!opened) toast.error(t('sidebarFilesTree.toast.operationFailed'));
-            });
-          }}
-        >
-          <Icon name="external-link" className="size-4" />
-          <span className="typography-ui-label text-foreground">{t('sidebarFilesTree.menu.openInDefaultApp')}</span>
-        </DropdownMenuItem>
-        {openInApps.length > 0 ? <DropdownMenuSeparator /> : null}
-        {openInApps.map((app) => (
-          <DropdownMenuItem
-            key={app.id}
-            className="flex items-center gap-2"
-            onClick={() => void handleOpenInApp(app)}
-          >
-            <Icon name={app.icon} className="size-4" />
-            <span className="typography-ui-label text-foreground">{app.label}</span>
-          </DropdownMenuItem>
-        ))}
-        {openInCacheStale ? (
-          <DropdownMenuItem
-            className="flex items-center gap-2"
-            onClick={() => void loadOpenInApps(true)}
-          >
-            <Icon name="refresh" className="size-4" />
-            <span className="typography-ui-label text-foreground">{t('filesView.editor.refreshApps')}</span>
-          </DropdownMenuItem>
-        ) : null}
-      </>
-    );
+    const openInAppMenuItems = selectedFile?.path
+      ? renderOpenWithItems(selectedFile.path, { Item: DropdownMenuItem, Separator: DropdownMenuSeparator, iconClassName: 'size-4' })
+      : null;
 
     // Which buttons the row has depends on what the file is, never on the
     // mode it shows: an action the current mode cannot do switches to the
@@ -4595,15 +4542,15 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
       onSelect: wholeFileComment.toggle,
     };
     const fileActions: ToolbarGroup = [
-      // Every item hands the path to this machine's OS. A remote server, WSL
-      // included, keeps its files elsewhere, so the menu would only fail there.
-      isDesktopLocalOriginActive() && {
+      // Every item hands the path to the machine running the server: this
+      // machine for a local server, the remote one otherwise.
+      canOpenWith && Boolean(selectedFile?.path) && {
         id: 'open-in-app',
-        label: t('filesView.editor.openInDesktopApp'),
+        label: t('filesView.menu.openWith'),
         icon: 'external-link',
         menu: openInAppMenuItems,
       },
-      canRevealPath && Boolean(selectedFile?.path) && {
+      canReveal && Boolean(selectedFile?.path) && {
         id: 'reveal-in-folder',
         label: t(getRevealLabelKey()),
         icon: 'folder-received',
@@ -5524,6 +5471,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
         onClose={handleCloseDialog}
         inputRef={dialogInputRef}
       />
+      {openWithDialog}
       {uploadElements}
       {fullscreenViewer}
       {isMobile ? (

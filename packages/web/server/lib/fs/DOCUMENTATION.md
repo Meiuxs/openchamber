@@ -39,6 +39,19 @@ The interval reopens the watcher before checking, so Linux/Windows folder deleti
       itself or into one of its subfolders returns `400`; a missing source
       returns `404` with `reason: 'not-found'`.
      - `POST /api/fs/reveal`
+     - `POST /api/fs/open` — opens a file or folder on the server machine with
+       its default handler, or in a named app when `app` is given (a CLI command
+       on Windows/Linux, an application name for `open -a` on macOS). Same
+       validation and error mapping as reveal: missing path `400`, missing
+       target `404`, launch failure `500`. Windows launches through PowerShell
+       `Start-Process` and macOS through `open`; both wait for a zero exit code,
+       since that is where those launchers report an unknown app. Windows
+       paths are single-quote escaped and quoted inside `-ArgumentList` so a
+       path with spaces stays one argument. Linux spawns detached and answers
+       once the child spawns, because a missing binary fails the spawn itself.
+       The app name is executed as given, so this route carries the same trust
+       model as reveal and exec: it runs code on the machine hosting the
+       server.
      - `POST /api/fs/clone`
      - `POST /api/fs/exec`
     - `GET /api/fs/exec/:jobId`

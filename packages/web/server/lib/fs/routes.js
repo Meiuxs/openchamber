@@ -658,6 +658,28 @@ export const registerFsRoutes = (app, dependencies) => {
     child.once('spawn', onSpawn);
   });
 
+  // macOS `open -a` and PowerShell launch through a helper process that reports
+  // failure as a non-zero exit code, so success needs that code, not the spawn.
+  const spawnAndWait = (command, args, label) => new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = spawn(command, args, { windowsHide: true, stdio: 'ignore' });
+    } catch (error) {
+      reject(new Error('Failed to launch file browser', { cause: error }));
+      return;
+    }
+    child.once('error', (error) => {
+      reject(new Error('Failed to launch file browser', { cause: error }));
+    });
+    child.once('exit', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`${label} launch failed with code ${code ?? 'unknown'}`));
+    });
+  });
+
   const execJobs = new Map();
   const commandTimeoutMs = createCommandTimeoutMs();
   const gitReadCacheTtlMs = createGitReadCacheTtlMs();
@@ -1854,21 +1876,8 @@ export const registerFsRoutes = (app, dependencies) => {
         // manager gets it; only Explorer can select a file inside its folder.
         const command = stat.isDirectory()
           ? `Start-Process -FilePath '${escapedPath}'`
-          : `Start-Process -FilePath explorer.exe -ArgumentList '/select,${escapedPath}'`;
-        await new Promise((resolve, reject) => {
-          const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], {
-            windowsHide: true,
-            stdio: 'ignore',
-          });
-          child.once('error', reject);
-          child.once('exit', (code) => {
-            if (code === 0) {
-              resolve();
-              return;
-            }
-            reject(new Error(`Explorer launch failed with code ${code ?? 'unknown'}`));
-          });
-        });
+          : `Start-Process -FilePath explorer.exe -ArgumentList '/select,"${escapedPath}"'`;
+        await spawnAndWait('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], 'Explorer');
       } else {
         const stat = await fsPromises.stat(resolved);
         const dir = stat.isDirectory() ? resolved : path.dirname(resolved);
@@ -1886,6 +1895,45 @@ export const registerFsRoutes = (app, dependencies) => {
       }
       console.error('Failed to reveal path:', error);
       return res.status(500).json({ error: (error && error.message) || 'Failed to reveal path' });
+    }
+  });
+
+  app.post('/api/fs/open', async (req, res) => {
+    const { path: targetPath, app: appName } = req.body || {};
+    if (!targetPath || !isString(targetPath)) {
+      return res.status(400).json({ error: 'Path is required' });
+    }
+    if (appName !== undefined && (!isString(appName) || !appName.trim())) {
+      return res.status(400).json({ error: 'Invalid app name' });
+    }
+
+    try {
+      const resolved = path.resolve(targetPath.trim());
+      await fsPromises.access(resolved);
+      const app = isString(appName) ? appName.trim() : '';
+
+      if (platform === 'darwin') {
+        await spawnAndWait('open', app ? ['-a', app, resolved] : [resolved], 'Open');
+      } else if (platform === 'win32') {
+        const escapedPath = resolved.replace(/'/g, "''");
+        const command = app
+          ? `Start-Process -FilePath '${app.replace(/'/g, "''")}' -ArgumentList '"${escapedPath}"'`
+          : `Start-Process -FilePath '${escapedPath}'`;
+        await spawnAndWait('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], 'Open');
+      } else {
+        await spawnDetached(app || 'xdg-open', [resolved]);
+      }
+
+      return res.json({ success: true, path: resolved });
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        return res.status(404).json({ error: 'Path not found' });
+      }
+      if (isOsPermissionError(error)) {
+        return sendOsPermissionDenied(res, 'Access to path denied');
+      }
+      console.error('Failed to open path:', error);
+      return res.status(500).json({ error: (error && error.message) || 'Failed to open path' });
     }
   });
 

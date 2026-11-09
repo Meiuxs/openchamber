@@ -18,6 +18,9 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -25,6 +28,9 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
@@ -52,6 +58,7 @@ import { areDirectoryNodesEqual } from '@/components/views/files/fileTreeStatus'
 import { useFileTreeUpload } from '@/components/views/files/useFileTreeUpload';
 import { useFileTreeDisclosure } from '@/components/views/files/useFileTreeDisclosure';
 import { moveWorkspacePath } from '@/components/views/files/moveWorkspacePath';
+import { useOpenWithMenu } from '@/components/views/files/useOpenWithMenu';
 import { INTERNAL_FILE_PATH_TYPE } from '@/components/chat/composer/attachments/dataTransfer';
 import { AUTO_RELIST_MAX_ENTRIES, useFileTreeChanges, type FileTreeChangeBatch } from '@/components/views/files/useFileTreeChanges';
 import { FileContentSearchResults } from '@/components/views/files/FileContentSearchResults';
@@ -78,7 +85,7 @@ import {
 } from '@/components/views/files/fileTreeRow';
 import { Icon } from "@/components/icon/Icon";
 import { toastContextFileOpenFailure, validateContextFileOpen } from '@/lib/contextFileOpenGuard';
-import { isBrowserClientRuntime, isDesktopLocalOriginActive, openDesktopPath } from '@/lib/desktop';
+import { isBrowserClientRuntime } from '@/lib/desktop';
 import { useDeviceInfo } from '@/lib/device';
 import { useI18n } from '@/lib/i18n';
 import { isFileTreeDragWithinClickSlop, recordFileTreeDragStart, shouldTreatFileTreeDragEndAsClick } from './fileTreeDragClick';
@@ -278,12 +285,14 @@ interface FileRowProps {
     canCreateFolder: boolean;
     canDelete: boolean;
     canReveal: boolean;
+    canOpenWith: boolean;
   };
   downloadFile?: (path: string) => Promise<void>;
   /** A plain click opens a preview tab; `pin` (double-click) keeps it. */
   onSelect: (node: FileNode, options?: { pin?: boolean }) => void;
   onToggle: (path: string) => void;
   onRevealPath: (path: string) => void;
+  renderOpenWithItems: (path: string, components: { Item: React.ElementType; Separator: React.ElementType }) => React.ReactNode;
   onOpenDialog: (type: 'createFile' | 'createFolder' | 'rename' | 'delete', data: { path: string; name?: string; type?: 'file' | 'directory' }) => void;
   onSetDropTarget: (path: string | null) => void;
   onDropFiles: (directory: string, dataTransfer: DataTransfer) => void;
@@ -314,6 +323,7 @@ const FileRow: React.FC<FileRowProps> = ({
   onSelect,
   onToggle,
   onRevealPath,
+  renderOpenWithItems,
   onOpenDialog,
   onSetDropTarget,
   onDropFiles,
@@ -325,11 +335,10 @@ const FileRow: React.FC<FileRowProps> = ({
   const { t } = useI18n();
   const isDir = node.type === 'directory';
   const uploadDirectory = isDir ? node.path : getParentPath(node.path);
-  const { canRename, canCreateFile, canCreateFolder, canDelete, canReveal } = permissions;
+  const { canRename, canCreateFile, canCreateFolder, canDelete, canReveal, canOpenWith } = permissions;
   const canDownload = !isDir && Boolean(downloadFile);
-  const canRevealPath = canReveal && !isBrowserClient;
   const canUploadHere = isDir && canUpload;
-  const hasMenuActions = canRename || canCreateFile || canCreateFolder || canUploadHere || canDelete || canDownload || canRevealPath;
+  const hasMenuActions = canRename || canCreateFile || canCreateFolder || canUploadHere || canDelete || canDownload || canReveal || canOpenWith;
 
   // Menu open state is local to each row so opening a menu in one row
   // never re-renders its siblings. Previously this state lived on the
@@ -366,9 +375,15 @@ const FileRow: React.FC<FileRowProps> = ({
   const renderMenuItems = ({
     Item,
     Separator,
+    Sub,
+    SubTrigger,
+    SubContent,
   }: {
     Item: React.ElementType;
     Separator: React.ElementType;
+    Sub: React.ElementType;
+    SubTrigger: React.ElementType;
+    SubContent: React.ElementType;
   }) => (
     <>
       {canRename && (
@@ -399,21 +414,18 @@ const FileRow: React.FC<FileRowProps> = ({
           <Icon name="download" className="me-2 h-4 w-4" /> {t(isBrowserClient ? 'sidebarFilesTree.menu.download' : 'sidebarFilesTree.menu.save')}
         </Item>
       )}
-      {canRevealPath && (
+      {canReveal && (
         <Item onClick={(e: React.MouseEvent) => { e.stopPropagation(); onRevealPath(node.path); }}>
           <Icon name="folder-received" className="me-2 h-4 w-4" /> {t(getRevealLabelKey())}
         </Item>
       )}
-      {/* The OS opens it with whatever app owns the type: Word for a .docx, Typora for a .md. */}
-      {!isDir && canRevealPath && isDesktopLocalOriginActive() && (
-        <Item onClick={(e: React.MouseEvent) => {
-          e.stopPropagation();
-          void openDesktopPath(node.path).then((opened) => {
-            if (!opened) toast.error(t('sidebarFilesTree.toast.operationFailed'));
-          });
-        }}>
-          <Icon name="external-link" className="me-2 h-4 w-4" /> {t('sidebarFilesTree.menu.openInDefaultApp')}
-        </Item>
+      {canOpenWith && (
+        <Sub>
+          <SubTrigger>
+            <Icon name="external-link" className="me-2 h-4 w-4" /> {t('filesView.menu.openWith')}
+          </SubTrigger>
+          <SubContent>{renderOpenWithItems(node.path, { Item, Separator })}</SubContent>
+        </Sub>
       )}
       {fileActions.length > 0 && <Separator />}
       {fileActions.map((entry) => (
@@ -609,14 +621,26 @@ const FileRow: React.FC<FileRowProps> = ({
               <TooltipContent side="bottom" sideOffset={6}>{t('diffView.actions.moreActions')}</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" side="bottom" onCloseAutoFocus={() => setContextMenuOpen(false)}>
-              {renderMenuItems({ Item: DropdownMenuItem, Separator: DropdownMenuSeparator })}
+              {renderMenuItems({
+                Item: DropdownMenuItem,
+                Separator: DropdownMenuSeparator,
+                Sub: DropdownMenuSub,
+                SubTrigger: DropdownMenuSubTrigger,
+                SubContent: DropdownMenuSubContent,
+              })}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       )}
       </ContextMenuTrigger>
       <ContextMenuContent className="min-w-[180px]">
-        {renderMenuItems({ Item: ContextMenuItem, Separator: ContextMenuSeparator })}
+        {renderMenuItems({
+          Item: ContextMenuItem,
+          Separator: ContextMenuSeparator,
+          Sub: ContextMenuSub,
+          SubTrigger: ContextMenuSubTrigger,
+          SubContent: ContextMenuSubContent,
+        })}
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -641,6 +665,7 @@ const areFileRowPropsEqual = (prev: FileRowProps, next: FileRowProps): boolean =
   && prev.onSelect === next.onSelect
   && prev.onToggle === next.onToggle
   && prev.onRevealPath === next.onRevealPath
+  && prev.renderOpenWithItems === next.renderOpenWithItems
   && prev.onOpenDialog === next.onOpenDialog
   && prev.onSetDropTarget === next.onSetDropTarget
   && prev.onDropFiles === next.onDropFiles
@@ -836,10 +861,11 @@ const SidebarFilesTreeContent: React.FC<{ visible: boolean; currentDirectory: st
   const canRename = Boolean(files.rename);
   const canDelete = Boolean(files.delete);
   const canReveal = Boolean(files.revealPath);
+  const { canOpenWith, renderOpenWithItems, openWithDialog } = useOpenWithMenu(root);
 
   const fileRowPermissions = React.useMemo(
-    () => ({ canRename, canCreateFile, canCreateFolder, canDelete, canReveal }),
-    [canRename, canCreateFile, canCreateFolder, canDelete, canReveal]
+    () => ({ canRename, canCreateFile, canCreateFolder, canDelete, canReveal, canOpenWith }),
+    [canRename, canCreateFile, canCreateFolder, canDelete, canReveal, canOpenWith]
   );
 
   const handleRevealPath = React.useCallback((targetPath: string) => {
@@ -1667,6 +1693,7 @@ const SidebarFilesTreeContent: React.FC<{ visible: boolean; currentDirectory: st
         onSelect={handleOpenFile}
         onToggle={toggleDirectory}
         onRevealPath={handleRevealPath}
+        renderOpenWithItems={renderOpenWithItems}
         onOpenDialog={handleOpenDialog}
         onSetDropTarget={setDropTarget}
         onDropFiles={handleDropFiles}
@@ -2002,6 +2029,8 @@ const SidebarFilesTreeContent: React.FC<{ visible: boolean; currentDirectory: st
       </div>
 
       {uploadElements}
+
+      {openWithDialog}
 
       {/* CRUD dialogs (matching FilesView) */}
       <Dialog open={!!activeDialog} onOpenChange={(open) => !open && setActiveDialog(null)}>

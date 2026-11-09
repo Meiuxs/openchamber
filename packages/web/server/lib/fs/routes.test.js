@@ -299,6 +299,27 @@ const registerReveal = ({ fsPromises, spawn, platform = 'linux' }) => {
   return getRoute('POST', '/api/fs/reveal');
 };
 
+const registerOpen = ({ fsPromises, spawn, platform = 'linux' }) => {
+  const { app, getRoute } = createRouteRegistry();
+  registerFsRoutes(app, {
+    os: { homedir: () => '/home/user' },
+    path: path.posix,
+    fsPromises: {
+      realpath: async (targetPath) => targetPath,
+      ...fsPromises,
+    },
+    spawn,
+    platform,
+    crypto: { randomUUID: () => 'job-0' },
+    normalizeDirectoryPath: (p) => p,
+    resolveProjectDirectory: async () => ({ directory: '/repo' }),
+    buildAugmentedPath: () => '/usr/bin',
+    resolveGitBinaryForSpawn: () => 'git',
+    openchamberUserConfigRoot: '/home/user/.config',
+  });
+  return getRoute('POST', '/api/fs/open');
+};
+
 const callExec = async (handler, body) => {
   const res = createMockResponse();
   await handler({ body }, res);
@@ -1335,6 +1356,49 @@ describe('fs reveal', () => {
     error.mockRestore();
   });
 
+  const createWindowsSpawn = (isDirectory, exitCode = 0) => {
+    const child = new EventEmitter();
+    const spawn = vi.fn(() => {
+      queueMicrotask(() => child.emit('exit', exitCode));
+      return child;
+    });
+    const handler = registerReveal({
+      fsPromises: {
+        access: vi.fn(async () => undefined),
+        stat: vi.fn(async () => ({ isDirectory: () => isDirectory })),
+      },
+      spawn,
+      platform: 'win32',
+    });
+    return { handler, spawn };
+  };
+
+  it('selects a Windows file inside Explorer with the path kept as one argument', async () => {
+    const { handler, spawn } = createWindowsSpawn(false);
+
+    const res = await callReveal(handler, { path: '/repo/my file.txt' });
+
+    expect(res.body).toEqual({ success: true, path: '/repo/my file.txt' });
+    expect(spawn).toHaveBeenCalledWith(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', "Start-Process -FilePath explorer.exe -ArgumentList '/select,\"/repo/my file.txt\"'"],
+      { windowsHide: true, stdio: 'ignore' },
+    );
+  });
+
+  it('opens a Windows folder through its default handler', async () => {
+    const { handler, spawn } = createWindowsSpawn(true);
+
+    const res = await callReveal(handler, { path: '/repo/my folder' });
+
+    expect(res.body).toEqual({ success: true, path: '/repo/my folder' });
+    expect(spawn).toHaveBeenCalledWith(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', "Start-Process -FilePath '/repo/my folder'"],
+      { windowsHide: true, stdio: 'ignore' },
+    );
+  });
+
   it('unrefs a detached launcher only after it spawns successfully', async () => {
     const child = new EventEmitter();
     child.unref = vi.fn();
@@ -1372,6 +1436,223 @@ describe('fs reveal', () => {
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({ error: 'Failed to launch file browser' });
     expect(error).toHaveBeenCalledWith('Failed to reveal path:', expect.objectContaining({ cause: spawnError }));
+    error.mockRestore();
+  });
+});
+
+describe('fs open', () => {
+  const createDetachedSpawn = () => {
+    const child = new EventEmitter();
+    child.unref = vi.fn();
+    const spawn = vi.fn(() => {
+      queueMicrotask(() => child.emit('spawn'));
+      return child;
+    });
+    return { child, spawn };
+  };
+
+  const createWaitingSpawn = (exitCode = 0) => {
+    const child = new EventEmitter();
+    child.unref = vi.fn();
+    const spawn = vi.fn(() => {
+      queueMicrotask(() => child.emit('exit', exitCode));
+      return child;
+    });
+    return { child, spawn };
+  };
+
+  const createWindowsSpawn = (exitCode = 0) => {
+    const child = new EventEmitter();
+    const spawn = vi.fn(() => {
+      queueMicrotask(() => child.emit('exit', exitCode));
+      return child;
+    });
+    return { child, spawn };
+  };
+
+  const openFsPromises = () => ({
+    access: vi.fn(async () => undefined),
+    stat: vi.fn(async () => ({ isDirectory: () => false })),
+  });
+
+  it('opens a path with the linux default handler', async () => {
+    const { spawn } = createDetachedSpawn();
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn, platform: 'linux' });
+
+    const res = await callReveal(handler, { path: '/repo/file.txt' });
+
+    expect(res.body).toEqual({ success: true, path: '/repo/file.txt' });
+    expect(spawn).toHaveBeenCalledWith('xdg-open', ['/repo/file.txt'], { windowsHide: true, stdio: 'ignore', detached: true });
+  });
+
+  // `open` reports an unknown or uninstalled app as a non-zero exit code, so
+  // the route has to wait for that code instead of counting the spawn.
+  it('opens a path with the macOS default handler', async () => {
+    const { spawn } = createWaitingSpawn();
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn, platform: 'darwin' });
+
+    const res = await callReveal(handler, { path: '/repo/file.txt' });
+
+    expect(res.body).toEqual({ success: true, path: '/repo/file.txt' });
+    expect(spawn).toHaveBeenCalledWith('open', ['/repo/file.txt'], { windowsHide: true, stdio: 'ignore' });
+  });
+
+  it('returns a controlled error when the macOS app is not installed', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { spawn } = createWaitingSpawn(1);
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn, platform: 'darwin' });
+
+    const res = await callReveal(handler, { path: '/repo/file.txt', app: 'NoSuchApp' });
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toEqual({ error: 'Open launch failed with code 1' });
+    expect(spawn).toHaveBeenCalledWith('open', ['-a', 'NoSuchApp', '/repo/file.txt'], { windowsHide: true, stdio: 'ignore' });
+    error.mockRestore();
+  });
+
+  it('opens a path with the Windows default handler', async () => {
+    const { spawn } = createWindowsSpawn();
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn, platform: 'win32' });
+
+    const res = await callReveal(handler, { path: '/repo/file.txt' });
+
+    expect(res.body).toEqual({ success: true, path: '/repo/file.txt' });
+    expect(spawn).toHaveBeenCalledWith(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', "Start-Process -FilePath '/repo/file.txt'"],
+      { windowsHide: true, stdio: 'ignore' },
+    );
+  });
+
+  it('opens a path in a named app on linux', async () => {
+    const { spawn } = createDetachedSpawn();
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn, platform: 'linux' });
+
+    const res = await callReveal(handler, { path: '/repo/file.txt', app: 'code' });
+
+    expect(res.body).toEqual({ success: true, path: '/repo/file.txt' });
+    expect(spawn).toHaveBeenCalledWith('code', ['/repo/file.txt'], { windowsHide: true, stdio: 'ignore', detached: true });
+  });
+
+  it('opens a path in a named app on macOS', async () => {
+    const { spawn } = createWaitingSpawn();
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn, platform: 'darwin' });
+
+    const res = await callReveal(handler, { path: '/repo/file.txt', app: 'Visual Studio Code' });
+
+    expect(res.body).toEqual({ success: true, path: '/repo/file.txt' });
+    expect(spawn).toHaveBeenCalledWith(
+      'open',
+      ['-a', 'Visual Studio Code', '/repo/file.txt'],
+      { windowsHide: true, stdio: 'ignore' },
+    );
+  });
+
+  it('opens a path in a named app on Windows', async () => {
+    const { spawn } = createWindowsSpawn();
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn, platform: 'win32' });
+
+    const res = await callReveal(handler, { path: '/repo/file.txt', app: 'code.cmd' });
+
+    expect(res.body).toEqual({ success: true, path: '/repo/file.txt' });
+    expect(spawn).toHaveBeenCalledWith(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', "Start-Process -FilePath 'code.cmd' -ArgumentList '\"/repo/file.txt\"'"],
+      { windowsHide: true, stdio: 'ignore' },
+    );
+  });
+
+  it('quotes a Windows path with spaces as one argument', async () => {
+    const { spawn } = createWindowsSpawn();
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn, platform: 'win32' });
+
+    const res = await callReveal(handler, { path: '/repo/my file.txt', app: 'code.cmd' });
+
+    expect(res.body).toEqual({ success: true, path: '/repo/my file.txt' });
+    expect(spawn).toHaveBeenCalledWith(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', "Start-Process -FilePath 'code.cmd' -ArgumentList '\"/repo/my file.txt\"'"],
+      { windowsHide: true, stdio: 'ignore' },
+    );
+  });
+
+  it('escapes single quotes in the path and app name on Windows', async () => {
+    const { spawn } = createWindowsSpawn();
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn, platform: 'win32' });
+
+    const res = await callReveal(handler, { path: "/repo/it's.txt", app: "my'app.cmd" });
+
+    expect(res.body).toEqual({ success: true, path: "/repo/it's.txt" });
+    expect(spawn).toHaveBeenCalledWith(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', "Start-Process -FilePath 'my''app.cmd' -ArgumentList '\"/repo/it''s.txt\"'"],
+      { windowsHide: true, stdio: 'ignore' },
+    );
+  });
+
+  it('rejects a missing path', async () => {
+    const { spawn } = createDetachedSpawn();
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn });
+
+    const res = await callReveal(handler, {});
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: 'Path is required' });
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty app name', async () => {
+    const { spawn } = createDetachedSpawn();
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn });
+
+    const res = await callReveal(handler, { path: '/repo/file.txt', app: '  ' });
+
+    expect(res.statusCode).toBe(400);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the path does not exist', async () => {
+    const { spawn } = createDetachedSpawn();
+    const handler = registerOpen({
+      fsPromises: {
+        access: vi.fn(async () => { throw Object.assign(new Error('missing'), { code: 'ENOENT' }); }),
+      },
+      spawn,
+    });
+
+    const res = await callReveal(handler, { path: '/repo/missing.txt' });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ error: 'Path not found' });
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('returns a controlled error when the app launcher is unavailable', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const child = new EventEmitter();
+    child.unref = vi.fn();
+    const spawn = vi.fn(() => {
+      queueMicrotask(() => child.emit('error', Object.assign(new Error('not found'), { code: 'ENOENT' })));
+      return child;
+    });
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn });
+
+    const res = await callReveal(handler, { path: '/repo/file.txt', app: 'code' });
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toEqual({ error: 'Failed to launch file browser' });
+    expect(child.unref).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it('returns a controlled error when the Windows launch exits non-zero', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { spawn } = createWindowsSpawn(1);
+    const handler = registerOpen({ fsPromises: openFsPromises(), spawn, platform: 'win32' });
+
+    const res = await callReveal(handler, { path: '/repo/file.txt', app: 'missing-app.cmd' });
+
+    expect(res.statusCode).toBe(500);
     error.mockRestore();
   });
 });

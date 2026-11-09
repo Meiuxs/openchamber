@@ -1467,6 +1467,7 @@ export interface FilesAPI {
   delete?(path: string): Promise<{ success: boolean }>;
   rename?(oldPath: string, newPath: string): Promise<{ success: boolean; path: string }>;
   revealPath?(path: string): Promise<{ success: boolean }>;
+  openPath?(path: string, app?: string): Promise<{ success: boolean }>;
   downloadFile?(path: string, options?: FileReadOptions): Promise<void>;
 }
 

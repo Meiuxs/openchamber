@@ -423,6 +423,23 @@ export const createWebFilesAPI = ({ getDirectory, searchFiles = defaultSearchFil
     return { success: Boolean((result as { success?: boolean }).success) };
   },
 
+  async openPath(targetPath: string, app?: string): Promise<{ success: boolean }> {
+    const response = await runtimeFetch('/api/fs/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...directoryHeaders(getDirectory, undefined, targetPath) },
+      // JSON.stringify drops `app` while it is undefined.
+      body: JSON.stringify({ path: normalizePath(targetPath), app }),
+    });
+
+    if (!response.ok) {
+      const error: WebFileMutationResponse = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(error.error || 'Failed to open path');
+    }
+
+    const result: WebFileMutationResponse = await response.json().catch(() => ({}));
+    return { success: Boolean(result.success) };
+  },
+
   async downloadFile(path: string, options): Promise<void> {
     const target = normalizePath(path);
     const params = new URLSearchParams({ path: target, download: 'true' });
