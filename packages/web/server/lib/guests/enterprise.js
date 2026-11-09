@@ -18,11 +18,12 @@ import { readEnterprisePolicy } from '../enterprise-mode.js';
  *   provider call and tool result in reach.
  * - `opencode`: that process reading sessions, messages and live events from
  *   OpenCode.
- * Such a package installs and runs only from a Git repository listed in the
+ * Such a package installs and runs from a Git repository listed in the
  * policy (`allowedExtensions`; an entry ending in `/` allows every
- * repository under it, such as a whole organization), or from a local folder
- * where `allowLocalExtensions` is set for developers. ZIP stays closed:
- * it is how a build gets handed to others. Everything else installs as usual.
+ * repository under it, such as a whole organization), from an offline `.zip`
+ * archive (`source === 'zip'`), or from a local folder where
+ * `allowLocalExtensions` is set for developers. Everything else installs as
+ * usual.
  * The list names repositories, not package ids: a package declares its own
  * id, so an id would let a user ship any code under an allowed name.
  */
@@ -72,6 +73,7 @@ export const enterpriseBlockedCapabilities = (guest, { source, gitUrl } = {}, po
   if (!policy.enterpriseMode) return [];
   const gated = requestedGuestCapabilities(guest).filter((capability) => ENTERPRISE_GATED_CAPABILITIES.includes(capability));
   if (gated.length === 0) return [];
+  if (source === 'zip') return [];
   if (source === 'git' && isAllowedRepository(gitUrl, policy.allowedExtensions)) return [];
   if (source === 'path' && policy.allowLocalExtensions) return [];
   return gated;

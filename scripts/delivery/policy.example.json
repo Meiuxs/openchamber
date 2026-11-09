@@ -44,13 +44,13 @@
   "allowedInsecureGitOrigins": [],
 
   "_comment_7_allowedExtensions": [
-    "7.【高权限扩展/插件安装白名单】(可选，Git 仓库 URL 数组)",
-    "声明了网络请求 (network)、读取会话 (transcript)、后台服务 (service) 的敏感插件，必须来自此处列出的 Git 仓库（支持以 '/' 结尾匹配整个组织分组）。",
+    "7.【高权限扩展/插件 Git 仓库安装白名单】(可选，Git 仓库 URL 数组)",
+    "通过 Git 仓库安装声明了网络请求 (network)、读取会话 (transcript)、后台服务 (service) 等权限的插件时，必须来自此处列出的仓库（支持以 '/' 结尾匹配整个组织分组）；离线 ZIP 文件安装不受此限制。",
     "示例: [\"https://gitlab.corp.internal/ai-plugins/\", \"http://gitlab.corp.internal/platform/\"]"
   ],
   "allowedExtensions": [],
 
-  "_comment_8_allowLocalExtensions": "8.【是否允许从本地文件夹安装/加载扩展】(可选，布尔值，默认 false) 适合内网插件开发调试，设为 true 时可在设置页面通过本地文件路径加载扩展。",
+  "_comment_8_allowLocalExtensions": "8.【是否允许从本地文件夹安装/加载扩展】(可选，布尔值，默认 false) 适合内网插件开发调试，设为 true 时可在设置页面通过本地文件夹路径加载扩展（离线 ZIP 包默认已放行）。",
   "allowLocalExtensions": true,
 
   "_comment_9_hideBuiltinSkillCatalogs": "9.【隐藏官方内置公开技能库】(可选，布尔值，默认 false) 设为 true 后隐藏官方自带的 Anthropic、OpenAI、Cursor 等外网公开技能库。",

@@ -13,12 +13,13 @@ const enterprise = (allowedExtensions = []) => ({ enterpriseMode: true, allowedE
 const withOrigins = { origins: ['https://api.acme.test'] };
 
 describe('enterpriseBlockedCapabilities', () => {
-  test('refuses what acts on sessions or steers agents, unless the repository is allowed', () => {
+  test('refuses what acts on sessions or steers agents, unless the repository or offline zip is allowed', () => {
     const guest = { service: { entry: 'service/main.js', runtime: 'host' }, sessionControl: {}, instructions: true, skills: 'skills', opencodePlugin: 'plugin' };
     const refused = ['service', 'sessionControl', 'instructions', 'skills', 'opencodePlugin'];
-    expect(enterpriseBlockedCapabilities(guest, { source: 'zip' }, enterprise()).sort()).toEqual([...refused].sort());
+    expect(enterpriseBlockedCapabilities(guest, { source: 'git', gitUrl: 'https://github.com/other/ext' }, enterprise()).sort()).toEqual([...refused].sort());
+    expect(enterpriseBlockedCapabilities(guest, { source: 'zip' }, enterprise())).toEqual([]);
     expect(enterpriseBlockedCapabilities({ skills: 'skills' }, { source: 'path' }, enterprise())).toEqual(['skills']);
-    // Code inside OpenCode itself: refused from any source but an allowed repository or an allowed local folder.
+    // Code inside OpenCode itself: refused from an unapproved repository or local folder unless allowed, permitted from offline zip.
     expect(enterpriseBlockedCapabilities({ opencodePlugin: 'plugin' }, { source: 'path' }, enterprise())).toEqual(['opencodePlugin']);
     expect(enterpriseBlockedCapabilities({ opencodePlugin: 'plugin' }, { source: 'path' }, { ...enterprise(), allowLocalExtensions: true })).toEqual([]);
     expect(enterpriseBlockedCapabilities({ opencodePlugin: 'plugin' }, { source: 'git', gitUrl: 'https://github.com/acme/ext' }, enterprise(['https://github.com/acme/ext']))).toEqual([]);
@@ -30,9 +31,9 @@ describe('enterpriseBlockedCapabilities', () => {
     expect(enterpriseBlockedCapabilities({ origins: withOrigins.origins }, { source: 'zip' }, { enterpriseMode: false, allowedExtensions: [] })).toEqual([]);
   });
 
-  test('refuses what could send data out, from any source but an allowed repository', () => {
+  test('refuses what could send data out from unapproved git or path, while allowing offline zip', () => {
     const guest = { origins: ['https://api.acme.test'] };
-    expect(enterpriseBlockedCapabilities(guest, { source: 'zip' }, enterprise())).toEqual(['origins']);
+    expect(enterpriseBlockedCapabilities(guest, { source: 'zip' }, enterprise())).toEqual([]);
     expect(enterpriseBlockedCapabilities(guest, { source: 'path' }, enterprise(['https://github.com/acme/ext']))).toEqual(['origins']);
     expect(enterpriseBlockedCapabilities(guest, { source: 'git', gitUrl: 'https://github.com/other/ext' }, enterprise(['https://github.com/acme/ext']))).toEqual(['origins']);
   });
@@ -54,11 +55,11 @@ describe('enterpriseBlockedCapabilities', () => {
     expect(enterpriseBlockedCapabilities(guest, { source: 'git', gitUrl: 'https://github.com/acme' }, policy)).toEqual(['origins']);
   });
 
-  test('allowLocalExtensions opens a local folder for developers, never a ZIP', () => {
+  test('allowLocalExtensions opens a local folder for developers, and offline ZIP is also allowed', () => {
     const guest = { origins: ['https://api.acme.test'] };
     const policy = { enterpriseMode: true, allowedExtensions: [], allowLocalExtensions: true };
     expect(enterpriseBlockedCapabilities(guest, { source: 'path' }, policy)).toEqual([]);
-    expect(enterpriseBlockedCapabilities(guest, { source: 'zip' }, policy)).toEqual(['origins']);
+    expect(enterpriseBlockedCapabilities(guest, { source: 'zip' }, policy)).toEqual([]);
   });
 
   test('leaves packages that cannot send data out alone', () => {
@@ -80,12 +81,16 @@ const writeGuest = async (root, id, contributes = {}) => {
 };
 
 describe('extensions in enterprise mode', () => {
+  const prevDataDir = process.env.OPENCHAMBER_DATA_DIR;
   afterEach(() => {
     delete process.env.OPENCHAMBER_ENTERPRISE_MODE;
+    if (prevDataDir === undefined) delete process.env.OPENCHAMBER_DATA_DIR;
+    else process.env.OPENCHAMBER_DATA_DIR = prevDataDir;
   });
 
   test('refuses to install a package that could send data out, and installs one that cannot', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-ext-enterprise-'));
+    process.env.OPENCHAMBER_DATA_DIR = dir;
     const persistPath = path.join(dir, 'extensions.json');
     await writeGuest(path.join(dir, 'reach'), 'reach-out', withOrigins);
     await writeGuest(path.join(dir, 'quiet'), 'stay-home');
@@ -99,6 +104,7 @@ describe('extensions in enterprise mode', () => {
 
   test('drops an installed package\'s approved grants once enterprise mode turns on', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-ext-enterprise-'));
+    process.env.OPENCHAMBER_DATA_DIR = dir;
     const persistPath = path.join(dir, 'extensions.json');
     await writeGuest(path.join(dir, 'reach'), 'reach-later', withOrigins);
     expect((await installGuestFromPath(path.join(dir, 'reach'), persistPath)).ok).toBe(true);
@@ -125,12 +131,14 @@ describe('extensions in enterprise mode', () => {
 describe('session content in enterprise mode', () => {
   test('OpenCode reads are gated with the service that would receive them', () => {
     const guest = { service: { entry: 's.js', runtime: 'host', provides: ['opencode'] } };
-    expect(enterpriseBlockedCapabilities(guest, { source: 'zip' }, enterprise())).toEqual(['service', 'opencode']);
+    expect(enterpriseBlockedCapabilities(guest, { source: 'git', gitUrl: 'https://github.com/other/ext' }, enterprise())).toEqual(['service', 'opencode']);
+    expect(enterpriseBlockedCapabilities(guest, { source: 'zip' }, enterprise())).toEqual([]);
   });
 
   test('transcript is gated with the service that would receive it', () => {
     const guest = { service: { entry: 'service/main.js', runtime: 'host' }, sessionEvents: { events: ['turn-finished'], content: true } };
-    expect(enterpriseBlockedCapabilities(guest, { source: 'zip' }, enterprise())).toEqual(['service', 'transcript']);
+    expect(enterpriseBlockedCapabilities(guest, { source: 'git', gitUrl: 'https://github.com/other/ext' }, enterprise())).toEqual(['service', 'transcript']);
+    expect(enterpriseBlockedCapabilities(guest, { source: 'zip' }, enterprise())).toEqual([]);
     expect(enterpriseBlockedCapabilities(guest, { source: 'git', gitUrl: 'https://github.com/acme/ext' }, enterprise(['https://github.com/acme/ext']))).toEqual([]);
   });
 });
