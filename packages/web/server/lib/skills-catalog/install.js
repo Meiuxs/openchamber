@@ -83,20 +83,20 @@ async function copyDirectoryNoSymlinks(srcDir, dstDir) {
   await walk(srcDir, dstDir);
 }
 
-async function cloneRepo({ cloneUrl, identity, credentialResolver, tempDir, ref = null }) {
+async function cloneRepo({ cloneUrl, identity, credentialResolver, tempDir, ref = null, gitRunner = runGit }) {
   // A `#ref` on the source picks the branch or tag; otherwise the default branch.
   const branch = ref ? ['--branch', ref] : [];
   const preferred = ['clone', '--depth', '1', '--filter=blob:none', '--no-checkout', ...branch, cloneUrl, tempDir];
   const fallback = ['clone', '--depth', '1', '--no-checkout', ...branch, cloneUrl, tempDir];
 
   const options = { identity, credentialResolver, timeoutMs: 90_000 };
-  const result = await runGit(preferred, options);
+  const result = await gitRunner(preferred, options);
   if (result.ok) return { ok: true };
   if (looksLikeAuthError(`${result.stderr || ''}\n${result.message || ''}`)) {
     return { ok: false, error: result };
   }
 
-  const fallbackResult = await runGit(fallback, options);
+  const fallbackResult = await gitRunner(fallback, options);
   if (fallbackResult.ok) return { ok: true };
 
   return {
@@ -139,6 +139,7 @@ export async function installSkillsFromRepository({
   selections,
   conflictPolicy,
   conflictDecisions,
+  gitRunner = runGit,
 } = {}) {
   const gitCheck = await assertGitAvailable();
   if (!gitCheck.ok) {
@@ -218,7 +219,7 @@ export async function installSkillsFromRepository({
   const tempBase = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'openchamber-skills-install-'));
 
   try {
-    const cloned = await cloneRepo({ cloneUrl, identity, credentialResolver, tempDir: tempBase, ref: parsed.ref });
+    const cloned = await cloneRepo({ cloneUrl, identity, credentialResolver, tempDir: tempBase, ref: parsed.ref, gitRunner });
     if (!cloned.ok) {
       const msg = `${cloned.error?.stderr || ''}\n${cloned.error?.message || ''}`.trim();
       if (looksLikeAuthError(msg)) {
@@ -227,16 +228,23 @@ export async function installSkillsFromRepository({
       return { ok: false, error: { kind: 'networkError', message: msg || 'Failed to clone repository' } };
     }
 
-    // Selective checkout for only requested skill dirs.
-    await runGit(['-C', tempBase, 'sparse-checkout', 'init', '--cone'], { timeoutMs: 15_000 });
-    const setResult = await runGit(['-C', tempBase, 'sparse-checkout', 'set', ...requestedDirs], { timeoutMs: 30_000 });
-    if (!setResult.ok) {
-      return { ok: false, error: { kind: 'unknown', message: setResult.stderr || setResult.message || 'Failed to configure sparse checkout' } };
+    // Git 2.20 has no sparse-checkout subcommand. A full checkout installs the
+    // same skill directories, so a sparse setup that fails is not fatal. A
+    // half-configured sparse checkout would hide them, so it is turned off for
+    // the checkout below.
+    let sparseReady = false;
+    const sparseInit = await gitRunner(['-C', tempBase, 'sparse-checkout', 'init', '--cone'], { timeoutMs: 15_000 });
+    if (sparseInit.ok) {
+      const sparseSet = await gitRunner(['-C', tempBase, 'sparse-checkout', 'set', ...requestedDirs], { timeoutMs: 30_000 });
+      sparseReady = sparseSet.ok;
     }
+    const checkoutArgs = ['-C', tempBase];
+    if (!sparseReady) checkoutArgs.push('-c', 'core.sparseCheckout=false');
+    checkoutArgs.push('checkout', '--force', 'HEAD');
 
     // The checkout fetches the selected blobs from the partial clone, so it
     // authenticates like the clone did.
-    const checkoutResult = await runGit(['-C', tempBase, 'checkout', '--force', 'HEAD'], { identity, credentialResolver, timeoutMs: 60_000 });
+    const checkoutResult = await gitRunner(checkoutArgs, { identity, credentialResolver, timeoutMs: 60_000 });
     if (!checkoutResult.ok) {
       return { ok: false, error: { kind: 'unknown', message: checkoutResult.stderr || checkoutResult.message || 'Failed to checkout repository' } };
     }

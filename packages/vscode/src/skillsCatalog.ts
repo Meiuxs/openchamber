@@ -243,15 +243,15 @@ function parseSkillMd(content: string): { frontmatter: SkillFrontmatter; warning
   }
 }
 
-async function cloneRepo(cloneUrl: string, targetDir: string, ref: string | null = null) {
+async function cloneRepo(cloneUrl: string, targetDir: string, ref: string | null = null, gitRunner: typeof runGit = runGit) {
   const branch = ref ? ['--branch', ref] : [];
   const preferred = ['clone', '--depth', '1', '--filter=blob:none', '--no-checkout', ...branch, cloneUrl, targetDir];
   const fallback = ['clone', '--depth', '1', '--no-checkout', ...branch, cloneUrl, targetDir];
 
-  const result = await runGit(preferred, { timeoutMs: 60_000 });
+  const result = await gitRunner(preferred, { timeoutMs: 60_000 });
   if (result.ok) return { ok: true as const };
 
-  const fallbackResult = await runGit(fallback, { timeoutMs: 60_000 });
+  const fallbackResult = await gitRunner(fallback, { timeoutMs: 60_000 });
   if (fallbackResult.ok) return { ok: true as const };
 
   const combined = `${fallbackResult.stderr}\n${fallbackResult.message}`.trim();
@@ -458,6 +458,7 @@ export async function installSkillsFromRepository(options: {
   selections: Array<{ skillDir: string }>;
   conflictPolicy?: 'prompt' | 'skipAll' | 'overwriteAll';
   conflictDecisions?: Record<string, 'skip' | 'overwrite'>;
+  gitRunner?: typeof runGit;
 }): Promise<SkillsInstallResult> { 
   const gitCheck = await assertGitAvailable();
   if (!gitCheck.ok) {
@@ -480,6 +481,7 @@ export async function installSkillsFromRepository(options: {
 
   const userSkillDir = getUserSkillBaseDir();
   const targetSource: SkillInstallSource = options.targetSource === 'agents' ? 'agents' : 'opencode';
+  const gitRunner = options.gitRunner ?? runGit;
 
   const skillPlans = requestedDirs.map((dir) => {
     const skillName = path.posix.basename(dir);
@@ -517,18 +519,26 @@ export async function installSkillsFromRepository(options: {
   const tempBase = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'openchamber-vscode-skills-install-'));
 
   try {
-    const cloned = await cloneRepo(parsed.cloneUrlHttps, tempBase, parsed.ref);
+    const cloned = await cloneRepo(parsed.cloneUrlHttps, tempBase, parsed.ref, gitRunner);
     if (!cloned.ok) {
       return { ok: false as const, error: cloned.error };
     }
 
-    await runGit(['-C', tempBase, 'sparse-checkout', 'init', '--cone'], { timeoutMs: 15_000 });
-    const setResult = await runGit(['-C', tempBase, 'sparse-checkout', 'set', ...requestedDirs], { timeoutMs: 30_000 });
-    if (!setResult.ok) {
-      return { ok: false as const, error: { kind: 'unknown' as const, message: setResult.stderr || setResult.message || 'Failed to configure sparse checkout' } };
+    // Git 2.20 has no sparse-checkout subcommand. A full checkout installs the
+    // same skill directories, so a sparse setup that fails is not fatal. A
+    // half-configured sparse checkout would hide them, so it is turned off for
+    // the checkout below.
+    let sparseReady = false;
+    const sparseInit = await gitRunner(['-C', tempBase, 'sparse-checkout', 'init', '--cone'], { timeoutMs: 15_000 });
+    if (sparseInit.ok) {
+      const sparseSet = await gitRunner(['-C', tempBase, 'sparse-checkout', 'set', ...requestedDirs], { timeoutMs: 30_000 });
+      sparseReady = sparseSet.ok;
     }
+    const checkoutArgs = ['-C', tempBase];
+    if (!sparseReady) checkoutArgs.push('-c', 'core.sparseCheckout=false');
+    checkoutArgs.push('checkout', '--force', 'HEAD');
 
-    const checkoutResult = await runGit(['-C', tempBase, 'checkout', '--force', 'HEAD'], { timeoutMs: 60_000 });
+    const checkoutResult = await gitRunner(checkoutArgs, { timeoutMs: 60_000 });
     if (!checkoutResult.ok) {
       return { ok: false as const, error: { kind: 'unknown' as const, message: checkoutResult.stderr || checkoutResult.message || 'Failed to checkout repository' } };
     }

@@ -43,7 +43,7 @@ The following functions are exported and used by the web server:
 - `scanSkillsRepository({ source, subpath, defaultSubpath, identity, credentialResolver })`: Scan a Git repository for skills by cloning it and reading its `SKILL.md` files. Account identities use their connected HTTPS credential, SSH identities use their managed key, anonymous identities use credential-free HTTPS, and no identity (labelled "This machine" in the catalog dialog) uses the server's own Git configuration and credential helpers.
 
 ### Git Repository Installation (`install.js`)
-- `installSkillsFromRepository({ source, subpath, defaultSubpath, identity, credentialResolver, scope, targetSource, workingDirectory, userSkillDir, selections, conflictPolicy, conflictDecisions })`: Install selected skills from a Git repository. It uses the same identity transports as scanning and supports user/project scopes, opencode/agents targets, conflict resolution (prompt/skipAll/overwriteAll), and sparse checkout.
+- `installSkillsFromRepository({ source, subpath, defaultSubpath, identity, credentialResolver, scope, targetSource, workingDirectory, userSkillDir, selections, conflictPolicy, conflictDecisions, gitRunner })`: Install selected skills from a Git repository. It uses the same identity transports as scanning and supports user/project scopes, opencode/agents targets, conflict resolution (prompt/skipAll/overwriteAll), and sparse checkout. `gitRunner` defaults to `runGit` and is the seam a test uses to answer Git commands the way an older Git would.
 
 ### Install provenance (`installed-sources.js`)
 The catalog's Installed badge used to match by name alone, so every same-named entry from every source read as installed (#4756). An install that names its catalog `sourceId` now records `{ skillName, skillDir, sourceId, scope, source, sourceRef }` in `skills-installed-sources.json` in the OpenChamber data dir (`version: 1`, mode 0600, atomic rename through a per-write temporary name).
@@ -123,10 +123,10 @@ The following functions are internal helpers used by exported functions:
 - Invalid names result in non-installable skills with appropriate warnings.
 
 ### Git cloning strategy
-- Use sparse checkout to minimize checkout size: `sparse-checkout init`, `sparse-checkout set`, `checkout HEAD`.
+- Use sparse checkout to minimize checkout size: `sparse-checkout init`, `sparse-checkout set`, `checkout HEAD`. The `sparse-checkout` subcommand needs Git 2.25, so scans that cannot use it fall back to `ls-tree -r --name-only HEAD` and installs fall back to a full checkout with `-c core.sparseCheckout=false`.
 - Keep managed credentials scoped to the selected provider endpoint. Do not fall back to System Git after a selected identity fails, and refuse a selected identity that names no credential.
 - Only commands that reach the remote resolve the identity: the clone, the `checkout`, and the `show` fallback in `scan.js`, which fetch blobs lazily from the partial clone. Local commands (`sparse-checkout`, `ls-files`, `ls-tree`) run without it.
-- Managed HTTPS and anonymous runs point `HOME`, `USERPROFILE`, and `XDG_CONFIG_HOME` at the null device, so an ambient `~/.netrc` cannot sign in as another account. SSH runs keep `HOME` for `known_hosts`.
+- Managed HTTPS and anonymous runs point `HOME`, `USERPROFILE`, and `XDG_CONFIG_HOME` at the null device, so an ambient `~/.netrc` cannot sign in as another account and an old Git ignores `~/.gitconfig`. SSH runs keep `HOME` for `known_hosts`.
 - Preferred clone uses `--depth=1 --filter=blob:none` for partial clone with fallback to `--depth=1`.
 - Always use non-interactive mode (`GIT_TERMINAL_PROMPT=0`) to avoid hangs.
 - Managed SSH keys are injected as `-c core.sshCommand=<wrapper>` through the shared SSH wrapper; the operation's key copy is removed after the run.
@@ -159,6 +159,9 @@ The sweep reads entries with `lstat` and removes only real folders the current u
 
 ### Why the sparse listing names the subpath
 After the sparse checkout the scan lists SKILL.md files with `git ls-files`. The index also holds the files the sparse checkout left out, and every one of those has no file on disk, so the scan read it with its own `git show`, and in a partial clone each of those fetches its blob from the remote. A source with a subpath in a large repository started thousands of Git processes per scan: 114 for Cursor's `pstack/skills`, about 5,700 for `sickn33/agentic-awesome-skills` with `skills` (#5446). It also listed skills from outside the subpath. `ls-files -- <subpath>` lists only what the checkout wrote, the same set the `ls-tree` fallback reads. `packages/vscode/src/skillsCatalog.ts` does the same.
+
+### Why a failed sparse checkout installs from a full checkout
+The clone uses `--no-checkout`, so an install needs files on disk to copy. A scan only reads `SKILL.md` and can answer from `ls-tree` plus `git show`; an install copies whole skill directories. A full `checkout --force HEAD` uses no option Git 2.20 lacks and fetches the same blobs from the partial clone. The `-c core.sparseCheckout=false` on that checkout covers the case where `sparse-checkout init` succeeded but `set` failed: an enabled sparse checkout would hide the selected directories.
 
 ### Error Handling
 - All exported functions return `{ ok, ... }` result objects, not throw.
