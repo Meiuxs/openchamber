@@ -704,6 +704,9 @@
     "customProviderIcons": {
       "scope": "profile"
     },
+    "customProviderLogos": {
+      "scope": "profile"
+    },
     "recentModels": {
       "scope": "profile"
     },

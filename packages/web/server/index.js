@@ -753,7 +753,8 @@ const agentMemoryRuntime = createAgentMemoryRuntime({
 /**
  * One switch for everything memory-related. It gates the tool, these routes,
  * and the session index alike, so turning memory off leaves nothing behind
- * that still reads or writes the store.
+ * that still reads or writes the store. The session index also needs the
+ * tool, which only an OpenCode we launched has.
  */
 const isAgentMemoryEnabled = async () => {
   const settings = await readSettingsFromDiskMigrated().catch(() => null);
@@ -1176,6 +1177,10 @@ const sessionKnowledgeRuntime = createSessionKnowledgeRuntime({
   resolveProjectId: (directory) => resolveMemoryProjectId(directory),
   isAgentMemoryEnabled,
   // The plugin carrying the tool exists only in an OpenCode we launched.
+  isMemoryToolAvailable: async () => {
+    if (isExternalOpenCode || ENV_SKIP_OPENCODE_START) return false;
+    return isAgentMemoryEnabled();
+  },
   isSessionLinkingAvailable: async () => {
     if (isExternalOpenCode || ENV_SKIP_OPENCODE_START) return false;
     const settings = await readSettingsFromDiskMigrated().catch(() => null);
@@ -1297,6 +1302,7 @@ const sessionWorkRuntime = createSessionWorkRuntime({
   isSessionArchived: (sessionID) => openChamberSessionService.sessionArchive.isArchived(sessionID),
   chatRoots: [path.join(OPENCHAMBER_USER_CONFIG_ROOT, 'chats'), OPENCHAMBER_CHATS_DIR],
   lineage: sessionLineage,
+  activityProbe: createSessionActivityProbe({ buildOpenCodeUrl, getOpenCodeAuthHeaders, timeoutMs: 2_000 }),
 });
 
 const permissionAutoAcceptRuntime = createPermissionAutoAcceptRuntime({
@@ -2773,6 +2779,12 @@ async function main(options = {}) {
   }));
   expressApp = app;
   server = http.createServer(app);
+  // A reverse proxy keeps idle upstream sockets pooled for 60-120 s (nginx,
+  // load balancers, cloudflared, Caddy). The runtime default closes them after
+  // 5 s, so a proxy that reuses one just as it closes answers 502. Outlive the
+  // proxy's pool instead; headersTimeout must stay above keepAliveTimeout.
+  server.keepAliveTimeout = 125_000;
+  server.headersTimeout = 126_000;
   gracefulShutdownRuntime.trackServerConnections(server);
   // A policy placed while the server runs cannot rebind it, so connections
   // from other machines are dropped until the next start binds loopback.
