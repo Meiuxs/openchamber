@@ -121,6 +121,10 @@ const managedEnvironment = (source, platform) => {
   }
   result.GIT_TERMINAL_PROMPT = '0';
   result.GIT_CONFIG_NOSYSTEM = '1';
+  // Git before 2.32 ignores GIT_CONFIG_GLOBAL. managedGitTransport hides HOME
+  // for HTTPS and anonymous runs, so an old Git finds no ~/.gitconfig there
+  // either; managed SSH keeps HOME for known_hosts, where the shared -c resets
+  // still clear the credential helper and askpass.
   result.GIT_CONFIG_GLOBAL = platform === 'win32' ? 'NUL' : '/dev/null';
   return result;
 };

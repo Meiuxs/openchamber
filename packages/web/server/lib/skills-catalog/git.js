@@ -30,6 +30,9 @@ const isolatedGitEnvironment = (allowedProtocol) => {
   }
   env.GIT_TERMINAL_PROMPT = '0';
   env.GIT_CONFIG_NOSYSTEM = '1';
+  // Git before 2.32 ignores GIT_CONFIG_GLOBAL. HTTP runs hide HOME below, so
+  // an old Git finds no ~/.gitconfig either; managed SSH keeps HOME for
+  // known_hosts, where the global config remains readable.
   env.GIT_CONFIG_GLOBAL = process.platform === 'win32' ? 'NUL' : '/dev/null';
   env.GIT_ALLOW_PROTOCOL = allowedProtocol;
   if (HTTP_PROTOCOLS.has(allowedProtocol)) {

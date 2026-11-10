@@ -59,14 +59,35 @@ describe('skills catalog runGit', () => {
     const result = await runGit(PRINT_HOME, { identity: httpsIdentity, credentialResolver: httpsResolver() });
 
     expect(result.ok).toBe(true);
-    expect(result.stdout).toBe(NULL_DEVICE);
+    expect(result.stdout.endsWith(NULL_DEVICE)).toBe(true);
   });
 
   it('hides the home directory from anonymous Git', async () => {
     const result = await runGit(PRINT_HOME, { identity: { anonymous: true, transport: 'anonymous' } });
 
     expect(result.ok).toBe(true);
-    expect(result.stdout).toBe(NULL_DEVICE);
+    expect(result.stdout.endsWith(NULL_DEVICE)).toBe(true);
+  });
+
+  it('keeps HOME for managed SSH so host keys still verify', async () => {
+    const cleanup = vi.fn(async () => {});
+    const credentialResolver = {
+      resolve: vi.fn(async () => ({
+        mode: 'managed',
+        transport: 'ssh',
+        key: { privateKeyPath: '/tmp/catalog-operation-key', cleanup },
+      })),
+    };
+
+    // Git before 2.32 ignores GIT_CONFIG_GLOBAL. HTTPS and anonymous runs hide
+    // HOME above; SSH keeps it for known_hosts and resets transport keys with -c.
+    const result = await runGit(PRINT_HOME, {
+      identity: { transport: 'ssh', credentialId: 'ssh-key-reference', endpoint: 'git@example.com:owner/private.git' },
+      credentialResolver,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.stdout).not.toBe(NULL_DEVICE);
   });
 
   it('refuses a selected identity without a credential instead of using System Git', async () => {

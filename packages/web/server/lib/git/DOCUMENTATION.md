@@ -777,6 +777,7 @@ The branch list used to ask every remote by default, so a branch a collaborator 
 
 ### Cross-Platform Considerations
 - Host Git commands must stay compatible with Git 2.20.x (UnionTech UOS). Do not require Git 2.21+ options or pseudo-refs without a fallback (`--end-of-options`, `--pathspec-from-file`, `--diff-merges`, `--show-scope`, `--no-object-names`, `--path-format=absolute`, `git restore`, `git switch`, or `REBASE_HEAD`).
+- `GIT_CONFIG_GLOBAL` needs Git 2.32. Managed HTTPS and anonymous transfers also hide `HOME`, `USERPROFILE`, and `XDG_CONFIG_HOME`, so Git 2.20 reads no `~/.gitconfig` for them either. Managed SSH keeps `HOME` for `known_hosts` and does read the global config there; `-c core.askPass=`, `-c credential.helper=` and `GIT_SSH_COMMAND` still take precedence over it, but a `url.*.insteadOf` rewrite is not cleared. Moving the SSH home needs a real Git 2.20 host with SSH to check host-key verification first.
 - Use `normalizeDirectoryPath` for all directory inputs to handle `~` and path separators.
 - Use `canonicalPath` for path comparisons to handle case-insensitive filesystems (Windows).
 - MSYS2 Git can return `/c/repos/project` on Windows. Pass Git filesystem-path output through `normalizeGitOutputPath` before resolving it or using it with Node filesystem and process APIs. It converts drive mounts to `C:/repos/project` on Windows and preserves other paths, including POSIX paths on Linux and macOS.
