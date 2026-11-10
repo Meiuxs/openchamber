@@ -3766,7 +3766,9 @@ export async function getRangeFileVersions(directory, { base, head, path: filePa
   const headRef = String(head ?? '').trim();
   if (!baseRef || !headRef || !filePath) throw new Error('base, head and path are required');
   await assertRangeRefsResolve(git, repoRoot, [baseRef, headRef]);
-  const headCommit = (await git.raw(['rev-parse', '--verify', '--end-of-options', `${headRef}^{commit}`])).trim();
+  // No --end-of-options: Git 2.20 (UOS) rejects it, and assertRangeRefsResolve
+  // already refuses refs starting with '-' before they reach a command.
+  const headCommit = (await git.raw(['rev-parse', '--verify', `${headRef}^{commit}`])).trim();
   const mergeBase = (await git.raw(['merge-base', baseRef, headCommit])).trim();
   const absolutePath = path.resolve(directoryPath, filePath);
   const candidates = new Set([path.resolve(repoRoot, filePath), absolutePath]);

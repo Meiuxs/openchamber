@@ -7283,4 +7283,26 @@ describe.runIf(canRunGit())('getRangeFileVersions', () => {
     expect(commit.original).toBe(dataUrl);
     fs.rmSync(repository, { recursive: true, force: true });
   });
+
+  it('does not pass --end-of-options, which Git 2.20 rejects', () => {
+    const source = fs.readFileSync(new URL('./service.js', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/['"]--end-of-options['"]/);
+  });
+
+  it('refuses a dash-prefixed ref before it reaches a Git command', async () => {
+    const repository = fs.mkdtempSync(path.join(os.tmpdir(), 'openchamber-range-ref-'));
+    const run = (...args) => execFileSync('git', args, { cwd: repository });
+    run('init', '-q', '-b', 'main');
+    run('config', 'user.email', 't@t');
+    run('config', 'user.name', 't');
+    fs.writeFileSync(path.join(repository, 'book.xlsx'), 'content');
+    run('add', '.');
+    run('commit', '-qm', 'base');
+
+    await expect(getRangeFileVersions(repository, {
+      base: 'main', head: '--help', path: 'book.xlsx',
+    })).rejects.toThrow('is not available locally');
+
+    fs.rmSync(repository, { recursive: true, force: true });
+  });
 });
