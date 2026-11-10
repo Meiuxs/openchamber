@@ -174,6 +174,12 @@ OpenCode reads every `file://` attachment whole, detects its type from the bytes
 
 So on the desktop a file past `MAX_INLINE_ATTACHMENT_BYTES`, or one `attachment-files.ts` cannot prepare, attaches as a short `text/plain` note that gives its path and size, with `agentPath` set to that path and no size limit. The agent reads what it needs with its own tools. The note is a plain data URL attachment, so the chip, queue, drafts, restore and resend need no case of their own. Outside the desktop OpenCode may not share the disk, so these files are refused or fail intake as before.
 
+A HEIC the bundled decoder cannot read (`HeicConversionError`, Apple's HDR gain-map photos) goes as the same note in every runtime, and the agent converts the file it names with its own tools. On the desktop the note names the file's own path. Everywhere else the store first writes the original bytes into OpenCode's temp folder (`opencodeClient.writeOpenCodeTempFiles`, the route the composer's `savePastedImagesAsFiles` uses), so the file lands on the machine OpenCode runs on, and the note names that copy. Only when that write fails is the file refused, with a toast that names it and asks for it to be saved as JPEG. An image inside a document that cannot be converted keeps the older behavior and refuses the whole document, because the dropped file in that case is the document, not the HEIC.
+
+### Why an unreadable HEIC goes as a saved file and not as an image part
+
+Providers accept PNG, JPEG, GIF and WebP image parts. A raw HEIC image part makes the provider refuse the request, and the whole send fails with it, so the bytes go where the agent's tools can read them and the message carries only the path. A newer decoder would read the gain-map photos in the browser, but it is a new dependency for one class of file that the agent's tools already convert.
+
 ### Why sends read the server's agent
 
 `resolveSendSelection` reads the session through the runtime-aware SDK before comparing a requested agent. A directory sync record can miss an agent switch and already match the picker while the server still runs another agent. The server read makes that send recover and skips switch records when the server already matches. Failed reads are definite pre-send failures and roll back without prompt-confirmation reads; a runtime instance change discards the response, including a switch away and back. Model and effort comparisons use the current sync record after the read, so events received during it remain visible. Sends without an agent make no extra read.

@@ -1053,6 +1053,7 @@ const notificationTriggerRuntime = createNotificationTriggerRuntime({
   sendPushToAllUiSessions,
   sendApnsToAllUiSessions,
   isAnyInteractiveClientVisible,
+  isAnyUiVisible,
   buildOpenCodeUrl,
   getOpenCodeAuthHeaders,
   readSessionMetadata: readStoredSessionMetadata,
