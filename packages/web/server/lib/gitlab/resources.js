@@ -57,6 +57,41 @@ async function readCollection(load, message, perPage = COLLECTION_PER_PAGE) {
   return page.items;
 }
 
+const DIFF_OVERFLOW_MESSAGE = 'GitLab merge request has more changed files than OpenChamber reads';
+
+// GitLab before 15.7 has no merge-request diff list; /changes is the read it
+// replaced. An instance that answered once is remembered, so the probing 404
+// costs one request per process rather than one per read.
+const legacyDiffInstances = new Set();
+
+/**
+ * Every changed file of a merge request, from the diff list or, on an older
+ * instance, the changes endpoint that predates it. Only the fallback's
+ * success proves the endpoint is missing, since a merge request this account
+ * cannot read answers 404 too.
+ */
+async function readMergeRequestDiffs(client, origin, projectId, number) {
+  if (!legacyDiffInstances.has(origin)) {
+    try {
+      return await readCollection(
+        (page) => client.MergeRequests.allDiffs(projectId, number, page),
+        DIFF_OVERFLOW_MESSAGE,
+        DIFF_PER_PAGE,
+      );
+    } catch (error) {
+      if (requestStatus(error) !== 404) throw error;
+    }
+  }
+  const response = await client.MergeRequests.requester.get(
+    `projects/${encodeURIComponent(String(projectId))}/merge_requests/${encodeURIComponent(String(number))}/changes`,
+  );
+  const payload = response?.body;
+  if (!isPlainObject(payload) || !Array.isArray(payload.changes)) throw new Error('GitLab returned an invalid merge request diff list');
+  legacyDiffInstances.add(origin);
+  if (payload.overflow === true) throw new Error(DIFF_OVERFLOW_MESSAGE);
+  return payload.changes;
+}
+
 function projectPath(owner, name) {
   return `${owner}/${name}`;
 }
@@ -872,7 +907,7 @@ export function createGitLabResourceService({ origin, client, download, resolveP
       const raw = await client.MergeRequests.show(projectId, number);
       const refs = raw?.diff_refs;
       if (!isString(refs?.base_sha) || !isString(refs?.start_sha) || !isString(refs?.head_sha)) throw new Error('GitLab returned an invalid merge request');
-      const diffs = await readCollection((page) => client.MergeRequests.allDiffs(projectId, number, page), 'GitLab merge request has more changed files than OpenChamber reads', DIFF_PER_PAGE);
+      const diffs = await readMergeRequestDiffs(client, origin, projectId, number);
       const diff = diffs.find((entry) => entry?.new_path === position.path || entry?.old_path === position.path);
       if (!diff) throw Object.assign(new Error('This file is not in the merge request'), { status: 422 });
       const created = await client.MergeRequestDraftNotes.create(projectId, number, body, {
@@ -1194,7 +1229,7 @@ export function createGitLabResourceService({ origin, client, download, resolveP
           ? readCollection((page) => client.MergeRequestDiscussions.all(target.project.id, number, page), 'GitLab merge request has more threads than OpenChamber reads')
           : readCollection((page) => client.MergeRequestNotes.all(target.project.id, number, page), 'GitLab merge request has more notes than OpenChamber reads'),
         options.includeDiff
-          ? readCollection((page) => client.MergeRequests.allDiffs(target.project.id, number, page), 'GitLab merge request has more changed files than OpenChamber reads', DIFF_PER_PAGE)
+          ? readMergeRequestDiffs(client, origin, target.project.id, number)
           : Promise.resolve([]),
         loadCI(target.project.id, raw, options.includeCIDetails),
         // A fork merge request's branch lives in the source project.
@@ -1313,7 +1348,7 @@ export function createGitLabResourceService({ origin, client, download, resolveP
       const { target } = await findByNumber(directory, number, options.project, {
         constrainToPrimary: true, remote: options.remote, requireNetwork: true, linked: options.linked,
       });
-      const diffs = await readCollection((page) => client.MergeRequests.allDiffs(target.project.id, number, page), 'GitLab merge request has more changed files than OpenChamber reads', DIFF_PER_PAGE);
+      const diffs = await readMergeRequestDiffs(client, origin, target.project.id, number);
       if (!Array.isArray(diffs)) throw new Error('GitLab returned an invalid merge request diff list');
       const files = diffs.filter((diff) => isPlainObject(diff) && (text(diff.new_path) || text(diff.old_path)));
       if (files.length !== diffs.length) throw new Error('GitLab returned an invalid merge request diff');

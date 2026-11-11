@@ -950,6 +950,71 @@ describe('GitLab merge request comparison reads', () => {
     expect(client.MergeRequests.allDiffs).toHaveBeenCalledWith('2', 5, expect.objectContaining({ showExpanded: true, perPage: 30, maxPages: 67 }));
   });
 
+  const notFound = () => Object.assign(new Error('404 Not Found'), {
+    cause: { description: '404 Not Found', response: { status: 404 } },
+  });
+  const changesBody = (changes, overflow = false) => ({ body: { changes, overflow } });
+  const patchOptions = { project: { owner: 'team', name: 'repo' }, remote: 'origin' };
+  // Projects are checked against the instance they are read from.
+  const onInstance = (instance) => ({
+    Projects: {
+      show: vi.fn(async (id) => {
+        const project = Number(id) === 2 ? targetProject : sourceProject;
+        return { ...project, web_url: `${instance}/${project.path_with_namespace}` };
+      }),
+    },
+  });
+
+  it('reads a merge request from the changes endpoint on an instance without the diff list, and remembers it', async () => {
+    const legacyOrigin = 'https://legacy-diffs.example.com';
+    const allDiffs = vi.fn(async () => { throw notFound(); });
+    const get = vi.fn(async () => changesBody([{ old_path: 'a.ts', new_path: 'a.ts', a_mode: '100644', b_mode: '100644', diff: '@@ -1 +1 @@\n-old\n+new\n' }]));
+    const legacy = setup({
+      ...onInstance(legacyOrigin),
+      MergeRequests: { ...setup().client.MergeRequests, allDiffs, requester: { get } },
+    }, { origin: legacyOrigin });
+
+    await expect(legacy.service.changeRequestPatch('/repo', 5, patchOptions))
+      .resolves.toMatchObject({ patch: expect.stringContaining('diff --git a/a.ts b/a.ts') });
+    expect(allDiffs).toHaveBeenCalledOnce();
+    expect(get).toHaveBeenCalledWith('projects/2/merge_requests/5/changes');
+
+    // Another request on the same instance starts from the endpoint it knows.
+    const laterAllDiffs = list([]);
+    const laterGet = vi.fn(async () => changesBody([]));
+    const later = setup({
+      ...onInstance(legacyOrigin),
+      MergeRequests: { ...setup().client.MergeRequests, allDiffs: laterAllDiffs, requester: { get: laterGet } },
+    }, { origin: legacyOrigin });
+    await later.service.changeRequestPatch('/repo', 5, patchOptions);
+    expect(laterAllDiffs).not.toHaveBeenCalled();
+    expect(laterGet).toHaveBeenCalledWith('projects/2/merge_requests/5/changes');
+  });
+
+  it('fails a legacy changes read that answers with more files than it sends', async () => {
+    const instance = 'https://overflow.example.com';
+    const get = vi.fn(async () => changesBody([{ old_path: 'a.ts', new_path: 'a.ts', diff: '@@' }], true));
+    const { service } = setup({
+      ...onInstance(instance),
+      MergeRequests: { ...setup().client.MergeRequests, allDiffs: vi.fn(async () => { throw notFound(); }), requester: { get } },
+    }, { origin: instance });
+
+    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true })).rejects.toThrow('more changed files');
+  });
+
+  it('keeps a diff-list failure that is not a missing endpoint', async () => {
+    const instance = 'https://broken.example.com';
+    const failure = Object.assign(new Error('GitLab unavailable'), { cause: { response: { status: 502 } } });
+    const get = vi.fn();
+    const { service } = setup({
+      ...onInstance(instance),
+      MergeRequests: { ...setup().client.MergeRequests, allDiffs: vi.fn(async () => { throw failure; }), requester: { get } },
+    }, { origin: instance });
+
+    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true })).rejects.toBe(failure);
+    expect(get).not.toHaveBeenCalled();
+  });
+
   it('reads both sides of a file at the merge base and the head', async () => {
     const showRaw = vi.fn(async (_project, path, ref) => `${path}@${ref.slice(0, 1)}`);
     const { service } = setup({

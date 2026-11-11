@@ -58,7 +58,7 @@ GitLab has no stack object. A merge request's chain is read with its context (`c
 - `glab-credential.js`: host-scoped CLI credential retrieval.
 - `client.js`: GitBeaker client factory with OpenChamber's own requester: redirects are refused so the credential header never leaves the instance, and only reads retry after 429/502. Mutations are sent once so an ambiguous proxy failure reaches the durable executor.
 - `changeRequestContext` with `includeTimeline` (`/pulls/context?timeline=1`, only the board and picker preview ask) also returns the newest 50 `commits`, oldest first, `commitsComplete: false` when there are more, and `verdicts`: approvals and change requests GitLab records as system notes. Without it the context carries neither and makes no commit request, so attaching a merge request costs what it did.
-- Resource lists page by GitLab's `x-next-page` header. Notes, diffs, issue comments, and branches are read to completion within 20 pages of 100; past that the read fails rather than returning a capped list as complete. Merges send the preflighted head as `sha`, and GitLab's 409 maps to `SOURCE_CONTROL_MUTATION_TARGET_MISMATCH`. Fork merge requests expose their source project as `headProject`, and CI jobs are read from the pipeline's own project.
+- Resource lists page by GitLab's `x-next-page` header. Notes, diffs, issue comments, and branches are read to completion within 20 pages of 100; past that the read fails rather than returning a capped list as complete. A merge request's changed files come from `/diffs`, or from `/changes` on an instance before 15.7 (see *Why a diff read falls back to `/changes`*). Merges send the preflighted head as `sha`, and GitLab's 409 maps to `SOURCE_CONTROL_MUTATION_TARGET_MISMATCH`. Fork merge requests expose their source project as `headProject`, and CI jobs are read from the pipeline's own project.
 - `repo.js`: instance-bound remote parsing, ranking, and directory resolution.
 - `mappers.js`: GitLab payload validation and provider-neutral DTO conversion.
 - `resources.js`: project, issue, merge-request, and CI orchestration.
@@ -69,6 +69,10 @@ GitLab has no stack object. A merge request's chain is read with its context (`c
 `GET /api/source-control/gitlab/auth/accounts?instance=...` returns persisted account metadata without tokens. The existing auth status route carries the same inventory for connected and disconnected states.
 
 ## Decisions
+
+### Why a diff read falls back to `/changes`
+
+GitLab 15.7 added `GET .../merge_requests/:iid/diffs` and deprecated `/changes`, but self-managed instances still run older releases (an intranet deployment on 12.7), where the diff list answers 404 and the comparison view, the agent's patch, and inline-comment placement all fail. A version probe would cost a request per instance and still need the same error handling, and GitBeaker's `showChanges` emits a deprecation warning on every call, so the diff list is read first and a 404 falls through to `/changes` through the requester. Only the fallback answering marks the instance as pre-15.7, for the rest of the process: a merge request this account cannot read answers 404 too, so a failed fallback propagates and is never remembered as a legacy instance. `/changes` sets `overflow` when it truncates, which fails the read the way an over-long paged list does, and its entries carry the same file fields the diff list does.
 
 ### Why the SSH clone URL may name another host and the web URLs may not
 
