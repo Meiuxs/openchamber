@@ -26,6 +26,7 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
@@ -207,6 +208,7 @@ export const dict = {
   ...heapSnapshotI18n.de,
   ...consoleBudgetsI18n.de,
   ...imageToolI18n.de,
+  ...memoryDreamingI18n.de,
   ...usageToolI18n.de,
   ...openchamberToolsLayoutI18n.de,
   ...openchamberToolOutputI18n.de,
@@ -1808,8 +1810,6 @@ export const dict = {
   'rightSidebar.contextNotesTodo.todo.addAria': 'Aufgabe hinzufügen',
   'rightSidebar.contextNotesTodo.todo.empty': 'Noch keine Aufgaben. Fügen Sie eine kleine Checkliste für dieses Projekt hinzu.',
   'rightSidebar.contextNotesTodo.todo.actions.markComplete': 'Markiere "{text}" als erledigt',
-  'rightSidebar.contextNotesTodo.todo.actions.collapse': 'Aufgabe "{text}" einklappen',
-  'rightSidebar.contextNotesTodo.todo.actions.expand': 'Aufgabe "{text}" ausklappen',
   'rightSidebar.contextNotesTodo.todo.actions.send': 'Sende "{text}"',
   'rightSidebar.contextNotesTodo.todo.actions.reorder': 'Ordne "{text}" neu',
   'rightSidebar.contextNotesTodo.todo.sendMenu.currentSession': 'An aktuelle Sitzung senden',
@@ -3416,11 +3416,8 @@ export const dict = {
   'sessions.archivePage.restoreSessionAria': '{title} wiederherstellen',
   'header.sessionActions.openAria': 'Sitzungsaktionen öffnen',
   'sessions.sidebar.session.menu.copyId': 'Sitzungs-ID kopieren',
-  'sessions.sidebar.session.menu.openInMiniChat': 'In Mini Chat öffnen',
   'sessions.sidebar.session.copyId.success': 'Sitzungs-ID kopiert',
   'sessions.sidebar.session.copyId.error': 'Sitzungs-ID konnte nicht kopiert werden',
-  'sessions.sidebar.session.menu.moveToWorktree': 'In neuen Worktree verschieben',
-  'sessions.sidebar.session.menu.moveToWorktreeTargets': 'In Worktree verschieben',
   'sessions.sidebar.session.menu.newWorktree': 'Neuer Worktree...',
   'sessions.sidebar.session.moveToWorktree.success': 'Sitzung in einen neuen Worktree verschoben',
   'sessions.sidebar.session.moveToWorktree.failed': 'Sitzung konnte nicht in einen neuen Worktree verschoben werden',
@@ -3430,7 +3427,6 @@ export const dict = {
   'sessions.sidebar.session.moveToWorktree.current': 'Aktueller Worktree',
   'sessions.sidebar.session.moveToWorktree.existingSuccess': 'Sitzung in Worktree verschoben',
   'sessions.sidebar.session.moveToWorktree.existingFailed': 'Sitzung konnte nicht in Worktree verschoben werden',
-  'sessions.sidebar.session.moveToWorktree.tooltip': 'Erstellt einen neuen Worktree aus dem aktuellen Branch und verschiebt diese Sitzung samt Untersitzungen dorthin. Ungespeicherte Änderungen bleiben im Quell-Worktree.',
   'sessions.sidebar.session.moveToWorktree.tooltipBusy': 'Verfügbar, wenn die Sitzung inaktiv ist. Warten Sie oder beenden Sie die aktuelle Aktivität.',
   'sessions.sidebar.session.moveToWorktree.tooltipMoving': 'Diese Sitzung wird bereits in einen neuen Worktree verschoben.',
   'sessions.sidebar.session.export.failedLoadHistory': 'Die vollständige Sitzungshistorie konnte nicht geladen werden',

@@ -14,7 +14,7 @@ import { createUsageReadAction } from './usage-read.js';
 import { createWorkNamer } from '../openchamber-sessions/work-naming.js';
 import { CHATS_SCOPE_PUBLIC_ID } from '../scheduled-tasks/chats-scope.js';
 import { createWorkMembership } from '../session-work/membership.js';
-import { userStatePatch } from '../session-work/state.js';
+import { isPinnedMetadata, userStatePatch } from '../session-work/state.js';
 
 const DEFAULT_WAIT_TIMEOUT_SECONDS = 600;
 const MAX_WAIT_TIMEOUT_SECONDS = 86_400;
@@ -287,6 +287,8 @@ export const createOpenChamberControlService = (dependencies) => {
     // write the app's own Done goes through; absent means the server cannot
     // change In work.
     updateSessionMetadata = null,
+    // Whether a folder is inside a worktree the user pinned: its sessions are never in work.
+    isWorktreePinned = async () => false,
     scheduledTaskService,
     browserControl = null,
     fileOpen = null,
@@ -335,6 +337,8 @@ export const createOpenChamberControlService = (dependencies) => {
     loadQuota = null,
     sleep = (duration) => new Promise((resolve) => setTimeout(resolve, duration)),
     now = Date.now,
+    // Sessions OpenChamber runs for itself (`../opencode/hidden-sessions.js`): never listed or counted.
+    isHiddenSession = () => false,
   } = dependencies;
 
   const wait = (duration, signal) => {
@@ -547,7 +551,7 @@ export const createOpenChamberControlService = (dependencies) => {
     if (!statuses || typeof statuses !== 'object' || Array.isArray(statuses)) {
       throw new OpenChamberControlError('Invalid session status response', 500);
     }
-    return statuses;
+    return Object.fromEntries(Object.entries(statuses).filter(([id]) => !isHiddenSession(id)));
   };
 
   // A permission the server answers by itself never reaches the user.
@@ -672,6 +676,7 @@ export const createOpenChamberControlService = (dependencies) => {
       const page = await Promise.all((Array.isArray(response?.data) ? response.data : []).map(withArchiveEntry));
       for (const record of page) {
         const id = asNonEmptyString(record?.id);
+        if (isHiddenSession(id, record)) continue;
         if (id) {
           if (seenSessionIds.has(id)) continue;
           seenSessionIds.add(id);
@@ -722,6 +727,9 @@ export const createOpenChamberControlService = (dependencies) => {
       throw new OpenChamberControlError(`${sessionID} is archived; In work shows no archived sessions`, 409);
     }
     const directory = asNonEmptyString(session?.location?.directory) || '';
+    if (state === 'open' && (isPinnedMetadata(session?.metadata) || (directory && await isWorktreePinned(directory)))) {
+      throw new OpenChamberControlError(`${sessionID} is pinned, or its worktree is; a pinned session is never in work`, 409);
+    }
     const { changed } = await updateSessionMetadata(sessionID, (metadata) => userStatePatch(metadata, { state, now: now() }), { directory });
     return { sessionId: sessionID, directory, title: asNonEmptyString(session?.title), inWork: state === 'open', changed };
   };
@@ -1331,7 +1339,7 @@ export const createOpenChamberControlService = (dependencies) => {
       if (action === 'session.create' || action === 'session.send' || action === 'session.fork') {
         return executeSessionAction(action, input, contextDirectory, options.signal, options.contextSessionId, options.startedByExtension);
       }
-      if (action === 'session.link') {
+      if (action === 'session.link' || action === 'session.unlink') {
         if (!sessionLinks) throw new OpenChamberControlError('Linking is not available on this server', 503);
         assertSingleScope(input);
         // An explicit session is linked where it lives; the calling session
@@ -1342,8 +1350,9 @@ export const createOpenChamberControlService = (dependencies) => {
           || (explicitSessionID ? await resolveSessionDirectory(explicitSessionID) : null)
           || asNonEmptyString(contextDirectory);
         // Models put the link's fields beside the action as often as inside
-        // `link`; session.link has no other use for them, so both are read.
+        // `link`; these actions have no other use for them, so both are read.
         const link = input.link ?? { url: input.url, title: input.title, kind: input.kind, identifier: input.identifier };
+        if (action === 'session.unlink') return sessionLinks.unlink({ sessionId: sessionID, directory, target: link });
         return sessionLinks.link({ sessionId: sessionID, directory, link });
       }
       if (action === 'pr.watch' || action === 'pr.unwatch') {

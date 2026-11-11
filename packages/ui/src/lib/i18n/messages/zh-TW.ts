@@ -27,6 +27,7 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
@@ -208,6 +209,7 @@ export const dict: Record<I18nKey, string> = {
   ...heapSnapshotI18n['zh-TW'],
   ...consoleBudgetsI18n['zh-TW'],
   ...imageToolI18n['zh-TW'],
+  ...memoryDreamingI18n['zh-TW'],
   ...usageToolI18n['zh-TW'],
   ...openchamberToolsLayoutI18n['zh-TW'],
   ...openchamberToolOutputI18n['zh-TW'],
@@ -788,7 +790,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.actions.newDraftSession': '新增草稿會話',
   'sessions.sidebar.session.menu.rename': '重新命名',
   'sessions.sidebar.session.menu.copyId': '複製工作階段 ID',
-  'sessions.sidebar.session.menu.openInMiniChat': '在 Mini Chat 中開啟',
   'sessions.sidebar.session.copyId.success': '已複製工作階段 ID',
   'sessions.sidebar.session.copyId.error': '無法複製工作階段 ID',
   'header.sessionActions.openAria': '開啟工作階段操作',
@@ -822,8 +823,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.session.menu.copyLink': '複製連結',
   'sessions.sidebar.session.menu.unshare': '取消分享',
   'sessions.sidebar.session.menu.exportMarkdown': '匯出 Markdown',
-  'sessions.sidebar.session.menu.moveToWorktree': '移至新工作樹',
-  'sessions.sidebar.session.menu.moveToWorktreeTargets': '移至工作樹',
   'sessions.sidebar.session.menu.newWorktree': '新增工作樹...',
   'sessions.sidebar.session.moveToWorktree.success': '工作階段已移至新工作樹',
   'sessions.sidebar.session.moveToWorktree.failed': '無法將工作階段移至新工作樹',
@@ -833,7 +832,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.session.moveToWorktree.current': '目前的工作樹',
   'sessions.sidebar.session.moveToWorktree.existingSuccess': '工作階段已移至工作樹',
   'sessions.sidebar.session.moveToWorktree.existingFailed': '無法將工作階段移至工作樹',
-  'sessions.sidebar.session.moveToWorktree.tooltip': '從目前分支建立新工作樹，並將此工作階段及其子工作階段移至其中。未提交的變更會留在來源工作樹中。',
   'sessions.sidebar.session.moveToWorktree.tooltipBusy': '僅在工作階段閒置時可用。請停止目前活動或等待其完成。',
   'sessions.sidebar.session.moveToWorktree.tooltipMoving': '此工作階段已在移至新工作樹。',
   'sessions.sidebar.session.menu.openInSidePanel': '在側邊面板中開啟',
@@ -2055,8 +2053,6 @@ export const dict: Record<I18nKey, string> = {
   'rightSidebar.contextNotesTodo.todo.addAria': '新增待辦',
   'rightSidebar.contextNotesTodo.todo.empty': '還沒有待辦。為此專案新增一個簡短清單吧。',
   'rightSidebar.contextNotesTodo.todo.actions.markComplete': '將「{text}」標記為已完成',
-  'rightSidebar.contextNotesTodo.todo.actions.collapse': '摺疊待辦「{text}」',
-  'rightSidebar.contextNotesTodo.todo.actions.expand': '展開待辦「{text}」',
   'rightSidebar.contextNotesTodo.todo.actions.send': '傳送「{text}」',
   'rightSidebar.contextNotesTodo.todo.actions.reorder': '重新排序「{text}」',
   'rightSidebar.contextNotesTodo.todo.sendMenu.currentSession': '傳送到目前會話',

@@ -27,6 +27,7 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
@@ -208,6 +209,7 @@ export const dict: Record<I18nKey, string> = {
   ...heapSnapshotI18n.ja,
   ...consoleBudgetsI18n.ja,
   ...imageToolI18n.ja,
+  ...memoryDreamingI18n.ja,
   ...usageToolI18n.ja,
   ...openchamberToolsLayoutI18n.ja,
   ...openchamberToolOutputI18n.ja,
@@ -768,7 +770,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.actions.newDraftSession': '新しい下書きセッション',
   'sessions.sidebar.session.menu.rename': '名前の変更',
   'sessions.sidebar.session.menu.copyId': 'セッションIDをコピー',
-  'sessions.sidebar.session.menu.openInMiniChat': 'Mini Chatで開く',
   'sessions.sidebar.session.copyId.success': 'セッションIDをコピーしました',
   'sessions.sidebar.session.copyId.error': 'セッションIDをコピーできませんでした',
   'header.sessionActions.openAria': 'セッション操作を開く',
@@ -802,8 +803,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.session.menu.copyLink': 'リンクをコピー',
   'sessions.sidebar.session.menu.unshare': '共有解除',
   'sessions.sidebar.session.menu.exportMarkdown': 'Markdownでエクスポート',
-  'sessions.sidebar.session.menu.moveToWorktree': '新しいworktreeへ移動',
-  'sessions.sidebar.session.menu.moveToWorktreeTargets': 'worktreeへ移動',
   'sessions.sidebar.session.menu.newWorktree': '新しいworktree...',
   'sessions.sidebar.session.moveToWorktree.success': 'セッションを新しいworktreeへ移動しました',
   'sessions.sidebar.session.moveToWorktree.failed': 'セッションを新しいworktreeへ移動できませんでした',
@@ -813,7 +812,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.session.moveToWorktree.current': '現在のworktree',
   'sessions.sidebar.session.moveToWorktree.existingSuccess': 'セッションをworktreeへ移動しました',
   'sessions.sidebar.session.moveToWorktree.existingFailed': 'セッションをworktreeへ移動できませんでした',
-  'sessions.sidebar.session.moveToWorktree.tooltip': '現在のブランチから新しいworktreeを作成し、このセッションとサブセッションをそこへ移動します。未コミットの変更は元のworktreeに残ります。',
   'sessions.sidebar.session.moveToWorktree.tooltipBusy': 'セッションがアイドル状態のときに利用できます。現在の処理を停止するか、完了するまでお待ちください。',
   'sessions.sidebar.session.moveToWorktree.tooltipMoving': 'このセッションはすでに新しいworktreeへ移動中です。',
   'sessions.sidebar.session.menu.openInSidePanel': 'サイドパネルで開く',
@@ -2068,8 +2066,6 @@ export const dict: Record<I18nKey, string> = {
   'rightSidebar.contextNotesTodo.todo.addAria': 'TODOを追加',
   'rightSidebar.contextNotesTodo.todo.empty': 'まだTODOはありません。このプロジェクトのチェックリストを追加してください。',
   'rightSidebar.contextNotesTodo.todo.actions.markComplete': '「{text}」を完了にする',
-  'rightSidebar.contextNotesTodo.todo.actions.collapse': 'TODO「{text}」を折りたたむ',
-  'rightSidebar.contextNotesTodo.todo.actions.expand': 'TODO「{text}」を展開',
   'rightSidebar.contextNotesTodo.todo.actions.send': '「{text}」を送信',
   'rightSidebar.contextNotesTodo.todo.actions.reorder': '「{text}」を並び替え',
   'rightSidebar.contextNotesTodo.todo.sendMenu.currentSession': '現在のセッションに送信',

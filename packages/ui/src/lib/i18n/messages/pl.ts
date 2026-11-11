@@ -27,6 +27,7 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
@@ -208,6 +209,7 @@ export const dict: Record<I18nKey, string> = {
   ...heapSnapshotI18n.pl,
   ...consoleBudgetsI18n.pl,
   ...imageToolI18n.pl,
+  ...memoryDreamingI18n.pl,
   ...usageToolI18n.pl,
   ...openchamberToolsLayoutI18n.pl,
   ...openchamberToolOutputI18n.pl,
@@ -588,7 +590,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.actions.newDraftSession': 'Nowa sesja robocza',
   'sessions.sidebar.session.menu.rename': 'Zmień nazwę',
   'sessions.sidebar.session.menu.copyId': 'Kopiuj ID sesji',
-  'sessions.sidebar.session.menu.openInMiniChat': 'Otwórz w Mini Chat',
   'sessions.sidebar.session.copyId.success': 'Skopiowano ID sesji',
   'sessions.sidebar.session.copyId.error': 'Nie udało się skopiować ID sesji',
   'header.sessionActions.openAria': 'Otwórz działania sesji',
@@ -622,8 +623,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.session.menu.copyLink': 'Kopiuj link',
   'sessions.sidebar.session.menu.unshare': 'Cofnij udostępnienie',
   'sessions.sidebar.session.menu.exportMarkdown': 'Eksportuj Markdown',
-  'sessions.sidebar.session.menu.moveToWorktree': 'Przenieś do nowego worktree',
-  'sessions.sidebar.session.menu.moveToWorktreeTargets': 'Przenieś do worktree',
   'sessions.sidebar.session.menu.newWorktree': 'Nowy worktree...',
   'sessions.sidebar.session.moveToWorktree.success': 'Sesja została przeniesiona do nowego worktree',
   'sessions.sidebar.session.moveToWorktree.failed': 'Nie udało się przenieść sesji do nowego worktree',
@@ -633,7 +632,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.session.moveToWorktree.current': 'Bieżący worktree',
   'sessions.sidebar.session.moveToWorktree.existingSuccess': 'Sesję przeniesiono do worktree',
   'sessions.sidebar.session.moveToWorktree.existingFailed': 'Nie udało się przenieść sesji do worktree',
-  'sessions.sidebar.session.moveToWorktree.tooltip': 'Tworzy nowy worktree z bieżącej gałęzi i przenosi tam tę sesję wraz z podsesjami. Niezacommitowane zmiany pozostają w źródłowym worktree.',
   'sessions.sidebar.session.moveToWorktree.tooltipBusy': 'Dostępne, gdy sesja jest bezczynna. Zatrzymaj bieżącą aktywność lub poczekaj na jej zakończenie.',
   'sessions.sidebar.session.moveToWorktree.tooltipMoving': 'Ta sesja jest już przenoszona do nowego worktree.',
   'sessions.sidebar.session.menu.openInSidePanel': 'Otwórz w panelu bocznym',
@@ -3216,8 +3214,6 @@ export const dict: Record<I18nKey, string> = {
   'rightSidebar.contextNotesTodo.toast.sentToNewSession': 'Zadanie wysłane do nowej sesji',
   'rightSidebar.contextNotesTodo.toast.sentToNewWorktreeSession': 'Zadanie wysłane do nowej sesji drzewa pracy',
   'rightSidebar.contextNotesTodo.toast.worktreeRequiresGitRepo': 'Akcje drzewa pracy są dostępne tylko dla repozytoriów Git',
-  'rightSidebar.contextNotesTodo.todo.actions.collapse': 'Zwiń zadanie „{text}”',
-  'rightSidebar.contextNotesTodo.todo.actions.expand': 'Rozwiń zadanie „{text}”',
   'rightSidebar.contextNotesTodo.todo.actions.markComplete': 'Oznacz „{text}” jako ukończone',
   'rightSidebar.contextNotesTodo.todo.actions.send': 'Wyślij „{text}”',
   'rightSidebar.contextNotesTodo.todo.actions.reorder': 'Zmień kolejność "{text}"',

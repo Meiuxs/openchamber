@@ -26,6 +26,7 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
@@ -207,6 +208,7 @@ export const dict = {
   ...heapSnapshotI18n.en,
   ...consoleBudgetsI18n.en,
   ...imageToolI18n.en,
+  ...memoryDreamingI18n.en,
   ...usageToolI18n.en,
   ...openchamberToolsLayoutI18n.en,
   ...openchamberToolOutputI18n.en,
@@ -767,7 +769,6 @@ export const dict = {
   'sessions.sidebar.project.actions.newDraftSession': 'New draft session',
   'sessions.sidebar.session.menu.rename': 'Rename',
   'sessions.sidebar.session.menu.copyId': 'Copy session ID',
-  'sessions.sidebar.session.menu.openInMiniChat': 'Open in Mini Chat',
   'sessions.sidebar.session.copyId.success': 'Session ID copied',
   'sessions.sidebar.session.copyId.error': 'Failed to copy session ID',
   'header.sessionActions.openAria': 'Open session actions',
@@ -801,8 +802,6 @@ export const dict = {
   'sessions.sidebar.session.menu.copyLink': 'Copy link',
   'sessions.sidebar.session.menu.unshare': 'Unshare',
   'sessions.sidebar.session.menu.exportMarkdown': 'Export Markdown',
-  'sessions.sidebar.session.menu.moveToWorktree': 'Move to new worktree',
-  'sessions.sidebar.session.menu.moveToWorktreeTargets': 'Move to worktree',
   'sessions.sidebar.session.menu.newWorktree': 'New worktree...',
   'sessions.sidebar.session.moveToWorktree.success': 'Session moved to a new worktree',
   'sessions.sidebar.session.moveToWorktree.failed': 'Failed to move session to a new worktree',
@@ -812,7 +811,6 @@ export const dict = {
   'sessions.sidebar.session.moveToWorktree.current': 'Current worktree',
   'sessions.sidebar.session.moveToWorktree.existingSuccess': 'Session moved to worktree',
   'sessions.sidebar.session.moveToWorktree.existingFailed': 'Failed to move session to worktree',
-  'sessions.sidebar.session.moveToWorktree.tooltip': 'Creates a new worktree from the current branch and moves this session and its sub-sessions there. Uncommitted changes stay in the source worktree.',
   'sessions.sidebar.session.moveToWorktree.tooltipBusy': 'Available when the session is idle. Stop or wait for the current activity to finish.',
   'sessions.sidebar.session.moveToWorktree.tooltipMoving': 'This session is already being moved to a new worktree.',
   'sessions.sidebar.session.menu.openInSidePanel': 'Open in Side Panel',
@@ -2072,8 +2070,6 @@ export const dict = {
   'rightSidebar.contextNotesTodo.todo.addAria': 'Add todo',
   'rightSidebar.contextNotesTodo.todo.empty': 'No todos yet. Add a small checklist for this project.',
   'rightSidebar.contextNotesTodo.todo.actions.markComplete': 'Mark "{text}" complete',
-  'rightSidebar.contextNotesTodo.todo.actions.collapse': 'Collapse todo "{text}"',
-  'rightSidebar.contextNotesTodo.todo.actions.expand': 'Expand todo "{text}"',
   'rightSidebar.contextNotesTodo.todo.actions.send': 'Send "{text}"',
   'rightSidebar.contextNotesTodo.todo.actions.reorder': 'Reorder "{text}"',
   'rightSidebar.contextNotesTodo.todo.sendMenu.currentSession': 'Send to current session',

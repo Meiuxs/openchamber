@@ -27,6 +27,7 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
@@ -208,6 +209,7 @@ export const dict: Record<I18nKey, string> = {
   ...heapSnapshotI18n['zh-CN'],
   ...consoleBudgetsI18n['zh-CN'],
   ...imageToolI18n['zh-CN'],
+  ...memoryDreamingI18n['zh-CN'],
   ...usageToolI18n['zh-CN'],
   ...openchamberToolsLayoutI18n['zh-CN'],
   ...openchamberToolOutputI18n['zh-CN'],
@@ -768,7 +770,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.actions.newDraftSession': '新建草稿会话',
   'sessions.sidebar.session.menu.rename': '重命名',
   'sessions.sidebar.session.menu.copyId': '复制会话 ID',
-  'sessions.sidebar.session.menu.openInMiniChat': '在 Mini Chat 中打开',
   'sessions.sidebar.session.copyId.success': '会话 ID 已复制',
   'sessions.sidebar.session.copyId.error': '无法复制会话 ID',
   'header.sessionActions.openAria': '打开会话操作',
@@ -802,8 +803,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.session.menu.copyLink': '复制链接',
   'sessions.sidebar.session.menu.unshare': '取消分享',
   'sessions.sidebar.session.menu.exportMarkdown': '导出 Markdown',
-  'sessions.sidebar.session.menu.moveToWorktree': '移至新工作树',
-  'sessions.sidebar.session.menu.moveToWorktreeTargets': '移至工作树',
   'sessions.sidebar.session.menu.newWorktree': '新建工作树...',
   'sessions.sidebar.session.moveToWorktree.success': '会话已移至新工作树',
   'sessions.sidebar.session.moveToWorktree.failed': '无法将会话移至新工作树',
@@ -813,7 +812,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.session.moveToWorktree.current': '当前工作树',
   'sessions.sidebar.session.moveToWorktree.existingSuccess': '会话已移至工作树',
   'sessions.sidebar.session.moveToWorktree.existingFailed': '无法将会话移至工作树',
-  'sessions.sidebar.session.moveToWorktree.tooltip': '从当前分支创建新工作树，并将此会话及其子会话移至其中。未提交的更改留在源工作树中。',
   'sessions.sidebar.session.moveToWorktree.tooltipBusy': '仅在会话空闲时可用。请停止当前活动或等待其完成。',
   'sessions.sidebar.session.moveToWorktree.tooltipMoving': '此会话已在移至新工作树。',
   'sessions.sidebar.session.menu.openInSidePanel': '在侧边面板中打开',
@@ -2038,8 +2036,6 @@ export const dict: Record<I18nKey, string> = {
   'rightSidebar.contextNotesTodo.todo.addAria': '添加待办',
   'rightSidebar.contextNotesTodo.todo.empty': '还没有待办。为此项目添加一个简短清单吧。',
   'rightSidebar.contextNotesTodo.todo.actions.markComplete': '将“{text}”标记为已完成',
-  'rightSidebar.contextNotesTodo.todo.actions.collapse': '折叠待办“{text}”',
-  'rightSidebar.contextNotesTodo.todo.actions.expand': '展开待办“{text}”',
   'rightSidebar.contextNotesTodo.todo.actions.send': '发送“{text}”',
   'rightSidebar.contextNotesTodo.todo.actions.reorder': '重新排序"{text}"',
   'rightSidebar.contextNotesTodo.todo.sendMenu.currentSession': '发送到当前会话',

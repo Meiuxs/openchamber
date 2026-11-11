@@ -26,6 +26,7 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
@@ -146,6 +147,7 @@ export const dict = {
   ...heapSnapshotI18n.tr,
   ...consoleBudgetsI18n.tr,
   ...imageToolI18n.tr,
+  ...memoryDreamingI18n.tr,
   ...usageToolI18n.tr,
   ...openchamberToolsLayoutI18n.tr,
   ...openchamberToolOutputI18n.tr,
@@ -680,7 +682,6 @@ export const dict = {
   'sessions.sidebar.project.actions.newDraftSession': 'Yeni taslak session',
   'sessions.sidebar.session.menu.rename': 'Yeniden adlandır',
   'sessions.sidebar.session.menu.copyId': 'Session ID\'yi kopyala',
-  'sessions.sidebar.session.menu.openInMiniChat': 'Mini Sohbet\'te aç',
   'sessions.sidebar.session.copyId.success': 'Session ID kopyalandı',
   'sessions.sidebar.session.copyId.error': 'Session ID kopyalanamadı',
   'header.sessionActions.openAria': 'Session eylemlerini aç',
@@ -714,14 +715,11 @@ export const dict = {
   'sessions.sidebar.session.menu.copyLink': 'Bağlantıyı kopyala',
   'sessions.sidebar.session.menu.unshare': 'Paylaşımı kaldır',
   'sessions.sidebar.session.menu.exportMarkdown': 'Markdown olarak dışa aktar',
-  'sessions.sidebar.session.menu.moveToWorktree': 'Yeni worktree\'ye taşı',
   'sessions.sidebar.session.moveToWorktree.success': 'Session yeni bir worktree\'ye taşındı',
   'sessions.sidebar.session.moveToWorktree.failed': 'Session yeni bir worktree\'ye taşınamadı',
   'sessions.sidebar.session.moveToWorktree.outcomeUnknown': 'Yeni worktree korundu: taşıma sunucuda hâlâ tamamlanabilir.',
-  'sessions.sidebar.session.moveToWorktree.tooltip': 'Geçerli branch\'ten yeni bir worktree oluşturur ve bu session\'ı alt session\'larıyla birlikte oraya taşır. Commit edilmemiş değişiklikler kaynak worktree\'de kalır.',
   'sessions.sidebar.session.moveToWorktree.tooltipBusy': 'Session boşta olduğunda kullanılabilir. Geçerli etkinliği durdur veya bitmesini bekle.',
   'sessions.sidebar.session.moveToWorktree.tooltipMoving': 'Bu session zaten yeni bir worktree\'ye taşınıyor.',
-  'sessions.sidebar.session.menu.moveToWorktreeTargets': 'Worktree\'ye taşı',
   'sessions.sidebar.session.menu.newWorktree': 'Yeni worktree...',
   'sessions.sidebar.session.moveToWorktree.main': 'Ana worktree',
   'sessions.sidebar.session.moveToWorktree.loadFailed': 'Worktree\'ler yüklenemedi',
@@ -1934,8 +1932,6 @@ export const dict = {
   'rightSidebar.contextNotesTodo.todo.addAria': 'Yapılacak ekle',
   'rightSidebar.contextNotesTodo.todo.empty': 'Henüz yapılacak yok. Bu proje için küçük bir kontrol listesi ekleyin.',
   'rightSidebar.contextNotesTodo.todo.actions.markComplete': 'Tamamlandı olarak işaretle: "{text}"',
-  'rightSidebar.contextNotesTodo.todo.actions.collapse': 'Daralt: "{text}"',
-  'rightSidebar.contextNotesTodo.todo.actions.expand': 'Genişlet: "{text}"',
   'rightSidebar.contextNotesTodo.todo.actions.send': 'Gönder: "{text}"',
   'rightSidebar.contextNotesTodo.todo.actions.reorder': 'Yeniden sırala: "{text}"',
   'rightSidebar.contextNotesTodo.todo.sendMenu.currentSession': 'Mevcut session\'a gönder',

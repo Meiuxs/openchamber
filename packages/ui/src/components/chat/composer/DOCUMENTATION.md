@@ -419,7 +419,11 @@ no `image` input gets only the link, since it could not read the attachment
 (#5087), and the modality toast says where the images went. Any other model,
 unknown metadata included, also gets the image attached under the link's name,
 with no second `[name]` citation (#5218). An image that could not be saved
-attaches as before, with an error toast. With the setting off nothing is
+attaches as before, with an error toast. A HEIC the bundled decoder cannot read
+(Apple's HDR gain-map photos) is saved unconverted under its own name and gets
+only its link in both cases: providers refuse HEIC image parts, and the store's
+own fallback for it (`sync/DOCUMENTATION.md`) would write a second copy and add
+a chip that repeats the link. With the setting off nothing is
 saved. One setting covers both cases: a split by model kind read as a puzzle of
 exceptions in Settings, and nobody needs the files for one kind of model only.
 The browser annotation screenshot and comment-field image pastes keep
@@ -1282,7 +1286,13 @@ one app-wide composer state is split per column:
   prompt while the column still shows the previous session, and taking it then
   would save it into that session's draft. Preset
   submits, guest-issue attaches and pending composer references are main-chat
-  only.
+  only. The mode says how the text meets the draft: `replace`, `append` (a
+  block on its own lines), `append-inline`, or `slash-command`, where the text
+  is a command name the draft starts with and the rest of the draft becomes
+  its argument (`withLeadingSlashCommand`; the command palette's extension
+  commands). Taking one leaves shell mode. An expanded `/btw` fork leaves it
+  pending for the parent, because the fork does not route extension commands
+  and would send `/name` to its model as text.
 - **Focus.** `focusChatInput()` focuses the main chat's composer and skips
   pinned ones; a chat focuses its own through `useChatColumnActions().focusInput`.
   A pinned composer takes focus on session entry only when the focus is

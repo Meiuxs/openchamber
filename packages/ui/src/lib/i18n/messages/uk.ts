@@ -27,6 +27,7 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
@@ -218,6 +219,7 @@ export const dict: Record<I18nKey, string> = {
   ...heapSnapshotI18n.uk,
   ...consoleBudgetsI18n.uk,
   ...imageToolI18n.uk,
+  ...memoryDreamingI18n.uk,
   ...usageToolI18n.uk,
   ...openchamberToolsLayoutI18n.uk,
   ...openchamberToolOutputI18n.uk,
@@ -772,7 +774,6 @@ export const dict: Record<I18nKey, string> = {
   "sessions.sidebar.project.actions.newDraftSession": "Нова чернетка сесії",
   "sessions.sidebar.session.menu.rename": "Перейменувати",
   "sessions.sidebar.session.menu.copyId": "Копіювати ID сесії",
-  "sessions.sidebar.session.menu.openInMiniChat": "Відкрити в Mini Chat",
   "sessions.sidebar.session.copyId.success": "ID сесії скопійовано",
   "sessions.sidebar.session.copyId.error": "Не вдалося скопіювати ID сесії",
   "header.sessionActions.openAria": "Відкрити дії із сесією",
@@ -806,8 +807,6 @@ export const dict: Record<I18nKey, string> = {
   "sessions.sidebar.session.menu.copyLink": "Копіювати посилання",
   "sessions.sidebar.session.menu.unshare": "Скасувати спільний доступ",
   "sessions.sidebar.session.menu.exportMarkdown": "Експорт Markdown",
-  "sessions.sidebar.session.menu.moveToWorktree": "Перенести в новий worktree",
-  "sessions.sidebar.session.menu.moveToWorktreeTargets": "Перенести в worktree",
   "sessions.sidebar.session.menu.newWorktree": "Новий worktree...",
   "sessions.sidebar.session.moveToWorktree.success": "Сесію перенесено в новий worktree",
   "sessions.sidebar.session.moveToWorktree.failed": "Не вдалося перенести сесію в новий worktree",
@@ -817,7 +816,6 @@ export const dict: Record<I18nKey, string> = {
   "sessions.sidebar.session.moveToWorktree.current": "Поточний worktree",
   "sessions.sidebar.session.moveToWorktree.existingSuccess": "Сесію перенесено в worktree",
   "sessions.sidebar.session.moveToWorktree.existingFailed": "Не вдалося перенести сесію в worktree",
-  "sessions.sidebar.session.moveToWorktree.tooltip": 'Створює новий worktree з поточної гілки й переносить туди цю сесію та її підсесії. Незакомічені зміни лишаються у вихідному worktree.',
   "sessions.sidebar.session.moveToWorktree.tooltipBusy": "Доступно, коли сесія неактивна. Зупиніть поточну активність або дочекайтеся її завершення.",
   "sessions.sidebar.session.moveToWorktree.tooltipMoving": "Ця сесія вже переноситься в новий worktree.",
   "sessions.sidebar.session.menu.openInSidePanel": "Відкрити на бічній панелі",
@@ -2040,8 +2038,6 @@ export const dict: Record<I18nKey, string> = {
   "rightSidebar.contextNotesTodo.todo.addAria": "Додати завдання",
   "rightSidebar.contextNotesTodo.todo.empty": "Поки що немає завдань. Додайте короткий список для цього проєкту.",
   "rightSidebar.contextNotesTodo.todo.actions.markComplete": "Позначити \"{text}\" як завершене",
-  "rightSidebar.contextNotesTodo.todo.actions.collapse": "Згорнути завдання \"{text}\"",
-  "rightSidebar.contextNotesTodo.todo.actions.expand": "Розгорнути завдання \"{text}\"",
   "rightSidebar.contextNotesTodo.todo.actions.send": "Надіслати \"{text}\"",
   "rightSidebar.contextNotesTodo.todo.actions.reorder": "Змінити порядок \"{text}\"",
   "rightSidebar.contextNotesTodo.todo.sendMenu.currentSession": "Надіслати до поточної сесії",

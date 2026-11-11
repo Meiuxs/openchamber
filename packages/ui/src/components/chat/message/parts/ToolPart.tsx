@@ -94,7 +94,9 @@ import {
     isQuestionTool,
     isShellTool,
     isSubagentTool,
+    isTodoWriteTool,
     isWebSearchTool,
+    todoWriteItems,
     subagentAgent,
     subagentDescription,
     isWriteTool,
@@ -114,9 +116,10 @@ import { OpenChamberToolOutput } from './OpenChamberToolOutput';
 import { OpencodeToolOutput } from './OpencodeToolOutput';
 import { opencodeCallSucceeded, opencodeToolVerb, parseOpencodeToolResult } from './opencodeToolResult';
 import { hasOpenChamberView, openChamberVerbKey, parseOpenChamberEnvelope, secretRowView } from './openChamberToolEnvelope';
-import { Field } from './ToolResultParts';
+import { Field, QuietAction } from './ToolResultParts';
 import { openApplyPatchFileInEditor } from './applyPatchEditorAction';
 import { WebSearchResults } from './WebSearchResults';
+import { TodoWriteList } from './TodoWriteList';
 import { toBackgroundShellPart, type BackgroundShellPhase } from './backgroundShellPart';
 import { toBackgroundSubagentPart, toStoppedSubagentPart, type BackgroundSubagentPhase } from './backgroundSubagentPart';
 import { findSubagentCancellation, findSubagentRun, readBackgroundSubagentChildID } from '@/lib/opencode/subagent-run';
@@ -500,6 +503,14 @@ const describeTool = (described: ToolDescription | null, currentDirectory: strin
         }
     }
 };
+
+/**
+ * The row's title. `todowrite` takes the Work Status section's localized name,
+ * since both show the same list side by side.
+ */
+const toolDisplayName = (toolName: string, t: DescriptionTranslate): string => (
+    isTodoWriteTool(toolName) ? t('chat.workStatus.section.tasks') : getToolMetadata(toolName).displayName
+);
 
 const getToolDescription = (part: ToolPartType, state: ToolStateUnion, currentDirectory: string, t: DescriptionTranslate, namespace?: string): string => {
     const stateWithData = state as ToolStateWithMetadata;
@@ -1021,7 +1032,7 @@ const OpenSubtaskButton: React.FC<{
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={handleOpen}
                 className={cn(
-                    'flex-shrink-0 inline-flex h-4 w-4 items-center justify-center rounded transition-opacity hover:bg-interactive-hover',
+                    'flex-shrink-0 inline-flex h-4 w-4 items-center justify-center rounded transition-opacity',
                     'opacity-60 hover:opacity-100 focus-visible:opacity-100',
                 )}
                 style={{ color: 'var(--tools-icon)' }}
@@ -1148,19 +1159,7 @@ const DiffPreview: React.FC<{ diff: string; diffViewMode: DiffViewMode }> = ({ d
 
 /** Switches an OpenChamber tool's row between its own view and the plain answer. */
 const RawAnswerToggle: React.FC<{ label: string; onToggle: () => void }> = ({ label, onToggle }) => (
-    <Button
-        variant="ghost"
-        size="xs"
-        className="text-muted-foreground hover:text-foreground"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => {
-            event.stopPropagation();
-            onToggle();
-        }}
-    >
-        <Icon name="code-box" className="size-3.5" />
-        {label}
-    </Button>
+    <QuietAction icon="code-box" label={label} onClick={onToggle} />
 );
 
 interface ToolExpandedContentProps {
@@ -1218,10 +1217,18 @@ const ToolExpandedContent: React.FC<ToolExpandedContentProps> = React.memo(({
         () => getDiffPatchEntries(metadata, diffContent ?? undefined, (path) => getRelativePath(path, currentDirectory)),
         [currentDirectory, diffContent, metadata]
     );
+    // The list a finished `todowrite` call set is its whole story; its text
+    // answer only counts the same items again.
+    const todoItems = React.useMemo(
+        () => (isTodoWriteTool(part.tool) && state.status === 'completed' ? todoWriteItems(input) : null),
+        [input, part.tool, state.status],
+    );
+    const showTodoList = todoItems !== null && todoItems.length > 0;
     // `execute` renders its script and its call list itself, below. An
     // OpenCode namespace view says what the call did; the raw answer and a
     // failed call keep the input beside it.
     const hideToolInputPreview = isOpenChamberTool(part.tool)
+        || showTodoList
         || (opencodeResult !== null && !showRawToolAnswer)
         || isPatchTool(part.tool)
         || isEditTool(part.tool)
@@ -1522,6 +1529,10 @@ const ToolExpandedContent: React.FC<ToolExpandedContentProps> = React.memo(({
             return null;
         }
 
+        if (showTodoList && todoItems) {
+            return renderScrollableBlock(<TodoWriteList items={todoItems} />, { maxHeightClass: 'max-h-[40vh]', disableHorizontal: true });
+        }
+
         if (webSearchOutput) {
             return renderScrollableBlock(
                 <WebSearchResults output={webSearchOutput} providerId={webSearchProviderOf(metadata)} />,
@@ -1552,9 +1563,7 @@ const ToolExpandedContent: React.FC<ToolExpandedContentProps> = React.memo(({
                         : secret.file
                             ? <Field label={t('chat.toolPart.openchamber.field.file')}>{secret.file}</Field>
                             : ran ? <div className="typography-meta text-muted-foreground">{t('chat.toolPart.noOutputProduced')}</div> : null}
-                    <div className="-ms-2">
-                        <RawAnswerToggle label={t('chat.toolPart.openchamber.raw.show')} onToggle={() => setShowRawToolAnswer(true)} />
-                    </div>
+                    <RawAnswerToggle label={t('chat.toolPart.openchamber.raw.show')} onToggle={() => setShowRawToolAnswer(true)} />
                 </div>,
                 { maxHeightClass: ran ? 'max-h-[46vh]' : 'max-h-60' },
             );
@@ -1570,7 +1579,7 @@ const ToolExpandedContent: React.FC<ToolExpandedContentProps> = React.memo(({
                         <div className="typography-meta whitespace-pre-wrap break-words" style={{ color: 'var(--status-error)' }}>
                             {openChamberEnvelope.errorMessage}
                         </div>
-                        <div className="-ms-2">{showRaw}</div>
+                        {showRaw}
                     </div>
                 );
             }
@@ -1597,9 +1606,7 @@ const ToolExpandedContent: React.FC<ToolExpandedContentProps> = React.memo(({
             return renderScrollableBlock(
                 (openChamberEnvelope || opencodeResult) && showRawToolAnswer ? (
                     <div className="space-y-2">
-                        <div className="-ms-2">
-                            <RawAnswerToggle label={t('chat.toolPart.openchamber.raw.hide')} onToggle={() => setShowRawToolAnswer(false)} />
-                        </div>
+                        <RawAnswerToggle label={t('chat.toolPart.openchamber.raw.hide')} onToggle={() => setShowRawToolAnswer(false)} />
                         {output}
                     </div>
                 ) : output,
@@ -1910,7 +1917,7 @@ const ToolPartContent: React.FC<ToolPartProps & { header?: ToolRowHeader; subage
     );
     const description = guestHeader?.subtitle ?? builtInDescription;
     const rowTool = scriptNamespace ?? (normalizedPartTool || part.tool);
-    const displayName = guestHeader?.title ?? getToolMetadata(rowTool).displayName;
+    const displayName = guestHeader?.title ?? toolDisplayName(rowTool, t);
 
     // Opened, the body already carries the whole error and output.
     const failureDetail = isError && !isExpanded ? failureReason : undefined;
@@ -2183,7 +2190,7 @@ const ToolPartContent: React.FC<ToolPartProps & { header?: ToolRowHeader; subage
                                             type="button"
                                             onClick={handleQuickOpen}
                                             className={cn(
-                                                'flex-shrink-0 inline-flex h-4 w-4 items-center justify-center rounded transition-opacity hover:bg-interactive-hover',
+                                                'flex-shrink-0 inline-flex h-4 w-4 items-center justify-center rounded transition-opacity',
                                                 'opacity-60 hover:opacity-100 focus-visible:opacity-100',
                                             )}
                                             style={{ color: 'var(--tools-icon)' }}
@@ -2320,9 +2327,7 @@ const ToolPartContent: React.FC<ToolPartProps & { header?: ToolRowHeader; subage
                         ) : (
                             <div className="typography-meta flex items-center gap-2 text-muted-foreground">
                                 <span>{t('chat.toolPart.content.loadFailed')}</span>
-                                <Button variant="ghost" size="xs" onClick={contentCompletion.retry}>
-                                    {t('chat.toolPart.content.retry')}
-                                </Button>
+                                <QuietAction label={t('chat.toolPart.content.retry')} onClick={contentCompletion.retry} />
                             </div>
                         )}
                     </BlockBody>
@@ -2540,7 +2545,7 @@ const ToolPart: React.FC<ToolPartProps> = (incoming) => {
     const part = useShownToolPart(incoming.part);
     const props = part === incoming.part ? incoming : { ...incoming, part };
     const toolName = normalizeToolName(props.part.tool) || 'tool';
-    const displayName = getToolMetadata(toolName).displayName;
+    const displayName = toolDisplayName(toolName, t);
     const backgroundShellID = isShellTool(toolName) ? readBackgroundShellID(props.part) : undefined;
 
     return (

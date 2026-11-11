@@ -27,6 +27,7 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
@@ -208,6 +209,7 @@ export const dict: Record<I18nKey, string> = {
   ...heapSnapshotI18n.ko,
   ...consoleBudgetsI18n.ko,
   ...imageToolI18n.ko,
+  ...memoryDreamingI18n.ko,
   ...usageToolI18n.ko,
   ...openchamberToolsLayoutI18n.ko,
   ...openchamberToolOutputI18n.ko,
@@ -768,7 +770,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.actions.newDraftSession': '새 드래프트 세션',
   'sessions.sidebar.session.menu.rename': '이름 변경',
   'sessions.sidebar.session.menu.copyId': '세션 ID 복사',
-  'sessions.sidebar.session.menu.openInMiniChat': 'Mini Chat에서 열기',
   'sessions.sidebar.session.copyId.success': '세션 ID가 복사되었습니다',
   'sessions.sidebar.session.copyId.error': '세션 ID를 복사하지 못했습니다',
   'header.sessionActions.openAria': '세션 작업 열기',
@@ -802,8 +803,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.session.menu.copyLink': '링크 복사',
   'sessions.sidebar.session.menu.unshare': '공유 해제',
   'sessions.sidebar.session.menu.exportMarkdown': 'Markdown 내보내기',
-  'sessions.sidebar.session.menu.moveToWorktree': '새 worktree로 이동',
-  'sessions.sidebar.session.menu.moveToWorktreeTargets': 'worktree로 이동',
   'sessions.sidebar.session.menu.newWorktree': '새 worktree...',
   'sessions.sidebar.session.moveToWorktree.success': '세션을 새 worktree로 이동했습니다',
   'sessions.sidebar.session.moveToWorktree.failed': '세션을 새 worktree로 이동하지 못했습니다',
@@ -813,7 +812,6 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.session.moveToWorktree.current': '현재 worktree',
   'sessions.sidebar.session.moveToWorktree.existingSuccess': '세션을 worktree로 이동했습니다',
   'sessions.sidebar.session.moveToWorktree.existingFailed': '세션을 worktree로 이동하지 못했습니다',
-  'sessions.sidebar.session.moveToWorktree.tooltip': '현재 브랜치에서 새 worktree를 만들어 이 세션과 하위 세션을 그곳으로 이동합니다. 커밋되지 않은 변경 사항은 원본 worktree에 남습니다.',
   'sessions.sidebar.session.moveToWorktree.tooltipBusy': '세션이 유휴 상태일 때 사용할 수 있습니다. 현재 작업을 중지하거나 완료될 때까지 기다리세요.',
   'sessions.sidebar.session.moveToWorktree.tooltipMoving': '이 세션은 이미 새 worktree로 이동 중입니다.',
   'sessions.sidebar.session.menu.openInSidePanel': '사이드 패널에서 열기',
@@ -2072,8 +2070,6 @@ export const dict: Record<I18nKey, string> = {
   'rightSidebar.contextNotesTodo.todo.addAria': 'Todo 추가',
   'rightSidebar.contextNotesTodo.todo.empty': '아직 Todo가 없습니다. 이 프로젝트용 체크리스트를 추가해 보세요.',
   'rightSidebar.contextNotesTodo.todo.actions.markComplete': '"{text}" 완료로 표시',
-  'rightSidebar.contextNotesTodo.todo.actions.collapse': '접기 todo "{text}"',
-  'rightSidebar.contextNotesTodo.todo.actions.expand': '펼치기 todo "{text}"',
   'rightSidebar.contextNotesTodo.todo.actions.send': '보내기 "{text}"',
   'rightSidebar.contextNotesTodo.todo.actions.reorder': '재정렬 "{text}"',
   'rightSidebar.contextNotesTodo.todo.sendMenu.currentSession': '현재 세션으로 보내기',

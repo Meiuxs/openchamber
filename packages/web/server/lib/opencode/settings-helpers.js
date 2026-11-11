@@ -109,12 +109,16 @@ const SECRET_SETTINGS_KEYS = Object.freeze(
     .filter(([, field]) => field.secret === true)
     .map(([key]) => key),
 );
+
 import {
   DEFAULT_INPUT_HISTORY_LIMIT,
   DEFAULT_INPUT_HISTORY_SCOPE,
   isInputHistoryLimit,
   isInputHistoryScope,
 } from './input-history-scope.js';
+
+/** `provider/model` dreaming runs on, or empty for the default model. */
+const dreamingModelSchema = z.string().trim().refine((value) => value === '' || /^[^/\s]+\/\S+$/.test(value));
 
 // Icons a custom provider may show instead of its logo; mirrors
 // CUSTOM_PROVIDER_ICONS in packages/ui/src/lib/customProviderIcons.ts.
@@ -505,6 +509,9 @@ export const createSettingsHelpers = (dependencies) => {
     }
     if (typeof candidate.sidebarKeepWorkInPlace === 'boolean') {
       result.sidebarKeepWorkInPlace = candidate.sidebarKeepWorkInPlace;
+    }
+    if (typeof candidate.sidebarKeepPinnedInPlace === 'boolean') {
+      result.sidebarKeepPinnedInPlace = candidate.sidebarKeepPinnedInPlace;
     }
     if (SIDEBAR_PROJECT_SORT_ORDER_VALUES.has(candidate.sidebarProjectSortOrder)) {
       result.sidebarProjectSortOrder = candidate.sidebarProjectSortOrder;
@@ -954,6 +961,14 @@ export const createSettingsHelpers = (dependencies) => {
     if (typeof candidate.agentMemoryToolEnabled === 'boolean') {
       result.agentMemoryToolEnabled = candidate.agentMemoryToolEnabled;
     }
+    if (candidate.agentMemoryDreamingEnabled === true || candidate.agentMemoryDreamingEnabled === false) {
+      result.agentMemoryDreamingEnabled = candidate.agentMemoryDreamingEnabled;
+    }
+    // Empty is a choice: dreaming then runs on the default model, so it is kept, not dropped.
+    const dreamingModel = dreamingModelSchema.safeParse(candidate.agentMemoryDreamingModel);
+    if (dreamingModel.success) result.agentMemoryDreamingModel = dreamingModel.data;
+    const dreamingVariant = z.string().trim().safeParse(candidate.agentMemoryDreamingVariant);
+    if (dreamingVariant.success) result.agentMemoryDreamingVariant = dreamingVariant.data;
     if (candidate.agentKnowledgeToolEnabled === true || candidate.agentKnowledgeToolEnabled === false) {
       result.agentKnowledgeToolEnabled = candidate.agentKnowledgeToolEnabled;
     }
