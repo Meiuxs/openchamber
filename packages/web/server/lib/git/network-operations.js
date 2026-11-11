@@ -1645,19 +1645,12 @@ export function createNetworkOperations({
         || authority.transportMode !== 'managed' || !authority.credentialId) {
         throw operationError('AUTHENTICATION_REQUIRED', 'Grant this exact HTTPS LFS upload endpoint a stored credential, then retry', 409);
       }
-      let commonDirectory;
-      try {
-        commonDirectory = (await localGit(plan.directory, ['rev-parse', '--path-format=absolute', '--git-common-dir'], controls, deadline)).trim();
-      } catch (error) {
-        if (error.cancelled || error.timedOut || error.code !== 'TRANSPORT_FAILED'
-          || !/unknown (option|switch)|path-format/i.test(String(error.stderr || ''))) throw error;
-        // Git before 2.31 (UOS ships 2.20) rejects --path-format=absolute;
-        // --git-common-dir then prints a path relative to the checkout, which
-        // the resolve below turns absolute again.
-        commonDirectory = (await localGit(plan.directory, ['rev-parse', '--git-common-dir'], controls, deadline)).trim();
-        if (!pathImpl.isAbsolute(commonDirectory)) commonDirectory = pathImpl.resolve(plan.directory, commonDirectory);
-      }
-      if (!pathImpl.isAbsolute(commonDirectory) || /[\0\r\n]/.test(commonDirectory)) throw operationError('INVALID_REQUEST', 'Git LFS storage location is invalid', 409);
+      // Never ask for --path-format=absolute: Git before 2.31 (UOS ships 2.20)
+      // prints the unknown option to stdout and exits 0, so the output would
+      // hold a line that is not a path.
+      const rawCommonDirectory = (await localGit(plan.directory, ['rev-parse', '--git-common-dir'], controls, deadline)).trim();
+      if (!rawCommonDirectory || /[\0\r\n]/.test(rawCommonDirectory)) throw operationError('INVALID_REQUEST', 'Git LFS storage location is invalid', 409);
+      const commonDirectory = pathImpl.resolve(plan.directory, rawCommonDirectory);
       const storage = pathImpl.resolve(commonDirectory, storagePath ?? 'lfs');
 
       // A private bare repository excludes mutable checkout config, URL rewrites,

@@ -62,6 +62,7 @@ import {
   restoreWorktreeArchive,
   deleteWorktreeArchive,
   resolvePrimaryWorktreeRoot,
+  resolveRepositoryGitPaths,
   resolveWorktreeTopLevel,
   resetToCommit,
   resolveBaseRefForLog,
@@ -1502,6 +1503,45 @@ exec "${realGit}" "$@"
       'rev-parse --verify --quiet HEAD',
       'status --porcelain -b -u --null -unormal',
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// repository path resolution
+// ---------------------------------------------------------------------------
+
+describe('repository path resolution', () => {
+  // Git before 2.31 does not know --path-format=absolute and, instead of
+  // failing, prints the option to stdout and exits 0 (UOS ships 2.20.1). The
+  // echoed option must never be taken for the common directory.
+  it('resolves paths when Git echoes an unknown option to stdout', async () => {
+    if (!canRunGit() || process.platform === 'win32') return; // the wrapper is a shell script
+    const repo = createTempDir();
+    runGit(repo, ['init', '-b', 'main']);
+
+    const wrapperDirectory = createTempDir();
+    const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+    fs.writeFileSync(path.join(wrapperDirectory, 'git'), `#!/bin/sh
+if [ "$1" = "rev-parse" ] && [ "$3" = "--path-format=absolute" ]; then
+  "$REAL_GIT" rev-parse --absolute-git-dir || exit $?
+  echo "--path-format=absolute"
+  "$REAL_GIT" rev-parse --git-common-dir --is-bare-repository
+  exit $?
+fi
+exec "$REAL_GIT" "$@"
+`);
+    fs.chmodSync(path.join(wrapperDirectory, 'git'), 0o755);
+    vi.stubEnv('PATH', `${wrapperDirectory}${path.delimiter}${process.env.PATH || ''}`);
+    vi.stubEnv('REAL_GIT', realGit);
+    try {
+      const paths = await resolveRepositoryGitPaths(repo);
+      expect(paths.supported).toBe(true);
+      expect(fs.realpathSync(paths.gitDirectory)).toBe(fs.realpathSync(path.join(repo, '.git')));
+      expect(fs.realpathSync(paths.commonDirectory)).toBe(fs.realpathSync(path.join(repo, '.git')));
+      expect(paths.bare).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
