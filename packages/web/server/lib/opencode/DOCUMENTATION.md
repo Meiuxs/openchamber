@@ -577,6 +577,8 @@ Persistence path normalization (`normalizePathForPersistence` / `normalizeSettin
 
 `sanitizeProjects` also validates the per-project `issuesDir` (the local tracker's issues-directory override): a present value is kept, trimmed, only when it is a relative path on either separator family with no `..` segment; otherwise it is stored as `null`, and an absent key stays omitted. This is the settings-layer defense so a stored `issuesDir` can never point the scanner outside the project; the scanner re-validates independently and falls back to its default directory. The per-project `autoDispatchIssues` flag (the issue auto-dispatch watcher's switch) is kept only when exactly `true`; anything else, and an absent key, read as off.
 
+The GitLab issue automation keeps four sibling keys. `autoDispatchGitlabIssues` is kept only when exactly `true`. `gitlabIssueBranchPrefix` must be a valid Git ref prefix ending with `/`; an invalid value is omitted so the dispatcher falls back to `openchamber/`. `gitlabIssueBotAccountId` is trimmed and omitted when empty. `gitlabIssueTimeoutMinutes` must be an integer from 1 to 1440; anything else is omitted and the dispatcher uses 30.
+
 ## Public exports (theme-runtime.js)
 - `createThemeRuntime(dependencies)`: creates custom theme runtime for on-disk theme discovery and JSON normalization/validation.
 - Returned API:

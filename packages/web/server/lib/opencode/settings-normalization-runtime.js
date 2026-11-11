@@ -1,4 +1,4 @@
-import { asNonEmptyString } from '../shared/guards.js';
+import { asNonEmptyString, isString } from '../shared/guards.js';
 
 export const createSettingsNormalizationRuntime = (dependencies) => {
   const {
@@ -308,6 +308,25 @@ export const createSettingsNormalizationRuntime = (dependencies) => {
       // switched on; the flag is stored only when true.
       if (candidate.autoDispatchIssues === true) {
         project.autoDispatchIssues = true;
+      }
+
+      if (candidate.autoDispatchGitlabIssues === true) {
+        project.autoDispatchGitlabIssues = true;
+      }
+      if (isString(candidate.gitlabIssueBranchPrefix)) {
+        // An invalid prefix is kept so the settings page can show the error
+        // and the dispatcher stays off; silently replacing it would start
+        // polling with a prefix the user never chose.
+        const prefix = candidate.gitlabIssueBranchPrefix.trim();
+        if (prefix) project.gitlabIssueBranchPrefix = prefix;
+      }
+      if (isString(candidate.gitlabIssueBotAccountId)) {
+        const accountId = candidate.gitlabIssueBotAccountId.trim();
+        if (accountId) project.gitlabIssueBotAccountId = accountId;
+      }
+      const gitlabTimeout = candidate.gitlabIssueTimeoutMinutes;
+      if (Number.isFinite(gitlabTimeout)) {
+        project.gitlabIssueTimeoutMinutes = gitlabTimeout;
       }
 
       result.push(project);

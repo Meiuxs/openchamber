@@ -2515,6 +2515,7 @@ const gracefulShutdownRuntime = createGracefulShutdownRuntime({
   stopFolderWatches: () => {
     stopEnterprisePolicyWatch();
     featureRoutesRuntime.stopFolderWatches();
+    void featureRoutesRuntime.stopGitlabIssueDispatcher();
   },
 });
 

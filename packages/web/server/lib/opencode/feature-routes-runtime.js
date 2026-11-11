@@ -93,6 +93,11 @@ import { installSkillsFromRepository } from '../skills-catalog/install.js';
 import { fetchGitHubRepoMetas } from '../skills-catalog/github-meta.js';
 import crypto from 'node:crypto';
 import { createSourceControlAuthStore } from '../source-control/auth-storage.js';
+import { createGitCredentialBroker } from '../git/credential-broker.js';
+import { createOpenCodeClient } from '../openchamber-sessions/opencode-client.js';
+import { createGitlabIssueDispatcher } from '../gitlab-issues/dispatcher.js';
+import { createGitlabIssueWorkspace } from '../gitlab-issues/workspace.js';
+import { createClientForAccount, createGitlabIssueApi } from '../gitlab-issues/gitlab.js';
 import { createSourceControlProviders } from '../source-control/provider-registry.js';
 import { createGitCredentialResolver, createHttpsCredentialReference, parseGitCredentialReference } from '../git/credential-resolver.js';
 import { createGitRepositoryCredentialRuntime } from '../git/repository-credential-runtime.js';
@@ -151,6 +156,8 @@ export const createFeatureRoutesRuntime = (dependencies) => {
   let gitRepositoryCredentialRuntime = null;
   let networkOperations = null;
   let gitWorktreeCreation = null;
+  let gitlabIssueDispatcher = null;
+  let gitlabIssueCredentialBroker = null;
   const getWalkthroughService = async () => {
     if (!walkthroughService) {
       const [service, pullRequest] = await Promise.all([
@@ -759,6 +766,38 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       resolveGitIdentity,
       trustedDirectoriesConfig: createTrustedDirectoriesConfig({ gitBinary }),
     });
+    // GitLab issue automation: a second dispatcher beside the local-issue one.
+    // It owns its credential broker so its leases never inherit a repository
+    // binding or a persistent credential helper. The broker starts on the
+    // first lease, so a machine that never enables automation never opens the
+    // loopback listener.
+    gitlabIssueCredentialBroker = createGitCredentialBroker();
+    gitlabIssueDispatcher = createGitlabIssueDispatcher({
+      listProjects: async () => sanitizeProjects((await readSettingsFromDiskMigrated())?.projects || []),
+      authStore: sourceControlAuthStore,
+      bindingService: walkthroughBindingService,
+      credentialResolver: gitCredentialResolver,
+      createHttpsCredentialReference,
+      worktreeBootstrapStore,
+      apiFactory: ({ origin, account }) => createGitlabIssueApi({
+        client: createClientForAccount(origin, account),
+      }),
+      workspace: createGitlabIssueWorkspace({
+        spawnImpl: spawn,
+        gitBinary,
+        credentialBroker: gitlabIssueCredentialBroker,
+      }),
+      clientFactory: ({ directory }) => createOpenCodeClient({
+        baseUrl: buildOpenCodeUrl('/', '').replace(/\/$/, ''),
+        headers: getOpenCodeAuthHeaders(),
+        directory,
+      }),
+      waitForOpenCodeReady,
+      onSessionCreated: emitSessionCreatedEvent,
+      ledgerPath: path.join(openchamberDataDir, 'gitlab-issue-runs.json'),
+      logger: console,
+    });
+    gitlabIssueDispatcher.start();
     await registerBuiltInGuests({ persistPath: extensionsPersistPath(openchamberDataDir), root: routeDependencies.builtInExtensionsDir });
     // A change every client reads again from the server; the event carries nothing.
     const announceChange = (type) => {
@@ -1015,6 +1054,10 @@ export const createFeatureRoutesRuntime = (dependencies) => {
     createChangeRequestWorktree,
     /** Writes the Git credential helper's endpoint file; a no-op until the Git routes are registered. */
     publishRepositoryCredentialEndpoint: async () => { await gitRepositoryCredentialRuntime?.publish(); },
+    stopGitlabIssueDispatcher: async () => {
+      await gitlabIssueDispatcher?.close();
+      await gitlabIssueCredentialBroker?.close();
+    },
     /** Both folder watches: the themes folder and the extensions installed from a folder. */
     stopFolderWatches: () => {
       themeFolderWatch?.stop();

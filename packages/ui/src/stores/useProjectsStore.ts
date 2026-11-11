@@ -7,7 +7,7 @@ import type { ProjectEntry } from '@/lib/api/types';
 import type { DesktopSettings } from '@/lib/desktop';
 import { type SettingsSyncedDetail, updateDesktopSettings } from '@/lib/persistence';
 import { createProjectIdFromPath } from '@/lib/projectId';
-import { parseNonEmptyTrimmedString } from '@/lib/settings/parsers';
+import { parseFiniteNumber, parseNonEmptyTrimmedString } from '@/lib/settings/parsers';
 import { getDeferredSafeStorage } from './utils/safeStorage';
 import { useDirectoryStore } from './useDirectoryStore';
 import { streamDebugEnabled } from '@/stores/utils/streamDebug';
@@ -75,6 +75,10 @@ interface ProjectsStore {
     defaultModel?: string | null;
     defaultVariant?: string | null;
     autoDispatchIssues?: boolean;
+    autoDispatchGitlabIssues?: boolean;
+    gitlabIssueBranchPrefix?: string | null;
+    gitlabIssueBotAccountId?: string | null;
+    gitlabIssueTimeoutMinutes?: number | null;
   }) => void;
   uploadProjectIcon: (id: string, file: File) => Promise<{ ok: boolean; error?: string }>;
   removeProjectIcon: (id: string) => Promise<{ ok: boolean; error?: string }>;
@@ -354,6 +358,17 @@ const sanitizeProjects = (value: unknown): ProjectEntry[] => {
     if (candidate.autoDispatchIssues === true) {
       project.autoDispatchIssues = true;
     }
+    if (candidate.autoDispatchGitlabIssues === true) {
+      project.autoDispatchGitlabIssues = true;
+    }
+    // Invalid values are kept so the settings page shows the error and the
+    // server keeps the project switched off; the form refuses to write them.
+    const gitlabPrefix = parseNonEmptyTrimmedString(candidate.gitlabIssueBranchPrefix, {});
+    if (gitlabPrefix) project.gitlabIssueBranchPrefix = gitlabPrefix;
+    const gitlabBotAccountId = parseNonEmptyTrimmedString(candidate.gitlabIssueBotAccountId, {});
+    if (gitlabBotAccountId) project.gitlabIssueBotAccountId = gitlabBotAccountId;
+    const gitlabTimeout = parseFiniteNumber(candidate.gitlabIssueTimeoutMinutes, {});
+    if (gitlabTimeout !== undefined) project.gitlabIssueTimeoutMinutes = gitlabTimeout;
     result.push(project);
   }
 
@@ -919,6 +934,10 @@ export const useProjectsStore = create<ProjectsStore>()(
       defaultModel?: string | null;
       defaultVariant?: string | null;
       autoDispatchIssues?: boolean;
+      autoDispatchGitlabIssues?: boolean;
+      gitlabIssueBranchPrefix?: string | null;
+      gitlabIssueBotAccountId?: string | null;
+      gitlabIssueTimeoutMinutes?: number | null;
     }) => {
       if (isVSCodeProjectsRuntime) {
         return;
@@ -973,6 +992,31 @@ export const useProjectsStore = create<ProjectsStore>()(
             updated.autoDispatchIssues = true;
           } else {
             delete updated.autoDispatchIssues;
+          }
+        }
+        if (meta.autoDispatchGitlabIssues !== undefined) {
+          if (meta.autoDispatchGitlabIssues) {
+            updated.autoDispatchGitlabIssues = true;
+          } else {
+            delete updated.autoDispatchGitlabIssues;
+          }
+        }
+        if (meta.gitlabIssueBranchPrefix !== undefined) {
+          const trimmed = meta.gitlabIssueBranchPrefix?.trim();
+          if (trimmed) updated.gitlabIssueBranchPrefix = trimmed;
+          else delete updated.gitlabIssueBranchPrefix;
+        }
+        if (meta.gitlabIssueBotAccountId !== undefined) {
+          const trimmed = meta.gitlabIssueBotAccountId?.trim();
+          if (trimmed) updated.gitlabIssueBotAccountId = trimmed;
+          else delete updated.gitlabIssueBotAccountId;
+        }
+        if (meta.gitlabIssueTimeoutMinutes !== undefined) {
+          const timeout = parseFiniteNumber(meta.gitlabIssueTimeoutMinutes, {});
+          if (timeout !== undefined && Number.isInteger(timeout) && timeout >= 1 && timeout <= 1440) {
+            updated.gitlabIssueTimeoutMinutes = timeout;
+          } else {
+            delete updated.gitlabIssueTimeoutMinutes;
           }
         }
         return updated;

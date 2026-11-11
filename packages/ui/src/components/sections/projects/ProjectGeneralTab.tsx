@@ -5,14 +5,21 @@ import { toast } from '@/components/ui';
 import { ModelSelector } from '@/components/sections/agents/ModelSelector';
 import { AgentSelector } from '@/components/sections/commands/AgentSelector';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { NumberInput } from '@/components/ui/number-input';
 import {
   SettingsCheckboxRow,
   SettingsFieldRow,
   SettingsSection,
   SETTINGS_CUSTOM_TRIGGER_CLASS,
   SETTINGS_HELPER_CLASS,
+  SETTINGS_NUMBER_INPUT_CLASS,
   SETTINGS_SELECT_ROW_TRIGGER_CLASS,
 } from '@/components/sections/shared/SettingsSection';
+import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
+import { getSourceControlAuthKey, useSourceControlAuthStore } from '@/stores/useSourceControlAuthStore';
+import { buildManagedAccountOptions, getManagedCredentialSourceLabelKey } from '@/lib/source-control/identity';
+import { useSourceControlDescriptorOf } from '@/lib/source-control/providers/registry';
+import { isValidBranchPrefix } from '@/lib/git-ref';
 import { selectProvidersForDirectory, useConfigStore } from '@/stores/useConfigStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { modelVariantNames } from '@/lib/modelVariants';
@@ -120,6 +127,152 @@ const LocalIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =>
         label={t('settings.projects.page.field.autoDispatch')}
         info={t('settings.projects.page.field.autoDispatchInfo')}
       />
+    </SettingsSection>
+  );
+};
+
+/**
+ * The project's GitLab issue automation: whether the server may pick up
+ * `ai-ready` issues, which bot account comments and labels, the branch prefix,
+ * and how long an implementing session may run.
+ */
+const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) => {
+  const { t } = useI18n();
+  const { sourceControl } = useRuntimeAPIs();
+  const updateProjectMeta = useProjectsStore((state) => state.updateProjectMeta);
+  const identities = useSourceControlAuthStore((state) => state.identities);
+  const authEntries = useSourceControlAuthStore((state) => state.entries);
+  const refreshAccounts = useSourceControlAuthStore((state) => state.refreshAll);
+  const descriptorOf = useSourceControlDescriptorOf();
+
+  React.useEffect(() => {
+    void refreshAccounts(sourceControl);
+  }, [refreshAccounts, sourceControl]);
+
+  const accountOptions = React.useMemo(() => identities.flatMap((identity) => {
+    if (identity.provider !== 'gitlab') return [];
+    const entry = authEntries[getSourceControlAuthKey(identity)];
+    if (!entry?.hasChecked || entry.status?.status !== 'connected') return [];
+    return buildManagedAccountOptions(
+      identity,
+      descriptorOf(identity.provider),
+      entry.status.accounts,
+      (account) => t(getManagedCredentialSourceLabelKey(account.source)),
+    ).map((option) => ({ id: option.reference.accountId, label: option.label }));
+  }), [authEntries, descriptorOf, identities, t]);
+
+  const storedPrefix = project.gitlabIssueBranchPrefix ?? 'openchamber/';
+  const [prefixDraft, setPrefixDraft] = React.useState(storedPrefix);
+  const [prefixError, setPrefixError] = React.useState(false);
+  React.useEffect(() => {
+    const configuredPrefix = project.gitlabIssueBranchPrefix;
+    setPrefixDraft(configuredPrefix ?? 'openchamber/');
+    // A value that reached the store from outside the form must surface the
+    // same error the form shows, so the stopped dispatcher is explained.
+    setPrefixError(Boolean(configuredPrefix) && !isValidBranchPrefix(configuredPrefix ?? ''));
+  }, [project.id, project.gitlabIssueBranchPrefix]);
+
+  const storedTimeout = project.gitlabIssueTimeoutMinutes;
+  const timeoutInvalid = storedTimeout !== undefined
+    && !(Number.isInteger(storedTimeout) && storedTimeout >= 1 && storedTimeout <= 1440);
+
+  const commitPrefix = () => {
+    const trimmed = prefixDraft.trim();
+    if (!isValidBranchPrefix(trimmed)) {
+      setPrefixError(true);
+      return;
+    }
+    setPrefixError(false);
+    if (trimmed !== storedPrefix) updateProjectMeta(project.id, { gitlabIssueBranchPrefix: trimmed });
+  };
+
+  return (
+    <SettingsSection
+      title={t('settings.projects.page.section.gitlabIssues')}
+      contentClassName="space-y-0"
+    >
+      <SettingsCheckboxRow
+        settingsItem="projects.gitlab-auto-dispatch"
+        checked={project.autoDispatchGitlabIssues === true}
+        onChange={(checked) => updateProjectMeta(project.id, { autoDispatchGitlabIssues: checked })}
+        label={t('settings.projects.page.field.gitlabAutoDispatch')}
+        info={t('settings.projects.page.field.gitlabAutoDispatchInfo')}
+      />
+      {project.autoDispatchGitlabIssues === true ? (
+        <>
+          <SettingsFieldRow
+            settingsItem="projects.gitlab-branch-prefix"
+            label={t('settings.projects.page.field.gitlabBranchPrefix')}
+            info={t('settings.projects.page.field.gitlabBranchPrefixInfo')}
+          >
+            <Input
+              value={prefixDraft}
+              onChange={(event) => {
+                setPrefixDraft(event.target.value);
+                if (prefixError) setPrefixError(false);
+              }}
+              onBlur={commitPrefix}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+              }}
+              placeholder="openchamber/"
+              aria-label={t('settings.projects.page.field.gitlabBranchPrefix')}
+              className="h-8 rounded-md px-3 font-mono text-xs"
+            />
+            {prefixError ? (
+              <span className="typography-meta text-[var(--status-error)]">
+                {t('settings.projects.page.field.gitlabBranchPrefixError')}
+              </span>
+            ) : null}
+          </SettingsFieldRow>
+          <SettingsFieldRow
+            settingsItem="projects.gitlab-timeout"
+            label={t('settings.projects.page.field.gitlabTimeout')}
+            info={t('settings.projects.page.field.gitlabTimeoutInfo')}
+          >
+            <NumberInput
+              value={project.gitlabIssueTimeoutMinutes ?? 30}
+              onValueChange={(value) => {
+                if (Number.isInteger(value) && value >= 1 && value <= 1440) {
+                  updateProjectMeta(project.id, { gitlabIssueTimeoutMinutes: value });
+                }
+              }}
+              min={1}
+              max={1440}
+              step={1}
+              className={SETTINGS_NUMBER_INPUT_CLASS}
+              aria-label={t('settings.projects.page.field.gitlabTimeout')}
+            />
+            {timeoutInvalid ? (
+              <span className="typography-meta text-[var(--status-error)]">
+                {t('settings.projects.page.field.gitlabTimeoutError')}
+              </span>
+            ) : null}
+          </SettingsFieldRow>
+          <SettingsFieldRow
+            settingsItem="projects.gitlab-bot-account"
+            label={t('settings.projects.page.field.gitlabBotAccount')}
+            info={t('settings.projects.page.field.gitlabBotAccountInfo')}
+          >
+            <Select
+              value={project.gitlabIssueBotAccountId ?? ''}
+              onValueChange={(value) => updateProjectMeta(project.id, { gitlabIssueBotAccountId: value })}
+            >
+              <SelectTrigger
+                className={SETTINGS_SELECT_ROW_TRIGGER_CLASS}
+                aria-label={t('settings.projects.page.field.gitlabBotAccount')}
+              >
+                <SelectValue placeholder={t('settings.projects.page.field.gitlabBotAccountPlaceholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                {accountOptions.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingsFieldRow>
+        </>
+      ) : null}
     </SettingsSection>
   );
 };
@@ -257,6 +410,7 @@ export const ProjectGeneralTab: React.FC<{
   <>
     <ChatDefaultsSection form={form} />
     {form.project ? <LocalIssuesSection project={form.project} /> : null}
+    {form.project ? <GitlabIssuesSection project={form.project} /> : null}
     <TeamFileSection projectRef={projectRef} setupState={setupState} />
   </>
 );

@@ -181,6 +181,44 @@ describe('settings normalization runtime - symlink resolution', () => {
       expect(runtime.sanitizeProjects(JSON.parse(JSON.stringify(result)))).toEqual(result);
     });
 
+    it('stores GitLab issue automation fields and keeps invalid values so the page can explain them', () => {
+      const runtime = createTestRuntime();
+
+      const result = runtime.sanitizeProjects([
+        {
+          id: 'proj1', path: '/a', autoDispatchGitlabIssues: true,
+          gitlabIssueBranchPrefix: 'team/bot/', gitlabIssueBotAccountId: 'acc-1',
+          gitlabIssueTimeoutMinutes: 45,
+        },
+        {
+          id: 'proj2', path: '/b', autoDispatchGitlabIssues: false,
+          gitlabIssueBranchPrefix: 'bad prefix/', gitlabIssueBotAccountId: ' ',
+          gitlabIssueTimeoutMinutes: 0,
+        },
+        {
+          id: 'proj3', path: '/c', autoDispatchGitlabIssues: true,
+          gitlabIssueBranchPrefix: 'openchamber', gitlabIssueBotAccountId: 'acc-2',
+          gitlabIssueTimeoutMinutes: '30',
+        },
+      ]);
+
+      expect(result[0]).toMatchObject({
+        autoDispatchGitlabIssues: true,
+        gitlabIssueBranchPrefix: 'team/bot/',
+        gitlabIssueBotAccountId: 'acc-1',
+        gitlabIssueTimeoutMinutes: 45,
+      });
+      expect(result[1]).not.toHaveProperty('autoDispatchGitlabIssues');
+      expect(result[1]).toMatchObject({
+        gitlabIssueBranchPrefix: 'bad prefix/',
+        gitlabIssueTimeoutMinutes: 0,
+      });
+      expect(result[1]).not.toHaveProperty('gitlabIssueBotAccountId');
+      expect(result[2]).toMatchObject({ gitlabIssueBranchPrefix: 'openchamber' });
+      expect(result[2]).not.toHaveProperty('gitlabIssueTimeoutMinutes');
+      expect(runtime.sanitizeProjects(JSON.parse(JSON.stringify(result)))).toEqual(result);
+    });
+
     it('nulls an absolute project issuesDir on either separator family', () => {
       const runtime = createTestRuntime();
 

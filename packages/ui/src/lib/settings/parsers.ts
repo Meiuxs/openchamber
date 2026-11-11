@@ -450,6 +450,12 @@ const projectEntrySchema = z.object({
   defaultAgent: nonEmptyTrimmed.optional().catch(undefined),
   defaultVariant: nonEmptyTrimmed.optional().catch(undefined),
   autoDispatchIssues: z.literal(true).optional().catch(undefined),
+  autoDispatchGitlabIssues: z.literal(true).optional().catch(undefined),
+  gitlabIssueBranchPrefix: nonEmptyTrimmed.optional().catch(undefined),
+  gitlabIssueBotAccountId: nonEmptyTrimmed.optional().catch(undefined),
+  // Out-of-range values are kept: the settings page shows the error and the
+  // dispatcher stays off until the value is fixed.
+  gitlabIssueTimeoutMinutes: z.number().finite().optional().catch(undefined),
 });
 
 export const parseProjects = fromSchema(
@@ -481,6 +487,12 @@ export const parseProjects = fromSchema(
       if (parsed.data.defaultVariant) project.defaultVariant = parsed.data.defaultVariant;
       if (parsed.data.sidebarCollapsed !== undefined) project.sidebarCollapsed = parsed.data.sidebarCollapsed;
       if (parsed.data.autoDispatchIssues === true) project.autoDispatchIssues = true;
+      if (parsed.data.autoDispatchGitlabIssues === true) project.autoDispatchGitlabIssues = true;
+      if (parsed.data.gitlabIssueBranchPrefix) project.gitlabIssueBranchPrefix = parsed.data.gitlabIssueBranchPrefix;
+      if (parsed.data.gitlabIssueBotAccountId) project.gitlabIssueBotAccountId = parsed.data.gitlabIssueBotAccountId;
+      if (parsed.data.gitlabIssueTimeoutMinutes !== undefined) {
+        project.gitlabIssueTimeoutMinutes = parsed.data.gitlabIssueTimeoutMinutes;
+      }
       result.push(project);
     }
     return result;

@@ -1496,6 +1496,14 @@ export interface ProjectEntry {
   issuesDir?: string | null;
   /** The issue auto-dispatch watcher runs for this project; absent means off. */
   autoDispatchIssues?: boolean;
+  /** GitLab issue automation runs for this project; absent means off. */
+  autoDispatchGitlabIssues?: boolean;
+  /** Branch prefix for automated GitLab issue branches; defaults to openchamber/. */
+  gitlabIssueBranchPrefix?: string;
+  /** Credential id of the GitLab bot account used for comments and labels. */
+  gitlabIssueBotAccountId?: string;
+  /** Implementing-phase timeout in minutes; defaults to 30. */
+  gitlabIssueTimeoutMinutes?: number;
 }
 
 /**

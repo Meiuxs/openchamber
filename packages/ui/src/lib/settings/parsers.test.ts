@@ -49,4 +49,33 @@ describe('parseProjects', () => {
     expect(parsed?.map((project) => project.autoDispatchIssues)).toEqual([true, undefined, undefined]);
     expect(parseProjects(parsed, { projects: parsed })).toEqual(parsed);
   });
+
+  test('keeps GitLab issue automation fields across a settings round trip', () => {
+    const projects = [
+      {
+        path: '/repo/app', autoDispatchGitlabIssues: true,
+        gitlabIssueBranchPrefix: 'team/bot/', gitlabIssueBotAccountId: 'acc-1',
+        gitlabIssueTimeoutMinutes: 45,
+      },
+      { path: '/repo/lib' },
+      { path: '/repo/bad', gitlabIssueTimeoutMinutes: 0, gitlabIssueBranchPrefix: '' },
+      { path: '/repo/edited', gitlabIssueBranchPrefix: 'bad prefix/', gitlabIssueTimeoutMinutes: 0 },
+    ];
+    const parsed = parseProjects(projects, { projects });
+
+    expect(parsed?.[0]).toMatchObject({
+      autoDispatchGitlabIssues: true,
+      gitlabIssueBranchPrefix: 'team/bot/',
+      gitlabIssueBotAccountId: 'acc-1',
+      gitlabIssueTimeoutMinutes: 45,
+    });
+    expect(parsed?.[1]).not.toHaveProperty('gitlabIssueTimeoutMinutes');
+    expect(parsed?.[2]).not.toHaveProperty('gitlabIssueBranchPrefix');
+    expect(parsed?.[2]).toMatchObject({ gitlabIssueTimeoutMinutes: 0 });
+    expect(parsed?.[3]).toMatchObject({
+      gitlabIssueBranchPrefix: 'bad prefix/',
+      gitlabIssueTimeoutMinutes: 0,
+    });
+    expect(parseProjects(parsed, { projects: parsed })).toEqual(parsed);
+  });
 });
