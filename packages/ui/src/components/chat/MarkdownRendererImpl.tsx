@@ -52,6 +52,7 @@ import { MarkdownLink, MarkdownInlineCode } from './markdown/MarkdownLink';
 import { MarkdownCode } from './markdown/MarkdownCode';
 import { MarkdownTable, MarkdownTableCell } from './markdown/MarkdownTable';
 import { MarkdownMermaid } from './markdown/MarkdownMermaid';
+import { MarkdownSvg } from './markdown/MarkdownSvg';
 import { MarkdownUiBlock } from './markdown/MarkdownUiBlock';
 import { MarkdownBlockquote } from './markdown/MarkdownBlockquote';
 import { createMarkdownCodePlugin } from './markdown/streamdownCode';
@@ -154,7 +155,7 @@ const components: Components = {
   video: ExportSafeVideo,
   p: MarkdownBodyParagraph,
   strong: ({ node: _node, ...props }) => <strong {...props} />,
-  li: ({ node: _node, ...props }) => <li {...props} dir="auto" />,
+  li: ({ node: _node, ...props }) => <li dir="auto" {...props} />,
   blockquote: MarkdownBlockquote,
   summary: ({ node: _node, children, ...props }) => (
     <summary {...props}>
@@ -167,6 +168,8 @@ const renderers = [
   { language: 'mermaid', component: MarkdownMermaid },
   // Reached only where `uiBlocks` is on (MarkdownCode); elsewhere the block stays code.
   { language: 'openui-lang', component: MarkdownUiBlock },
+  // Reached only where `svgFences` is on (MarkdownCode); elsewhere the fence stays code.
+  { language: 'svg', component: MarkdownSvg },
 ];
 const linkSafety = { enabled: false };
 const remend: StreamdownProps['remend'] = { linkMode: 'text-only', singleTilde: false };
@@ -297,6 +300,8 @@ export interface MarkdownContentProps {
   windowed?: boolean;
   /** `openui-lang` fences draw as UI blocks; only assistant and subagent replies set it. */
   uiBlocks?: boolean;
+  /** `svg` fences draw as images; only the Files preview sets it. */
+  svgFences?: boolean;
   /** Text a person typed: no HTML and no character references, so `<b>` and `&amp;` read as typed (`remarkLiteralText`). */
   literalText?: boolean;
   /** What active extensions claim in chat messages (`useGuestLinkRules`); only chat messages pass it. Keep the array stable. */
@@ -332,6 +337,7 @@ export function MarkdownContent({
   emojiShortcodes,
   windowed = false,
   uiBlocks = false,
+  svgFences = false,
   literalText = false,
   guestLinks = null,
 }: MarkdownContentProps) {
@@ -456,6 +462,7 @@ export function MarkdownContent({
     // Only an assistant or subagent reply on screen draws UI blocks; copies
     // and image exports keep the block's source.
     uiBlocks: uiBlocks && !purpose,
+    svgFences: svgFences && !purpose,
     settledReply: uiBlocks && !purpose && settled && sessionId && messageId ? { sessionId, messageId } : null,
     disableLinkSafety,
     guestLinks: activeGuestLinks,
@@ -467,7 +474,7 @@ export function MarkdownContent({
     confirmFile,
     code,
   }), [
-    directory, fileReferences, fileNavigation, loopbackPreview, settled, purpose, uiBlocks, sessionId, messageId, disableLinkSafety, activeGuestLinks, tableWidthScope, theme,
+    directory, fileReferences, fileNavigation, loopbackPreview, settled, purpose, uiBlocks, svgFences, sessionId, messageId, disableLinkSafety, activeGuestLinks, tableWidthScope, theme,
     mermaidControls, onShowPopup, onExportCode, confirmFile, code,
   ]);
 

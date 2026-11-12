@@ -21,6 +21,7 @@ import {
   commit,
   createWorktree,
   getWorktreeBootstrapStatus,
+  getWorktreeBootstrapGateStatus,
   waitForActiveWorktreeBootstrap,
   getBranches,
   getRepositoryRemoteUrls,
@@ -1120,6 +1121,83 @@ describe.runIf(canRunGit())('diffs for status paths that are not plain files', (
 // ---------------------------------------------------------------------------
 
 describe('getStatus', () => {
+  it('names a rename\'s source path, and only both paths read as a rename diff', async () => {
+    if (!canRunGit()) return;
+
+    const repo = createTempDir();
+    runGit(repo, ['init', '-b', 'main']);
+    runGit(repo, ['config', 'user.email', 'test@example.com']);
+    runGit(repo, ['config', 'user.name', 'Test User']);
+    fs.writeFileSync(path.join(repo, 'old-name.txt'), 'alpha\nbeta\n');
+    runGit(repo, ['add', 'old-name.txt']);
+    runGit(repo, ['commit', '-m', 'Initial commit']);
+    runGit(repo, ['mv', 'old-name.txt', 'new-name.txt']);
+
+    const status = await getStatus(repo);
+    expect(status.files).toEqual([
+      { path: 'new-name.txt', index: 'R', working_dir: ' ', previousPath: 'old-name.txt' },
+    ]);
+
+    // The destination alone reads as a new file; naming both sides reads as a rename.
+    expect(await getDiff(repo, { path: 'new-name.txt', staged: true })).toContain('new file mode');
+    const patch = await getDiff(repo, { path: 'new-name.txt', staged: true, previousPath: 'old-name.txt' });
+    expect(patch).toContain('rename from old-name.txt');
+    expect(patch).toContain('rename to new-name.txt');
+
+    const fileDiff = await getFileDiff(repo, { path: 'new-name.txt', previousPath: 'old-name.txt' });
+    expect(fileDiff.original).toBe('alpha\nbeta\n');
+    expect(fileDiff.modified).toBe('alpha\nbeta\n');
+  });
+
+  it('reads a staged, edited rename HEAD-to-index when staged and index-to-working-tree when not', async () => {
+    if (!canRunGit()) return;
+
+    const repo = createTempDir();
+    runGit(repo, ['init', '-b', 'main']);
+    runGit(repo, ['config', 'user.email', 'test@example.com']);
+    runGit(repo, ['config', 'user.name', 'Test User']);
+    fs.writeFileSync(path.join(repo, 'notes.txt'), 'one\ntwo\nthree\nfour\n');
+    runGit(repo, ['add', 'notes.txt']);
+    runGit(repo, ['commit', '-m', 'Initial commit']);
+    runGit(repo, ['mv', 'notes.txt', 'journal.txt']);
+    fs.writeFileSync(path.join(repo, 'journal.txt'), 'one\ntwo\nthree\nfour\nstaged\n');
+    runGit(repo, ['add', 'journal.txt']);
+    fs.writeFileSync(path.join(repo, 'journal.txt'), 'one\ntwo\nthree\nfour\nstaged\nunstaged\n');
+
+    const stagedVersions = await getFileDiff(repo, { path: 'journal.txt', staged: true, previousPath: 'notes.txt' });
+    expect(stagedVersions.original).toBe('one\ntwo\nthree\nfour\n');
+    expect(stagedVersions.modified).toBe('one\ntwo\nthree\nfour\nstaged\n');
+
+    const unstagedVersions = await getFileDiff(repo, { path: 'journal.txt', previousPath: 'notes.txt' });
+    expect(unstagedVersions.original).toBe('one\ntwo\nthree\nfour\nstaged\n');
+    expect(unstagedVersions.modified).toBe('one\ntwo\nthree\nfour\nstaged\nunstaged\n');
+  });
+
+  it('keeps the old side of a staged rename that was edited in the working tree', async () => {
+    if (!canRunGit()) return;
+
+    const repo = createTempDir();
+    runGit(repo, ['init', '-b', 'main']);
+    runGit(repo, ['config', 'user.email', 'test@example.com']);
+    runGit(repo, ['config', 'user.name', 'Test User']);
+    const before = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]);
+    const after = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x02]);
+    fs.writeFileSync(path.join(repo, 'logo.png'), before);
+    runGit(repo, ['add', 'logo.png']);
+    runGit(repo, ['commit', '-m', 'Initial commit']);
+    runGit(repo, ['mv', 'logo.png', 'logo-mark.png']);
+    fs.writeFileSync(path.join(repo, 'logo-mark.png'), after);
+
+    const status = await getStatus(repo);
+    expect(status.files).toEqual([
+      { path: 'logo-mark.png', index: 'R', working_dir: 'M', previousPath: 'logo.png' },
+    ]);
+
+    const fileDiff = await getFileDiff(repo, { path: 'logo-mark.png', previousPath: 'logo.png' });
+    expect(fileDiff.original).toBe(`data:image/png;base64,${before.toString('base64')}`);
+    expect(fileDiff.modified).toBe(`data:image/png;base64,${after.toString('base64')}`);
+  });
+
   it('handles repositories without upstream tracking', async () => {
     if (!canRunGit()) return;
 
@@ -1990,6 +2068,117 @@ describe('getWorktrees', () => {
 // ---------------------------------------------------------------------------
 
 describe('createWorktree', () => {
+  it('reports the failed attempt after fast creation rolls back its empty directory', async () => {
+    if (!canRunGit()) return;
+    const repo = createTempDir();
+    runGit(repo, ['init', '-b', 'main']);
+    runGit(repo, ['config', 'user.email', 'test@example.com']);
+    runGit(repo, ['config', 'user.name', 'Test User']);
+    runGit(repo, ['commit', '--allow-empty', '-m', 'Initial commit']);
+    runGit(repo, ['branch', 'team/stable']);
+    const previousDataHome = process.env.XDG_DATA_HOME;
+    process.env.XDG_DATA_HOME = createTempDir();
+    const bootstrapStore = createWorktreeBootstrapStore({ filePath: path.join(createTempDir(), 'bootstrap.json') });
+    try {
+      const created = await createWorktree(repo, {
+        mode: 'new', branchName: 'team/stable/feature', worktreeName: 'failed-ref', returnAfterDirectoryCreated: true,
+      }, { bootstrapStore });
+      // Git refuses the nested branch name; the rollback finishes before the first poll.
+      await waitForActiveWorktreeBootstrap(created.path);
+
+      expect(fs.existsSync(created.path)).toBe(false);
+      // The rollback itself releases the durable record and its capacity.
+      await expect(bootstrapStore.read(created.path)).resolves.toBeNull();
+      // The attempt's watcher and waiters still read the failure, on every poll.
+      for (let poll = 0; poll < 2; poll += 1) {
+        await expect(getWorktreeBootstrapStatus(created.path, { bootstrapStore }))
+          .resolves.toMatchObject({ status: 'failed', phase: 'directory-created' });
+      }
+      await expect(getWorktreeBootstrapGateStatus(created.path, { bootstrapStore }))
+        .resolves.toMatchObject({ status: 'failed' });
+    } finally {
+      if (previousDataHome === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = previousDataHome;
+    }
+  });
+
+  it('keeps the rolled-back failure across a store read that fails once', async () => {
+    if (!canRunGit()) return;
+    const repo = createTempDir();
+    runGit(repo, ['init', '-b', 'main']);
+    runGit(repo, ['config', 'user.email', 'test@example.com']);
+    runGit(repo, ['config', 'user.name', 'Test User']);
+    runGit(repo, ['commit', '--allow-empty', '-m', 'Initial commit']);
+    runGit(repo, ['branch', 'team/stable']);
+    const previousDataHome = process.env.XDG_DATA_HOME;
+    process.env.XDG_DATA_HOME = createTempDir();
+    const store = createWorktreeBootstrapStore({ filePath: path.join(createTempDir(), 'bootstrap.json') });
+    let failNextRead = false;
+    const bootstrapStore = {
+      ...store,
+      read: async (directory) => {
+        if (failNextRead) {
+          failNextRead = false;
+          throw Object.assign(new Error('Busy'), { code: 'EBUSY' });
+        }
+        return store.read(directory);
+      },
+    };
+    try {
+      const created = await createWorktree(repo, {
+        mode: 'new', branchName: 'team/stable/feature', worktreeName: 'failed-ref-read', returnAfterDirectoryCreated: true,
+      }, { bootstrapStore });
+      await waitForActiveWorktreeBootstrap(created.path);
+      expect(fs.existsSync(created.path)).toBe(false);
+
+      const first = await getWorktreeBootstrapStatus(created.path, { bootstrapStore });
+      expect(first).toMatchObject({ status: 'failed', phase: 'directory-created' });
+      failNextRead = true;
+      await expect(getWorktreeBootstrapStatus(created.path, { bootstrapStore }))
+        .resolves.toBe(first);
+      await expect(getWorktreeBootstrapStatus(created.path, { bootstrapStore }))
+        .resolves.toMatchObject({ status: 'failed', errorCode: first.errorCode, error: first.error });
+      await expect(getWorktreeBootstrapGateStatus(created.path, { bootstrapStore }))
+        .resolves.toMatchObject({ status: 'failed', errorCode: first.errorCode });
+    } finally {
+      if (previousDataHome === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = previousDataHome;
+    }
+  });
+
+  it('still reports the failed attempt when rollback cannot release its record', async () => {
+    if (!canRunGit()) return;
+    const repo = createTempDir();
+    runGit(repo, ['init', '-b', 'main']);
+    runGit(repo, ['config', 'user.email', 'test@example.com']);
+    runGit(repo, ['config', 'user.name', 'Test User']);
+    runGit(repo, ['commit', '--allow-empty', '-m', 'Initial commit']);
+    runGit(repo, ['branch', 'team/stable']);
+    const previousDataHome = process.env.XDG_DATA_HOME;
+    process.env.XDG_DATA_HOME = createTempDir();
+    const store = createWorktreeBootstrapStore({ filePath: path.join(createTempDir(), 'bootstrap.json') });
+    const bootstrapStore = {
+      ...store,
+      remove: async () => { throw Object.assign(new Error('Busy'), { code: 'EBUSY' }); },
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const created = await createWorktree(repo, {
+        mode: 'new', branchName: 'team/stable/feature', worktreeName: 'failed-ref-kept', returnAfterDirectoryCreated: true,
+      }, { bootstrapStore });
+      await waitForActiveWorktreeBootstrap(created.path);
+
+      expect(fs.existsSync(created.path)).toBe(false);
+      await expect(store.read(created.path)).resolves.toMatchObject({ status: 'failed' });
+      await expect(getWorktreeBootstrapStatus(created.path, { bootstrapStore }))
+        .resolves.toMatchObject({ status: 'failed', phase: 'directory-created' });
+    } finally {
+      warn.mockRestore();
+      if (previousDataHome === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = previousDataHome;
+    }
+  });
+
   // A directory this server never bootstrapped is not being populated. Reading
   // it as failed refused every ordinary repository once the OpenCode proxy
   // started gating on this status.
@@ -2637,6 +2826,179 @@ describe('createWorktree', () => {
       }
     }
   });
+
+  it('records a branch name Git cannot create as that name conflict, not unknown (#6690)', async () => {
+    if (!canRunGit()) return;
+
+    const previousXdgDataHome = process.env.XDG_DATA_HOME;
+    const dataHome = createTempDir();
+    process.env.XDG_DATA_HOME = dataHome;
+
+    try {
+      const repo = createTempDir();
+      const baseWorktree = createTempDir();
+      runGit(repo, ['init', '-b', 'main']);
+      runGit(repo, ['config', 'user.email', 'test@example.com']);
+      runGit(repo, ['config', 'user.name', 'Test User']);
+      fs.writeFileSync(path.join(repo, 'README.md'), '# Test\n');
+      runGit(repo, ['add', 'README.md']);
+      runGit(repo, ['commit', '-m', 'Initial commit']);
+
+      // A branch that a new nested name cannot sit under: Git refuses to create
+      // `team/stable/feat` while `refs/heads/team/stable` exists.
+      fs.rmSync(baseWorktree, { recursive: true, force: true });
+      runGit(repo, ['worktree', 'add', '-b', 'team/stable', baseWorktree, 'HEAD']);
+
+      const bootstrapStore = createWorktreeBootstrapStore({
+        filePath: path.join(createTempDir(), 'bootstrap.json'),
+      });
+      const created = await createWorktree(repo, {
+        mode: 'new',
+        branchName: 'team/stable/feat/export',
+        worktreeName: 'export',
+        startRef: 'team/stable',
+        returnAfterDirectoryCreated: true,
+      }, { bootstrapStore });
+
+      await expect.poll(
+        async () => (await getWorktreeBootstrapStatus(created.path, { bootstrapStore })).status,
+        { timeout: 5_000 },
+      ).toBe('failed');
+      await waitForActiveWorktreeBootstrap(created.path);
+      await expect(getWorktreeBootstrapStatus(created.path, { bootstrapStore })).resolves.toMatchObject({
+        status: 'failed',
+        phase: 'directory-created',
+        errorCode: 'BRANCH_NAME_CONFLICT',
+        error: expect.stringContaining('clashes with an existing branch'),
+      });
+      // The rollback released the durable record; the attempt's failure stays in memory.
+      await expect(bootstrapStore.read(created.path)).resolves.toBeNull();
+    } finally {
+      if (previousXdgDataHome === undefined) {
+        delete process.env.XDG_DATA_HOME;
+      } else {
+        process.env.XDG_DATA_HOME = previousXdgDataHome;
+      }
+    }
+  }, 30_000);
+
+  // Git translates its diagnostics with the user's locale, so the code comes
+  // from the refs: a Git whose `worktree add` fails in German still reads as a
+  // name conflict when one exists, and as unknown when none does.
+  it.each([
+    ['team/stable/feat/export', 'BRANCH_NAME_CONFLICT'],
+    ['standalone/export', 'UNKNOWN'],
+  ])('classifies a failed %s worktree from refs, not Git\'s translated message', async (branchName, errorCode) => {
+    if (process.platform === 'win32' || !canRunGit()) return;
+
+    const previousXdgDataHome = process.env.XDG_DATA_HOME;
+    const previousGitBinary = process.env.OPENCHAMBER_GIT_BINARY;
+    process.env.XDG_DATA_HOME = createTempDir();
+    const germanDiagnostic = 'fatal: Konnte Referenz nicht sperren: /geheim/pfad';
+    const wrapper = path.join(createTempDir(), 'git-de');
+    fs.writeFileSync(wrapper, [
+      '#!/bin/sh',
+      `if [ "$1" = worktree ] && [ "$2" = add ]; then echo '${germanDiagnostic}' >&2; exit 128; fi`,
+      'exec git "$@"',
+      '',
+    ].join('\n'), { mode: 0o755 });
+
+    try {
+      const repo = createTempDir();
+      runGit(repo, ['init', '-b', 'main']);
+      runGit(repo, ['config', 'user.email', 'test@example.com']);
+      runGit(repo, ['config', 'user.name', 'Test User']);
+      fs.writeFileSync(path.join(repo, 'README.md'), '# Test\n');
+      runGit(repo, ['add', 'README.md']);
+      runGit(repo, ['commit', '-m', 'Initial commit']);
+      runGit(repo, ['branch', 'team/stable']);
+      // A sibling under the same folder is no conflict.
+      runGit(repo, ['branch', 'standalone/other']);
+      process.env.OPENCHAMBER_GIT_BINARY = wrapper;
+
+      const bootstrapStore = createWorktreeBootstrapStore({
+        filePath: path.join(createTempDir(), 'bootstrap.json'),
+      });
+      const created = await createWorktree(repo, {
+        mode: 'new',
+        branchName,
+        worktreeName: 'export',
+        returnAfterDirectoryCreated: true,
+      }, { bootstrapStore });
+
+      await expect.poll(
+        async () => (await getWorktreeBootstrapStatus(created.path, { bootstrapStore })).status,
+        { timeout: 5_000 },
+      ).toBe('failed');
+      await waitForActiveWorktreeBootstrap(created.path);
+      // The rollback released the durable record; the attempt's failure stays in memory.
+      await expect(bootstrapStore.read(created.path)).resolves.toBeNull();
+      const record = await getWorktreeBootstrapStatus(created.path, { bootstrapStore });
+      expect(record).toMatchObject({ status: 'failed', errorCode });
+      expect(JSON.stringify(record)).not.toContain('geheim');
+    } finally {
+      if (previousGitBinary === undefined) delete process.env.OPENCHAMBER_GIT_BINARY;
+      else process.env.OPENCHAMBER_GIT_BINARY = previousGitBinary;
+      if (previousXdgDataHome === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = previousXdgDataHome;
+    }
+  }, 30_000);
+
+  // Real Git creates the new branch, then fails on the occupied directory and
+  // leaves that branch behind; the branch this attempt made is no conflict.
+  it('does not read the branch a failed worktree add created as a name conflict', async () => {
+    if (process.platform === 'win32' || !canRunGit()) return;
+
+    const previousXdgDataHome = process.env.XDG_DATA_HOME;
+    const previousGitBinary = process.env.OPENCHAMBER_GIT_BINARY;
+    process.env.XDG_DATA_HOME = createTempDir();
+    const wrapper = path.join(createTempDir(), 'git-occupy');
+    fs.writeFileSync(wrapper, [
+      '#!/bin/sh',
+      'if [ "$1" = worktree ] && [ "$2" = add ]; then',
+      '  seen=""; for arg in "$@"; do',
+      '    if [ "$seen" = name ]; then seen=dir; continue; fi',
+      '    if [ "$seen" = dir ]; then touch "$arg/occupied"; break; fi',
+      '    if [ "$arg" = -b ]; then seen=name; fi',
+      '  done',
+      'fi',
+      'exec git "$@"',
+      '',
+    ].join('\n'), { mode: 0o755 });
+
+    try {
+      const repo = createTempDir();
+      runGit(repo, ['init', '-b', 'main']);
+      runGit(repo, ['config', 'user.email', 'test@example.com']);
+      runGit(repo, ['config', 'user.name', 'Test User']);
+      fs.writeFileSync(path.join(repo, 'README.md'), '# Test\n');
+      runGit(repo, ['add', 'README.md']);
+      runGit(repo, ['commit', '-m', 'Initial commit']);
+      process.env.OPENCHAMBER_GIT_BINARY = wrapper;
+
+      const bootstrapStore = createWorktreeBootstrapStore({
+        filePath: path.join(createTempDir(), 'bootstrap.json'),
+      });
+      const created = await createWorktree(repo, {
+        mode: 'new',
+        branchName: 'feat/occupied',
+        worktreeName: 'occupied',
+        returnAfterDirectoryCreated: true,
+      }, { bootstrapStore });
+
+      await expect.poll(
+        async () => (await getWorktreeBootstrapStatus(created.path, { bootstrapStore })).status,
+        { timeout: 5_000 },
+      ).toBe('failed');
+      await waitForActiveWorktreeBootstrap(created.path);
+      await expect(bootstrapStore.read(created.path)).resolves.toMatchObject({ errorCode: 'UNKNOWN' });
+    } finally {
+      if (previousGitBinary === undefined) delete process.env.OPENCHAMBER_GIT_BINARY;
+      else process.env.OPENCHAMBER_GIT_BINARY = previousGitBinary;
+      if (previousXdgDataHome === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = previousXdgDataHome;
+    }
+  }, 30_000);
 
   it('does not auto-track the remote start ref when creating a new branch from it', async () => {
     if (!canRunGit()) return;
@@ -3717,6 +4079,7 @@ describe('git remote arguments with option-like names', () => {
 
     const { remote, repository } = createRepositoryWithRemote();
     addOptionLikeRemote(repository, remote);
+    runGit(repository, ['symbolic-ref', 'refs/remotes/--mirror/HEAD', 'refs/remotes/--mirror/react']);
     const head = runGit(repository, ['rev-parse', 'HEAD']).trim();
     runGit(repository, ['update-ref', `refs/remotes/${OPTION_LIKE_REMOTE}/gone`, head]);
 
@@ -6383,6 +6746,38 @@ describe.runIf(canRunGit())('getRangeDiff', () => {
     const diff = await getRangeDiff(repository, { base: 'origin/react', head: 'next', path: 'README.md', includeWorkingTree: true });
     expect(diff).toContain('deleted file mode');
     expect(diff).toContain('-# Test');
+  });
+
+  it('reads a rename whose source name holds pathspec characters as that one file', async () => {
+    const { repository } = createRepositoryWithRemote();
+    fs.writeFileSync(path.join(repository, 'a[1].txt'), 'bracket source\nline two\nline three\n');
+    fs.writeFileSync(path.join(repository, 'a1.txt'), 'unrelated\n');
+    runGit(repository, ['add', '.']);
+    runGit(repository, ['commit', '-m', 'sources']);
+    runGit(repository, ['branch', 'rename-base']);
+    runGit(repository, ['mv', 'a[1].txt', 'moved.txt']);
+    // `a[1].txt` read as a pattern matches this file too.
+    fs.writeFileSync(path.join(repository, 'a1.txt'), 'unrelated edit\n');
+    runGit(repository, ['add', '.']);
+    runGit(repository, ['commit', '-m', 'rename']);
+    const base = { base: 'refs/heads/rename-base', head: 'next', previousPath: 'a[1].txt' };
+
+    for (const includeWorkingTree of [false, true]) {
+      const diff = await getRangeDiff(repository, { ...base, path: 'moved.txt', includeWorkingTree });
+      expect(diff).toContain('rename from a[1].txt');
+      expect(diff).toContain('rename to moved.txt');
+      expect(diff).not.toContain('a1.txt');
+    }
+
+    // Moved again without staging: the destination is untracked, so the
+    // comparison runs on a temporary index, next to an untracked look-alike.
+    fs.renameSync(path.join(repository, 'moved.txt'), path.join(repository, 'b[2].txt'));
+    fs.writeFileSync(path.join(repository, 'b2.txt'), 'look-alike\n');
+    const diff = await getRangeDiff(repository, { ...base, path: 'b[2].txt', includeWorkingTree: true });
+    expect(diff).toContain('rename from a[1].txt');
+    expect(diff).toContain('rename to b[2].txt');
+    expect(diff).not.toContain('a1.txt');
+    expect(diff).not.toContain('b2.txt');
   });
 
   it('carries the working-tree option through the actual HTTP route handlers', async () => {

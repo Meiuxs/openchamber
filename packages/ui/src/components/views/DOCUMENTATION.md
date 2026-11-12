@@ -530,6 +530,22 @@ UI `*.vitest.tsx` fixtures; the isolated Bun runner intentionally does not.
 
 ## Archive page
 
+Archive search keeps browsing separate from searching. An empty field preserves
+the archived-worktree groups and archive actions. A typed query uses the shared
+conversation search for title metadata and indexed message excerpts. Its project,
+worktree, lifecycle, title-only and author filters live outside the text as
+remembered chips, and the archived lifecycle default stays hidden.
+Opening a title selects the session, and an excerpt uses `openSessionLink` to
+focus its message. Neither path restores an archived session. While a query is
+present, the project list narrows the shared query and only shows counts when
+the server can report an exact total.
+
+### Why archive filters live outside the search text
+
+Filters are persistent choices and search text is temporary input. Keeping them
+separate lets the field stay readable while a remembered filter remains visible
+and removable.
+
 `ArchiveView` lists archived top-level sessions. A subsession whose parent is
 archived too is left out: it comes back when the parent is restored. A
 subsession archived while its parent stays active is listed, indented under a
@@ -583,9 +599,11 @@ away when it is shown. VS Code has neither tabs nor the setting and keeps the
 exited terminal.
 
 In the desktop app Cmd/Ctrl+W closes the shown terminal tab the same way,
-without asking, so a command still running in it ends. It reaches the terminal
-through `lib/closeTabTarget.ts` when the terminal's zone was the place clicked
-or focused last among the surfaces with a tab to close.
+without asking, so a command still running in it ends. The key goes through
+`lib/closeTabTarget.ts`: Settings or a full page covering the chat closes
+first, whatever was clicked last; otherwise the registered tab target whose
+zone was clicked or focused last closes, so the terminal gets the key when its
+zone was. With no target registered the window closes.
 
 ## A terminal that cannot connect
 

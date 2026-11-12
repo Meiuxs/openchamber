@@ -19,6 +19,7 @@ import type {
   PullRequestStack,
   ProjectUpstream,
   ReadyChangeRequestInput,
+  DraftChangeRequestInput,
   CommentInput,
   DiscussionCloseReason,
   DiscussionCommentInput,
@@ -45,6 +46,7 @@ import type {
   SourceControlMergeMutationResult,
   SourceControlMutationReceipt,
   SourceControlReadyMutationResult,
+  SourceControlDraftMutationResult,
   SourceControlReviewMutationResult,
   SourceControlStateMutationResult,
   SourceControlBindingRead,
@@ -211,6 +213,8 @@ interface GitStatusFile {
   path: string;
   index: string;
   working_dir: string;
+  /** Set on a rename: the path this file came from. */
+  previousPath?: string;
 }
 
 export interface GitMergeInProgress {
@@ -306,6 +310,8 @@ export interface GetGitDiffOptions {
   path: string;
   staged?: boolean;
   contextLines?: number;
+  /** A rename's source path. */
+  previousPath?: string;
 }
 
 export interface GetGitDiffsOptions {
@@ -334,6 +340,8 @@ export interface GetGitRangeDiffOptions {
   path?: string;
   contextLines?: number;
   includeWorkingTree?: boolean;
+  /** A rename's source path. */
+  previousPath?: string;
 }
 
 export interface GetGitRangeFilesOptions {
@@ -346,6 +354,8 @@ export interface GetGitRangeFilesOptions {
 export interface GitRangeFileEntry {
   path: string;
   status: string;
+  /** A rename's source path. */
+  previousPath?: string;
   /**
    * Working-tree listings only: changes exactly when this file's patch can
    * change (merge base moved, or the file was written). Absent elsewhere.
@@ -369,6 +379,8 @@ export interface GitFileDiffResponse {
 export interface GetGitFileDiffOptions {
   path: string;
   staged?: boolean;
+  /** A rename's source path. */
+  previousPath?: string;
 }
 
 export interface GitBranchDetails {
@@ -728,6 +740,8 @@ export type GitNetworkOperationErrorCode =
   | 'RUNTIME_UNSUPPORTED'
   | 'GIT_LFS_CLIENT_MISSING'
   | 'CHECKOUT_TOO_LARGE'
+  | 'PATH_LENGTH_LIMIT'
+  | 'BRANCH_NAME_CONFLICT'
   | 'UNKNOWN';
 
 export interface GitNetworkOperationError<Code extends GitNetworkOperationErrorCode = GitNetworkOperationErrorCode> {
@@ -1971,6 +1985,7 @@ export interface SourceControlAPI {
   changeRequestUpdate(payload: UpdateChangeRequestInput): Promise<SourceControlMutationReceipt<SourceControlEmptyMutationResult>>;
   changeRequestMerge(payload: MergeChangeRequestInput): Promise<SourceControlMutationReceipt<SourceControlMergeMutationResult>>;
   changeRequestReady(payload: ReadyChangeRequestInput): Promise<SourceControlMutationReceipt<SourceControlReadyMutationResult>>;
+  changeRequestDraft(payload: DraftChangeRequestInput): Promise<SourceControlMutationReceipt<SourceControlDraftMutationResult>>;
   changeRequestComment(payload: CommentInput): Promise<SourceControlMutationReceipt<SourceControlEmptyMutationResult>>;
   /** Opens a thread on a change request: a comment that waits to be resolved (GitLab). */
   changeRequestStartThread(payload: CommentInput): Promise<SourceControlMutationReceipt<SourceControlEmptyMutationResult>>;

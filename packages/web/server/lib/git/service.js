@@ -17,6 +17,7 @@ import { overlayEnvironment } from '../environment/variables.js';
 import { primaryWorktreeRootFromGitDir, unsupportedRepositoryRootReason } from './repository-root.js';
 import { isString } from '../shared/guards.js';
 import { randomUUID } from 'crypto';
+import { worktreeBootstrapFailureMessage } from './worktree-bootstrap-storage.js';
 
 const fsp = fs.promises;
 const require = createRequire(import.meta.url);
@@ -114,6 +115,45 @@ const clearWorktreeBootstrapState = async (directory, bootstrapStore) => {
   }
   if (bootstrapStore) await bootstrapStore.remove(key);
   worktreeBootstrapState.delete(key);
+};
+
+// Failures of creation attempts this process rolled back. Their durable record
+// is already gone, but the attempt's watcher and waiters still have to read the
+// failure, so reads never prune these; the next bootstrap of the path replaces
+// them, and a restart forgets them.
+const rolledBackAttemptFailures = new WeakSet();
+
+const isReclaimableFailure = (state) => state?.status === WORKTREE_BOOTSTRAP_FAILED
+  && !rolledBackAttemptFailures.has(state);
+
+const forgetMissingWorktreeFailure = async (key, bootstrapStore) => {
+  const current = worktreeBootstrapState.get(key);
+  if (rolledBackAttemptFailures.has(current)) return false;
+  if (bootstrapStore) {
+    if (!await bootstrapStore.remove(key, { ifMissingFailed: true })) return false;
+  } else {
+    if (current?.status !== WORKTREE_BOOTSTRAP_FAILED) return false;
+    try {
+      await fsp.lstat(key);
+      return false;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+  // A new bootstrap may have published state while removal waited for the store.
+  if (worktreeBootstrapState.get(key) === current) worktreeBootstrapState.delete(key);
+  return true;
+};
+
+// Fast creation removed the directory of the attempt that just failed. Its
+// durable record goes, so the store's capacity and its checkout gate are not
+// held by a path that no longer exists, while the failure stays in memory for
+// the attempt's watcher and waiters.
+const releaseRolledBackAttemptFailure = async (key, bootstrapStore) => {
+  const current = worktreeBootstrapState.get(key);
+  if (current?.status !== WORKTREE_BOOTSTRAP_FAILED) return;
+  rolledBackAttemptFailures.add(current);
+  if (bootstrapStore) await bootstrapStore.remove(key, { ifMissingFailed: true });
 };
 
 const trackWorktreeBootstrapTask = (directory, task) => {
@@ -2256,7 +2296,7 @@ const isAttachedGitWorktreeDirectory = async (directory) => {
   }
 };
 
-const cleanupFailedFastWorktreeCreate = async (context, candidate) => {
+const cleanupFailedFastWorktreeCreate = async (context, candidate, bootstrapStore) => {
   const candidateDirectory = path.resolve(candidate.directory);
   const worktreeRoot = path.resolve(context.worktreeRoot);
   const isInsideWorktreeRoot = isInsideOrSameDirectory(worktreeRoot, candidateDirectory) && candidateDirectory !== worktreeRoot;
@@ -2266,16 +2306,26 @@ const cleanupFailedFastWorktreeCreate = async (context, candidate) => {
     return;
   }
 
+  // The failure was recorded under the canonical path while the directory existed.
+  const key = await toCanonicalBootstrapStateKey(candidateDirectory);
+  let directoryGone = false;
   try {
     const entries = await fsp.readdir(candidateDirectory);
     if (entries.length === 0) {
       await fsp.rmdir(candidateDirectory);
+      directoryGone = true;
     }
   } catch (error) {
-    if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error?.code)) {
+    if (error?.code === 'ENOENT') {
+      directoryGone = true;
+    } else if (!['ENOTEMPTY', 'EEXIST'].includes(error?.code)) {
       console.warn('Failed to clean up empty worktree directory after creation failure:', error instanceof Error ? error.message : String(error));
     }
   }
+  if (!directoryGone) return;
+  await releaseRolledBackAttemptFailure(key, bootstrapStore).catch((error) => {
+    console.warn('Failed to release the bootstrap record of a rolled-back worktree:', error instanceof Error ? error.message : String(error));
+  });
 };
 
 // `projectDirectory` is the directory the worktree was requested from: the user
@@ -2379,11 +2429,13 @@ const queueWorktreeBootstrap = (args) => {
       const recordedPhase = worktreeBootstrapState.get(await toCanonicalBootstrapStateKey(directory))?.phase;
       const pathLengthFailure = !error?.hydration
         && isFilenameTooLongError(error instanceof Error ? error.message : error);
+      const failureCode = bootstrapFailureCode(error, pathLengthFailure);
       const publicMessage = error?.hydration
         ? error instanceof Error ? error.message : 'Worktree checkout hydration did not complete'
         : pathLengthFailure
           ? formatWorktreePopulateError(error instanceof Error ? error.message : error)
-          : 'Worktree bootstrap failed. Inspect the checkout and repair it before use.';
+          : worktreeBootstrapFailureMessage(failureCode)
+            ?? 'Worktree bootstrap failed. Inspect the checkout and repair it before use.';
       await setWorktreeBootstrapState(
         directory,
         WORKTREE_BOOTSTRAP_FAILED,
@@ -2392,7 +2444,7 @@ const queueWorktreeBootstrap = (args) => {
           : WORKTREE_BOOTSTRAP_PHASE_DIRECTORY_CREATED,
         publicMessage,
         error?.hydration,
-        bootstrapFailureCode(error, pathLengthFailure),
+        failureCode,
         bootstrapStore,
       ).catch(() => {});
       console.warn('Worktree bootstrap task failed:', error instanceof Error ? error.message : String(error));
@@ -3439,6 +3491,7 @@ async function readStatus(normalizedDirectory, lightMode) {
         path: f.path,
         index: f.index,
         working_dir: f.working_dir,
+        previousPath: f.from || undefined,
       })),
       isClean: status.isClean(),
       diffStats: lightMode ? undefined : diffStats,
@@ -3471,12 +3524,12 @@ const getNoIndexDiff = async (repoRoot, repoPath, contextLines) => {
   throw new Error(result.stderr || result.message || 'Failed to get untracked Git diff');
 };
 
-export async function getDiff(directory, { path: filePath, staged = false, contextLines = 3 } = {}) {
+export async function getDiff(directory, { path: filePath, staged = false, contextLines = 3, previousPath } = {}) {
   const context = await createRepositoryGitContext(directory);
   const fileContext = filePath
     ? await resolveGitFileContext(context.directoryPath, context.directoryGit, filePath, context.repoRoot)
     : null;
-  return readDiff(context, fileContext, { staged, contextLines });
+  return readDiff(context, fileContext, { staged, contextLines, previousPath });
 }
 
 /**
@@ -3484,10 +3537,10 @@ export async function getDiff(directory, { path: filePath, staged = false, conte
  * empty when only untracked files changed inside it, so callers need the state
  * to show anything truthful.
  */
-export async function getPathDiff(directory, { path: filePath, staged = false, contextLines = 3 } = {}) {
+export async function getPathDiff(directory, { path: filePath, staged = false, contextLines = 3, previousPath } = {}) {
   const context = await createRepositoryGitContext(directory);
   const fileContext = await resolveGitFileContext(context.directoryPath, context.directoryGit, filePath, context.repoRoot);
-  const diff = await readDiff(context, fileContext, { staged, contextLines });
+  const diff = await readDiff(context, fileContext, { staged, contextLines, previousPath });
   if (!fileContext.isSubmodule) return { diff, submodule: null };
   return { diff, submodule: await readSubmoduleState(context.repoRoot, fileContext) };
 }
@@ -3529,7 +3582,7 @@ export async function getPathDiffs(directory, { paths: filePaths = [], staged = 
   return results;
 }
 
-async function readDiff({ repoRoot, git }, fileContext, { staged, contextLines }) {
+async function readDiff({ repoRoot, git }, fileContext, { staged, contextLines, previousPath }) {
   try {
     const args = ['diff', '--no-color', '--full-index', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/'];
 
@@ -3542,7 +3595,8 @@ async function readDiff({ repoRoot, git }, fileContext, { staged, contextLines }
     }
 
     if (fileContext) {
-      args.push('--', fileContext.repoPath);
+      // A rename needs both paths named; the destination alone reads as a new file.
+      args.push('--', ...[previousPath, fileContext.repoPath].filter(Boolean).map((value) => `:(literal)${value}`));
     }
 
     const diff = await git.raw(args);
@@ -3702,7 +3756,7 @@ async function runWorkingTreeRangeDiff(context, baseRef, headRef, args, paths = 
     }
     return { output, mergeBase };
   };
-  const untracked = await git.raw(['ls-files', '--others', '--exclude-standard', '-z', '--', ...paths]);
+  const untracked = await git.raw(['--literal-pathspecs', 'ls-files', '--others', '--exclude-standard', '-z', '--', ...paths]);
   if (!untracked) return readDiff(git);
 
   const temporaryDirectory = await fsp.mkdtemp(path.join(os.tmpdir(), 'openchamber-branch-diff-'));
@@ -3723,7 +3777,7 @@ async function runWorkingTreeRangeDiff(context, baseRef, headRef, args, paths = 
   }
 }
 
-export async function getRangeDiff(directory, { base, head, path: filePath, contextLines = 3, includeWorkingTree = false } = {}) {
+export async function getRangeDiff(directory, { base, head, path: filePath, previousPath, contextLines = 3, includeWorkingTree = false } = {}) {
   const { directoryPath, directoryGit, repoRoot, git } = await createRepositoryGitContext(directory);
   const baseRef = typeof base === 'string' ? base.trim() : '';
   const headRef = typeof head === 'string' ? head.trim() : '';
@@ -3733,7 +3787,8 @@ export async function getRangeDiff(directory, { base, head, path: filePath, cont
 
   await assertRangeRefsResolve(git, repoRoot, [baseRef, headRef]);
 
-  const args = ['diff', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/'];
+  // Paths are file names, never pathspec patterns: `a[1].txt` must not match `a1.txt`.
+  const args = ['--literal-pathspecs', 'diff', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/'];
   if (typeof contextLines === 'number' && !Number.isNaN(contextLines)) {
     args.push(`-U${Math.max(0, contextLines)}`);
   }
@@ -3741,7 +3796,8 @@ export async function getRangeDiff(directory, { base, head, path: filePath, cont
   if (filePath) {
     try {
       const fileContext = await resolveGitFileContext(directoryPath, directoryGit, filePath, repoRoot);
-      paths.push(fileContext.repoPath);
+      // Both sides of a rename; the destination alone reads as a new file.
+      paths.push(...[previousPath, fileContext.repoPath].filter(Boolean));
     } catch (error) {
       if (error.code !== GIT_PATH_NOT_FOUND) throw error;
       // A committed deletion is absent from HEAD, the index, and the working
@@ -3976,10 +4032,11 @@ export async function getRangeFiles(directory, { base, head, includeWorkingTree 
     const status = (tokens[index] || '').trim();
     if (!status) continue;
     const isRenameOrCopy = status.startsWith('R') || status.startsWith('C');
+    const previousPath = isRenameOrCopy ? tokens[index + 1] || undefined : undefined;
     const path = isRenameOrCopy ? (tokens[index + 2] || '') : (tokens[index + 1] || '');
     index += isRenameOrCopy ? 2 : 1;
     if (path) {
-      files.push({ path, status: status.charAt(0) });
+      files.push({ path, status: status.charAt(0), previousPath });
     }
   }
   if (!workingTree) return files;
@@ -4099,7 +4156,7 @@ const isBinaryDiff = async (directoryPath, filePath, staged) => {
   return false;
 };
 
-export async function getFileDiff(directory, { path: filePath, staged = false } = {}) {
+export async function getFileDiff(directory, { path: filePath, staged = false, previousPath } = {}) {
   if (!directory || !filePath) {
     throw new Error('directory and path are required for getFileDiff');
   }
@@ -4109,6 +4166,7 @@ export async function getFileDiff(directory, { path: filePath, staged = false } 
   const mimeType = isImage ? getImageMimeType(filePath) : null;
   const fileContext = await resolveGitFileContext(directoryPath, directoryGit, filePath, repoRoot);
   const { absolutePath, repoPath, isSymbolicLink } = fileContext;
+  const originalRepoPath = previousPath || repoPath;
 
   if (fileContext.isSubmodule) {
     // Git's own text form of a gitlink, so a plain two-pane view still shows
@@ -4137,14 +4195,19 @@ export async function getFileDiff(directory, { path: filePath, staged = false } 
     }
   }
 
+  // Staged compares HEAD with the index; unstaged compares the index with the
+  // working tree, so what is already staged stays out. A rename's index entry
+  // can sit at either side of the pair, and a path with no merged index entry
+  // (a conflict) falls back to HEAD.
+  const originalRevisions = staged
+    ? [`HEAD:${originalRepoPath}`]
+    : [...new Set([`:${repoPath}`, `:${originalRepoPath}`, `HEAD:${originalRepoPath}`])];
   let original = '';
-  try {
-    if (isImage) {
-      // For images, use git show with raw output and convert to base64
-      try {
-        // Unstaged changes start from the index, so what is staged stays out.
-        const originalRevision = staged ? `HEAD:${repoPath}` : `:${repoPath}`;
-        const { stdout } = await execFileAsync(getGitBinary(), ['show', originalRevision], {
+  for (const revision of originalRevisions) {
+    try {
+      if (isImage) {
+        // For images, use git show with raw output and convert to base64
+        const { stdout } = await execFileAsync(getGitBinary(), ['show', revision], {
           cwd: repoRoot,
           encoding: 'buffer',
           windowsHide: true,
@@ -4152,15 +4215,15 @@ export async function getFileDiff(directory, { path: filePath, staged = false } 
         });
         if (stdout && stdout.length > 0) {
           original = `data:${mimeType};base64,${stdout.toString('base64')}`;
+          break;
         }
-      } catch {
-        original = '';
+      } else {
+        original = await git.show([revision]);
+        break;
       }
-    } else {
-      original = await git.show([`HEAD:${repoPath}`]);
+    } catch {
+      // Not at this path; try the other side of the rename.
     }
-  } catch {
-    original = '';
   }
 
   let modified = '';
@@ -5909,6 +5972,23 @@ const prepareChangeRequestLocalBranch = async (primaryWorktree, input = {}) => {
   return { branch, tip, backupBranch };
 };
 
+// Whether a new branch cannot be created because of the refs that exist: the
+// same name, a branch its name sits inside (`a/b` blocks `a/b/c`), or a branch
+// inside its name (`a/b/c` blocks `a/b`). Read from refs, not from Git's
+// message, which is translated with the user's locale.
+const branchNameClashesWithExistingRef = async (primaryWorktree, branchName) => {
+  const segments = String(branchName || '').split('/').filter(Boolean);
+  if (segments.length === 0) return false;
+  const candidates = segments.map((_, index) => `refs/heads/${segments.slice(0, index + 1).join('/')}`);
+  const target = candidates[candidates.length - 1];
+  // A pattern matches its ref and every ref below it, so siblings are filtered out here.
+  const result = await runGitCommand(primaryWorktree, ['for-each-ref', '--format=%(refname)', ...candidates]);
+  if (!result.success) return false;
+  return String(result.stdout || '').split(/\r?\n/).map((line) => line.trim()).some((ref) => (
+    candidates.includes(ref) || ref.startsWith(`${target}/`)
+  ));
+};
+
 async function attachGitWorktreeToCandidateWithoutRemoteRollback(context, candidate, input = {}, serverOptions = {}) {
   const mode = input?.mode === 'existing' ? 'existing' : 'new';
   const startRef = normalizeStartRef(input?.startRef);
@@ -6015,7 +6095,18 @@ async function attachGitWorktreeToCandidateWithoutRemoteRollback(context, candid
     checkoutRemoteName = await resolveCheckoutRemoteName(context.primaryWorktree, mode === 'existing' ? localBranch : startRef);
   }
 
-  await runGitCommandOrThrow(context.primaryWorktree, worktreeAddArgs, 'Failed to create git worktree');
+  // Read before the attempt: a failed `worktree add -b` can leave behind the
+  // branch it just created, which is no conflict.
+  const branchNameConflict = (mode === 'new' || createdLocalBranch)
+    && await branchNameClashesWithExistingRef(context.primaryWorktree, localBranch);
+  try {
+    await runGitCommandOrThrow(context.primaryWorktree, worktreeAddArgs, 'Failed to create git worktree');
+  } catch (error) {
+    if (branchNameConflict) {
+      throw Object.assign(error, { code: 'BRANCH_NAME_CONFLICT' });
+    }
+    throw error;
+  }
   await publishWorktreeTopologyChange(context.primaryWorktree);
   // A new branch's parent is the branch it starts from, a lower layer of a
   // stack included; its pull request and comparisons default to it.
@@ -6353,16 +6444,21 @@ export async function createWorktree(directory, input = {}, serverOptions = {}) 
 
     const task = bootstrapStatus.status === WORKTREE_BOOTSTRAP_PENDING
       ? attachGitWorktreeToCandidate(context, candidate, preparedInput, attachOptions).catch(async (error) => {
+      const failureCode = bootstrapFailureCode(
+        error,
+        isFilenameTooLongError(error instanceof Error ? error.message : error),
+      );
       await setWorktreeBootstrapState(
         candidate.directory,
         WORKTREE_BOOTSTRAP_FAILED,
         WORKTREE_BOOTSTRAP_PHASE_DIRECTORY_CREATED,
-        'Worktree creation failed. Inspect the checkout and repair it before use.',
+        worktreeBootstrapFailureMessage(failureCode)
+          ?? 'Worktree creation failed. Inspect the checkout and repair it before use.',
         undefined,
-        'UNKNOWN',
+        failureCode,
         serverOptions.bootstrapStore,
       ).catch(() => {});
-      await cleanupFailedFastWorktreeCreate(context, candidate);
+      await cleanupFailedFastWorktreeCreate(context, candidate, serverOptions.bootstrapStore);
       console.warn('Background worktree creation failed:', error instanceof Error ? error.message : String(error));
       })
       : null;
@@ -6392,11 +6488,13 @@ export async function createWorktree(directory, input = {}, serverOptions = {}) 
 
 // The code a failed bootstrap is recorded with, which decides what the user is
 // told. A known cause is never recorded as unknown: a repository grant whose
-// account needs attention reads as the access problem it is.
+// account needs attention reads as the access problem it is, and a branch Git
+// refused to create reads as the name conflict it is.
 const bootstrapFailureCode = (error, pathLengthFailure) => {
   if (error?.hydration) return error.code;
   if (pathLengthFailure) return 'PATH_LENGTH_LIMIT';
   if (error?.reason === 'needs-attention' || error?.code === 'AUTHENTICATION_REQUIRED') return 'AUTHENTICATION_REQUIRED';
+  if (error?.code === 'BRANCH_NAME_CONFLICT') return 'BRANCH_NAME_CONFLICT';
   return 'UNKNOWN';
 };
 
@@ -6438,8 +6536,18 @@ const notBootstrappedHere = () => createWorktreeBootstrapState(
 // A persisted record becomes this process's state. One left `pending` with no
 // live bootstrap behind it is a crash mid-population and is inspected.
 const adoptPersistedBootstrapState = async (key, persisted, bootstrapStore) => {
+  const current = worktreeBootstrapState.get(key);
+  // The record a rollback could not release still describes the attempt
+  // reported from memory; pruning it must not erase that report.
+  if (persisted.status === WORKTREE_BOOTSTRAP_FAILED && rolledBackAttemptFailures.has(current)) {
+    return current;
+  }
   if (persisted.status !== WORKTREE_BOOTSTRAP_PENDING || await hasActiveWorktreeBootstrap(key)) {
     worktreeBootstrapState.set(key, persisted);
+    if (persisted.status === WORKTREE_BOOTSTRAP_FAILED && !await hasActiveWorktreeBootstrap(key)
+      && await forgetMissingWorktreeFailure(key, bootstrapStore)) {
+      return worktreeBootstrapState.get(key) ?? notBootstrappedHere();
+    }
     return persisted;
   }
   const blocker = await inspectWorktreeBootstrapRecovery(key);
@@ -6458,14 +6566,24 @@ export async function getWorktreeBootstrapStatus(directory, { bootstrapStore } =
     try {
       const persisted = await bootstrapStore.read(key);
       if (!persisted) {
+        if (isReclaimableFailure(worktreeBootstrapState.get(key)) && !await hasActiveWorktreeBootstrap(key)) {
+          await forgetMissingWorktreeFailure(key, bootstrapStore);
+        }
         return worktreeBootstrapState.get(key) ?? notBootstrappedHere();
       }
       return await adoptPersistedBootstrapState(key, persisted, bootstrapStore);
     } catch {
+      // The rolled-back attempt's own failure beats a guess from its missing
+      // directory, which a later read would prune as a stale record.
+      const current = worktreeBootstrapState.get(key);
+      if (rolledBackAttemptFailures.has(current)) return current;
       const blocker = await inspectWorktreeBootstrapRecovery(key);
       worktreeBootstrapState.set(key, blocker);
       return blocker;
     }
+  }
+  if (isReclaimableFailure(worktreeBootstrapState.get(key)) && !await hasActiveWorktreeBootstrap(key)) {
+    await forgetMissingWorktreeFailure(key);
   }
   return worktreeBootstrapState.get(key) ?? notBootstrappedHere();
 }

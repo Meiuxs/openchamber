@@ -370,8 +370,11 @@ other.
   `session.messages`) resolve `projectId` through the session service's
   `resolveDirectory`, the lookup create/send/fork use: an unknown project is a
   404 and a missing project folder a 400, never a read of the current or every
-  directory. Every `session.*` action refuses `projectId` and `directory`
-  together with a 400, so neither silently wins.
+  directory. An action that names a session ID resolves its directory by
+  reading that session by ID (unscoped) first: a moved session can leave a
+  stale copy under the directory the call came from, which the global list can
+  return first. The list is the fallback. Every `session.*` action refuses
+  `projectId` and `directory` together with a 400, so neither silently wins.
 - One failed directory status lookup produces `unknown` for only that
   directory and does not erase other session results.
 - `session.list` returns top-level sessions newest first (OpenCode's
@@ -447,10 +450,15 @@ other.
   `by: 'user'` makes the carried title user-owned. Explicit creation titles and
   UI renames still record that marker; no metadata migration runs.
 - `pr.watch` and `pr.unwatch` let the calling session wait on its pull
-  request without polling: `pr.watch` takes the address in the control tool's
+  requests without polling: `pr.watch` takes the address in the control tool's
   own `url` input and hands it to `prWatch` (`../pr-watch/DOCUMENTATION.md`),
-  which reads it, follows it and wakes the session once when it changes. Both
-  act only on the calling session, never one the input names.
+  which reads it, follows it and wakes the session once when it changes.
+  `pr.unwatch` stops the one at `url`, or every one without it. Both act only
+  on the calling session, never one the input names.
+- `wait.list`, `wait.start` and `wait.stop` are the same kind of wait for what
+  an extension's service follows (`../extension-waits/DOCUMENTATION.md`):
+  `wait.start` takes `source` (`<extension>/<wait>`) and `args`, `wait.stop`
+  an optional `waitId`, all three only for the calling session.
 - `session.link` records a code change under review or an issue on a session
   (`../openchamber-sessions/session-link.js`), defaulting to the calling
   session. When to link is not in the action's description but at the head of
@@ -526,8 +534,8 @@ dropping slots or ignoring the requested time.
 
 ### Why a background message waits behind a page and does not end it
 
-A dispatched session's result, a pull request wake, a workflow report or a
-restart resume can arrive while a page or a secret card waits. OpenCode keeps it
+A dispatched session's result, a pull request or extension wait's wake, a
+workflow report or a restart resume can arrive while a page or a secret card waits. OpenCode keeps it
 in the session's inbox until the waiting call returns, and the agent reads it at
 the next step, right after the user's answer. The alternative, ending the wait
 so the agent reads the message at once and asks again, loses the question the

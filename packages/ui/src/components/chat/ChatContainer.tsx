@@ -1222,10 +1222,12 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     // A pinned column leaves the panel, and the app-wide flags below, to the
     // main chat.
     const workStatusPanelMountable = !isMobile
-        && !isVSCode
         && !pinned
         && chatSurfaceMode !== 'mini-chat';
-    const showWorkStatusPanel = workStatusPanelMountable && workStatusVisible;
+    // VS Code has no right slot for the inline card; its header opens the
+    // overlay instead, so only the inline form is excluded there.
+    const workStatusInlineMountable = workStatusPanelMountable && !isVSCode;
+    const showWorkStatusPanel = workStatusInlineMountable && workStatusVisible;
     // The inline card renders in the right slot beside the chat, which owns
     // the one width animation for the card and the context panel together
     // (components/layout/rightSlot.ts).
@@ -1238,18 +1240,21 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     const setWorkStatusPanelFits = useUIStore((state) => state.setWorkStatusPanelFits);
     // Mounted whenever it could be shown, not only while it is: an element
     // that appears and disappears with the condition has nothing to animate.
+    // VS Code has no header switch for the persisted preference, so its
+    // overlay is transient and ignores it. Elsewhere the panel's own switch
+    // gates the overlay, as it always has.
     const workStatusOverlayMountable = workStatusPanelMountable
-        && workStatusPanelEnabled
+        && (isVSCode || workStatusPanelEnabled)
         && !workStatusFits;
     // The slot keeps the card's column while the context panel covers it.
-    const workStatusReserved = workStatusPanelMountable && workStatusPanelEnabled && workStatusRoomy;
+    const workStatusReserved = workStatusInlineMountable && workStatusPanelEnabled && workStatusRoomy;
     const showWorkStatusOverlay = workStatusOverlayMountable && workStatusOverlayOpen;
 
     React.useEffect(() => {
         if (pinned) return;
-        setWorkStatusPanelFits(workStatusPanelMountable && workStatusFits);
+        setWorkStatusPanelFits(workStatusInlineMountable && workStatusFits);
         return () => setWorkStatusPanelFits(false);
-    }, [pinned, setWorkStatusPanelFits, workStatusFits, workStatusPanelMountable]);
+    }, [pinned, setWorkStatusPanelFits, workStatusFits, workStatusInlineMountable]);
 
     // Published so the header can drop the readouts the panel already carries.
     // Cleared on unmount: a chat that goes away is not showing anything.
@@ -1432,6 +1437,16 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     const chatRootRef = React.useRef<HTMLDivElement>(null);
     const lastPressedInsideRef = React.useRef(false);
     const [chatSearch, setChatSearch] = React.useState({ open: false, focusRequest: 0 });
+    const [chatSearchSessionId, setChatSearchSessionId] = React.useState(currentSessionId);
+    // The search belongs to the conversation it was opened in. Close it
+    // synchronously on session switch: a passive effect would leave one
+    // commit rendering the old hits under the new session id, and the bar
+    // would re-issue message focus for the new session with the old hit's
+    // id, ending in a "linked message not found" toast.
+    if (chatSearchSessionId !== currentSessionId) {
+        setChatSearchSessionId(currentSessionId);
+        if (chatSearch.open) setChatSearch((current) => ({ ...current, open: false }));
+    }
     const shortcutOverrides = useUIStore((state) => state.shortcutOverrides);
     const messageSearchEnabled = useUIStore((state) => state.messageSearchEnabled);
     React.useEffect(() => {
@@ -1457,10 +1472,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             document.removeEventListener('keydown', onKeyDown);
         };
     }, [active, currentSessionId, messageSearchEnabled, shortcutOverrides]);
-    // The search belongs to the conversation it was opened in.
-    React.useEffect(() => {
-        setChatSearch((current) => (current.open ? { ...current, open: false } : current));
-    }, [currentSessionId]);
     const closeChatSearch = React.useCallback(() => {
         setChatSearch((current) => ({ ...current, open: false }));
     }, []);
@@ -2019,6 +2030,11 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
 			{chatSearch.open && currentSessionId && messageSearchEnabled ? (
 				<div className="pointer-events-none absolute inset-e-3 top-2 z-20">
 					<ChatSearchBar
+						// Keyed by session so the old hits never meet a new
+						// session id in one commit: the same instance would
+						// re-issue message focus for the new session with the
+						// old hit's id, ending in a "not found" toast.
+						key={currentSessionId}
 						sessionId={currentSessionId}
 						scrollNode={scrollNode}
 						focusRequest={chatSearch.focusRequest}
@@ -2152,7 +2168,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             in; `visible` drives that, `reserved` keeps its column in the right
             slot while the context panel covers it, and `besidePanel` keeps it
             beside the open panel. */}
-        {workStatusPanelMountable && workStatusHost ? createPortal(
+        {workStatusInlineMountable && workStatusHost ? createPortal(
             <WorkStatusPanel
                 visible={showWorkStatusPanel}
                 reserved={workStatusReserved}

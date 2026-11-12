@@ -62,6 +62,7 @@ import type { ToolPopupContent } from './message/types';
 import { QueuedMessagesStrip } from './QueuedMessagesStrip';
 import { AutoReviewStrip } from './AutoReviewStrip';
 import { PullRequestWatchStrip } from './PullRequestWatchStrip';
+import { ExtensionWaitStrip } from './ExtensionWaitStrip';
 import type { FileMentionHandle } from './FileMentionAutocomplete';
 import { resolveGuestMention, type GuestMention } from '@/lib/guests/mentions';
 import type { CommandAutocompleteHandle, CommandInfo } from './CommandAutocomplete';
@@ -4861,8 +4862,12 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         ? <ComposerStatusStrip icon="time" text={t('spaces.draft.queued')} />
         : null;
     const autoReviewRow = !isBtwActive && !newSessionDraftOpen ? <AutoReviewStrip /> : null;
-    // The agent waits on its pull request; the server wakes it.
-    const prWatchRow = !isBtwActive && !newSessionDraftOpen ? <PullRequestWatchStrip sessionId={currentSessionId} /> : null;
+    // The agent waits on its pull requests; the server wakes it. Keyed by
+    // session, as the commands below, so an expanded list collapses on a
+    // switch; the prefix keeps the two keys of this fragment apart.
+    const prWatchRow = !isBtwActive && !newSessionDraftOpen ? <PullRequestWatchStrip key={`pr-watch:${currentSessionId ?? ''}`} sessionId={currentSessionId} /> : null;
+    // The agent waits on something an extension follows; the server wakes it.
+    const extensionWaitRow = !isBtwActive && !newSessionDraftOpen ? <ExtensionWaitStrip sessionId={currentSessionId} /> : null;
     // The session's goal, then what is still running, then what waits for it.
     const goalRow = !isBtwActive ? (
         <SessionGoalRow
@@ -4894,7 +4899,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     const trustPausedRow = trustPausedDirectory && !folderMissingRow && !isBtwActive
         ? <SessionTrustPausedRow directory={trustPausedDirectory} />
         : null;
-    const composerTopRows = folderMissingRow || trustPausedRow || worktreeSetupRow || creatingSessionRow || spaceWaitRow || goalRow || autoReviewRow || prWatchRow || backgroundShellsRow || revertRow || queueRow || doneHintRow || reviewHintRow || suggestionRow ? (
+    const composerTopRows = folderMissingRow || trustPausedRow || worktreeSetupRow || creatingSessionRow || spaceWaitRow || goalRow || autoReviewRow || prWatchRow || extensionWaitRow || backgroundShellsRow || revertRow || queueRow || doneHintRow || reviewHintRow || suggestionRow ? (
         <>
             {folderMissingRow}
             {trustPausedRow}
@@ -4904,6 +4909,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
             {goalRow}
             {autoReviewRow}
             {prWatchRow}
+            {extensionWaitRow}
             {backgroundShellsRow}
             {revertRow}
             {queueRow}

@@ -17,7 +17,7 @@ import { readProjectStartCommand } from '../../web/server/lib/opencode/project-s
 import { resolveWorktreeDirectory } from './worktree-directory';
 import { readSubmoduleState, resolveGitPathTarget, type GitPathUnavailable, type GitSubmoduleState } from './gitPathDiff';
 import { parseGitRemoteListing, type GitRemote } from './gitRemoteListing';
-import type { API as GitAPI, Repository, GitExtension, Status } from './git.d';
+import type { API as GitAPI, Change, Repository, GitExtension, Status } from './git.d';
 
 let gitApi: GitAPI | null = null;
 let gitExtensionEnabled = false;
@@ -26,8 +26,14 @@ type WorktreeBootstrapStatus = {
   status: 'pending' | 'ready' | 'failed';
   phase: 'directory-created' | 'git-ready' | 'setup-ready';
   error: string | null;
+  // Set only for a known cause, whose fixed sentence is in `error`.
+  errorCode?: 'BRANCH_NAME_CONFLICT';
   updatedAt: number;
 };
+
+// The server's fixed sentence for this code (`worktree-bootstrap-storage.js`);
+// Git's own message is translated and can carry paths, so it is not shown.
+const BRANCH_NAME_CONFLICT_MESSAGE = 'Git could not create the worktree branch: its name clashes with an existing branch (the same name, or one nested inside the other). Rename the branch and create the worktree again.';
 
 const worktreeBootstrapState = new Map<string, WorktreeBootstrapStatus>();
 const activeWorktreeBootstrapTasks = new Map<string, Promise<unknown>>();
@@ -73,12 +79,16 @@ const setWorktreeBootstrapState = (
 
 const setWorktreeBootstrapFailure = (directory: string, error: unknown): void => {
   const current = worktreeBootstrapState.get(toBootstrapStateKey(directory));
-  setWorktreeBootstrapState(
+  const branchNameConflict = error instanceof Error && 'code' in error && error.code === 'BRANCH_NAME_CONFLICT';
+  const failed = setWorktreeBootstrapState(
     directory,
     WORKTREE_BOOTSTRAP_FAILED,
     current?.phase ?? WORKTREE_PHASE_DIRECTORY_CREATED,
-    error instanceof Error ? error.message : String(error),
+    branchNameConflict
+      ? BRANCH_NAME_CONFLICT_MESSAGE
+      : error instanceof Error ? error.message : String(error),
   );
+  if (failed && branchNameConflict) failed.errorCode = 'BRANCH_NAME_CONFLICT';
 };
 
 const clearWorktreeBootstrapState = (directory: string): void => {
@@ -369,6 +379,8 @@ interface GitStatusFile {
   path: string;
   index: string;
   working_dir: string;
+  /** Set on a rename or copy: the path this file came from. */
+  previousPath?: string;
 }
 
 interface GitMergeInProgress {
@@ -457,6 +469,11 @@ export async function getGitStatus(directory: string, options?: GitStatusOptions
   const head = state.HEAD;
   
   const files: GitStatusFile[] = [];
+  // A rename's change sits at its destination and keeps the source as `originalUri`.
+  const previousPathOf = (change: Change, relativePath: string) => {
+    const previousPath = getRepositoryRelativePath(repo, change.originalUri);
+    return previousPath !== relativePath ? previousPath : undefined;
+  };
   
   // Process index changes (staged)
   for (const change of state.indexChanges) {
@@ -465,6 +482,7 @@ export async function getGitStatus(directory: string, options?: GitStatusOptions
       path: relativePath,
       index: mapStatus(change.status),
       working_dir: ' ',
+      previousPath: previousPathOf(change, relativePath),
     });
   }
   
@@ -474,11 +492,13 @@ export async function getGitStatus(directory: string, options?: GitStatusOptions
     const existing = files.find(f => f.path === relativePath);
     if (existing) {
       existing.working_dir = mapStatus(change.status);
+      existing.previousPath ??= previousPathOf(change, relativePath);
     } else {
       files.push({
         path: relativePath,
         index: ' ',
         working_dir: mapStatus(change.status),
+        previousPath: previousPathOf(change, relativePath),
       });
     }
   }
@@ -569,7 +589,8 @@ async function getGitStatusRaw(directory: string): Promise<GitStatusResult> {
   // shared UI explains such an entry; this runtime has not adopted that bound.
   // `--no-optional-locks`: a status that refreshes the index holds
   // `.git/index.lock`, and a terminal `git commit` then fails (#2229).
-  const statusResult = await execGit(['--no-optional-locks', 'status', '--porcelain=v1', '-b', '-uall'], directory);
+  // `-z`: paths arrive unquoted, and a rename or copy entry is followed by its source path.
+  const statusResult = await execGit(['--no-optional-locks', 'status', '--porcelain=v1', '-z', '-b', '-uall'], directory);
   
   if (statusResult.exitCode !== 0) {
     return {
@@ -582,14 +603,16 @@ async function getGitStatusRaw(directory: string): Promise<GitStatusResult> {
     };
   }
 
-  const lines = statusResult.stdout.trim().split('\n').filter(Boolean);
+  const entries = statusResult.stdout.split('\0');
   const files: GitStatusFile[] = [];
   let current = '';
   let tracking: string | null = null;
   let ahead = 0;
   let behind = 0;
 
-  for (const line of lines) {
+  for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+    const line = entries[entryIndex];
+    if (!line) continue;
     if (line.startsWith('##')) {
       // Parse branch info
       const branchMatch = line.match(/^## (.+?)(?:\.\.\.(.+?))?(?:\s+\[(.+)\])?$/);
@@ -606,11 +629,14 @@ async function getGitStatusRaw(directory: string): Promise<GitStatusResult> {
       // Parse file status
       const index = line[0] || ' ';
       const workingDir = line[1] || ' ';
-      const filePath = line.slice(3).trim();
+      const filePath = line.slice(3);
+      const isRenameOrCopy = 'RC'.includes(index) || 'RC'.includes(workingDir);
+      const previousPath = isRenameOrCopy ? entries[++entryIndex] || undefined : undefined;
       files.push({
         path: filePath,
         index,
         working_dir: workingDir,
+        previousPath,
       });
     }
   }
@@ -1930,6 +1956,22 @@ export async function previewWorktreeCreate(directory: string, input: CreateGitW
   };
 }
 
+// Whether a new branch cannot be created because of the refs that exist: the
+// same name, a branch its name sits inside (`a/b` blocks `a/b/c`), or a branch
+// inside its name. Read from refs, not from Git's translated message.
+const branchNameClashesWithExistingRef = async (primaryWorktree: string, branchName: string): Promise<boolean> => {
+  const segments = String(branchName || '').split('/').filter(Boolean);
+  if (segments.length === 0) return false;
+  const candidates = segments.map((_, index) => `refs/heads/${segments.slice(0, index + 1).join('/')}`);
+  const target = candidates[candidates.length - 1];
+  // A pattern matches its ref and every ref below it, so siblings are filtered out here.
+  const result = await runGitCommand(primaryWorktree, ['for-each-ref', '--format=%(refname)', ...candidates]);
+  if (!result.success) return false;
+  return String(result.stdout || '').split(/\r?\n/).map((line) => line.trim()).some((ref) => (
+    candidates.includes(ref) || ref.startsWith(`${target}/`)
+  ));
+};
+
 async function attachGitWorktreeToCandidate(
   context: Awaited<ReturnType<typeof resolveWorktreeProjectContext>>,
   candidate: { name: string; directory: string; branch: string },
@@ -2007,7 +2049,18 @@ async function attachGitWorktreeToCandidate(
     await ensureRemoteWithUrl(context.primaryWorktree, ensureRemoteName, ensureRemoteUrl);
   }
 
-  await runGitCommandOrThrow(context.primaryWorktree, worktreeAddArgs, 'Failed to create git worktree');
+  // Read before the attempt: a failed `worktree add -b` can leave behind the
+  // branch it just created, which is no conflict.
+  const branchNameConflict = worktreeAddArgs.includes('-b')
+    && await branchNameClashesWithExistingRef(context.primaryWorktree, localBranch);
+  try {
+    await runGitCommandOrThrow(context.primaryWorktree, worktreeAddArgs, 'Failed to create git worktree');
+  } catch (error) {
+    if (branchNameConflict) {
+      throw Object.assign(error instanceof Error ? error : new Error(String(error)), { code: 'BRANCH_NAME_CONFLICT' });
+    }
+    throw error;
+  }
 
   const shouldSetUpstream = Boolean(input?.setUpstream);
   const upstreamRemote = String(input?.upstreamRemote || inferredUpstream?.remote || '').trim();

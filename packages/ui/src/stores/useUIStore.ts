@@ -1155,6 +1155,8 @@ interface UIStore {
   sessionTabsEnabled: boolean;
   /** Separate header tabs for each project root, worktree and space (`lib/sessionTabScope.ts`). */
   sessionTabsPerWorkspace: boolean;
+  /** Include archived conversations and their messages in command palette search. */
+  commandPaletteShowArchivedSessions: boolean;
   showOpenCodeUpdateNotifications: boolean;
   agentControlToolEnabled: boolean;
   agentScheduleToolEnabled: boolean;
@@ -1458,6 +1460,7 @@ interface UIStore {
   setShowTerminalQuickKeysOnDesktop: (value: boolean) => void;
   setSessionTabsEnabled: (value: boolean) => void;
   setSessionTabsPerWorkspace: (value: boolean) => void;
+  setCommandPaletteShowArchivedSessions: (value: boolean) => void;
   setNotifyOnSubtasks: (value: boolean) => void;
   setDockBadgeEnabled: (value: boolean) => void;
   setAlwaysShowScrollbars: (value: boolean) => void;
@@ -1738,6 +1741,7 @@ export const useUIStore = create<UIStore>()(
         showTerminalQuickKeysOnDesktop: false,
         sessionTabsEnabled: false,
         sessionTabsPerWorkspace: false,
+        commandPaletteShowArchivedSessions: false,
         showOpenCodeUpdateNotifications: true,
         agentControlToolEnabled: true,
         agentScheduleToolEnabled: true,
@@ -3375,6 +3379,10 @@ export const useUIStore = create<UIStore>()(
           set({ sessionTabsPerWorkspace: value });
         },
 
+        setCommandPaletteShowArchivedSessions: (value) => {
+          set({ commandPaletteShowArchivedSessions: value });
+        },
+
         setNotifyOnSubtasks: (value) => {
           set({ notifyOnSubtasks: value });
         },
@@ -4025,6 +4033,7 @@ export const useUIStore = create<UIStore>()(
           showTerminalQuickKeysOnDesktop: state.showTerminalQuickKeysOnDesktop,
           sessionTabsEnabled: state.sessionTabsEnabled,
           sessionTabsPerWorkspace: state.sessionTabsPerWorkspace,
+          commandPaletteShowArchivedSessions: state.commandPaletteShowArchivedSessions,
           notifyOnSubtasks: state.notifyOnSubtasks,
           dockBadgeEnabled: state.dockBadgeEnabled,
           alwaysShowScrollbars: state.alwaysShowScrollbars,

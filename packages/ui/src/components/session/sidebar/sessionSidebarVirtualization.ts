@@ -37,6 +37,7 @@ type SectionSpacing = keyof typeof SECTION_SPACING_ESTIMATE;
  * user's scroll gesture.
  */
 export const sessionSidebarRowSizeKey = (row: SessionSidebarRow): string => {
+  if (row.kind === 'search-result' || row.searchResult) return `search:${row.key}:${row.kind === 'search-result' ? Boolean(row.result.excerpt) : Boolean(row.searchResult?.excerpt)}`;
   const context = 'renderContext' in row ? row.renderContext : '';
   const detailed = 'detailed' in row && row.detailed;
   const variableHeight = (row.kind === 'session' && (detailed || context === 'timeline-mixed'))
@@ -287,9 +288,9 @@ export const estimateSessionSidebarRowSize = (
 const PROJECT_DIVIDER_CLASS = "after:pointer-events-none after:absolute after:start-1.5 after:end-1.5 after:bottom-[5.5px] after:h-px after:bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] after:content-['']";
 
 /** The classes of a row's wrapper: its trailing gap, and the line between open projects. */
-export const sectionWrapperClass = (row: SessionSidebarRow, nextRow: SessionSidebarRow | undefined): string => {
+export const sectionWrapperClass = (row: SessionSidebarRow, nextRow: SessionSidebarRow | undefined, projectDivider = true): string => {
   const spacing = sectionSpacingAfter(row, nextRow);
-  if (spacing === 'pb-3' && nextRow?.kind === 'project-header') return `${spacing} ${PROJECT_DIVIDER_CLASS}`;
+  if (projectDivider && spacing === 'pb-3' && nextRow?.kind === 'project-header') return `${spacing} ${PROJECT_DIVIDER_CLASS}`;
   return spacing ?? '';
 };
 

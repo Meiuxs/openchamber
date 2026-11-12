@@ -111,6 +111,7 @@ import { createSessionKnowledgeRuntime, measureMemoryIndex } from './lib/session
 import { createMemoryDreaming } from './lib/agent-memory/dreaming.js';
 import { isAutoModel, JEV_BACKGROUND_TIMEOUT_MS } from './lib/routing/defaults.js';
 import { createMessageSearchRuntime } from './lib/message-search/runtime.js';
+import { applyOwnedArchiveState } from './lib/opencode/proxy.js';
 import { createScheduledTasksRuntime } from './lib/scheduled-tasks/runtime.js';
 import { resolveSessionDefaults } from './lib/scheduled-tasks/session-defaults.js';
 import { createChatsScope } from './lib/scheduled-tasks/chats-scope.js';
@@ -131,6 +132,7 @@ import { createMessageQueueRuntime } from './lib/message-queue/runtime.js';
 import { createAutoReviewRuntime } from './lib/auto-review/runtime.js';
 import { createDispatchResultsRuntime } from './lib/dispatch-results/runtime.js';
 import { createPrWatchRuntime } from './lib/pr-watch/runtime.js';
+import { createExtensionWaitsRuntime } from './lib/extension-waits/runtime.js';
 import { createMergeFollowRuntime } from './lib/github/merge-follow.js';
 import { createWorkflowAgentSessions } from './lib/workflows/agent-session.js';
 import { createWorkflowRuntime } from './lib/workflows/runtime.js';
@@ -1423,6 +1425,21 @@ const prWatchRuntime = createPrWatchRuntime({
   insideSpace: Boolean(process.env.OPENCHAMBER_SPACE_IDLE_STOP_FILE),
 });
 prWatchRuntime.start(globalMessageStreamHub);
+// Waits extensions offer agents (`contributes.waits`): checked on their
+// services, woken with one message; the catalog decides who may wake whom.
+const extensionWaitsRuntime = createExtensionWaitsRuntime({
+  listGuests: () => listInstalledGuests({ persistPath: extensionsPersistPath(OPENCHAMBER_DATA_DIR) }),
+  proxyServiceRequest: proxyGuestServiceRequest,
+  persistPath: extensionsPersistPath(OPENCHAMBER_DATA_DIR),
+  buildOpenCodeUrl,
+  getOpenCodeAuthHeaders,
+  dataDir: OPENCHAMBER_DATA_DIR,
+  broadcastUiEvent: broadcastOpenChamberUiEvent,
+  // Declared further down; only ever called after startup.
+  isSessionArchived: (sessionID) => openChamberSessionService.sessionArchive.isArchived(sessionID),
+  insideSpace: Boolean(process.env.OPENCHAMBER_SPACE_IDLE_STOP_FILE),
+});
+extensionWaitsRuntime.start(globalMessageStreamHub);
 const mergeFollowRuntime = createMergeFollowRuntime({
   dataDir: OPENCHAMBER_DATA_DIR,
   notify: (notification) => notificationTriggerRuntime.notifyPullRequest(notification),
@@ -1467,6 +1484,8 @@ const messageSearchRuntime = createMessageSearchRuntime({
   buildOpenCodeUrl,
   getOpenCodeAuthHeaders,
   globalEventHub: globalMessageStreamHub,
+  getArchivedSessions: () => openChamberSessionService.archiveStore.getAll(),
+  applyOwnedArchiveState,
   readSettings: async () => {
     const settings = await readSettingsFromDisk();
     return { enabled: settings.messageSearchEnabled === true, reasoning: settings.messageSearchReasoningEnabled === true };
@@ -2398,6 +2417,7 @@ const openChamberControlService = createOpenChamberControlService({
   },
   dispatchResults: dispatchResultsRuntime,
   prWatch: prWatchRuntime,
+  extensionWaits: extensionWaitsRuntime,
   workflowRuntime,
   archiveStore: openChamberSessionService.archiveStore,
   // The module the quota routes load, loaded on the first read: the same
@@ -2467,6 +2487,7 @@ const gracefulShutdownRuntime = createGracefulShutdownRuntime({
   sessionTodosRuntime,
   autoReviewRuntime,
   prWatchRuntime,
+  extensionWaitsRuntime,
   messageQueueRuntime,
   mergeFollowRuntime,
   dispatchResultsRuntime,
@@ -3157,6 +3178,7 @@ async function main(options = {}) {
         managedConfigRuntime?.refreshManagedConfigFile(),
       ]);
     },
+    onExtensionWaitsChanged: () => extensionWaitsRuntime.reconcile(),
     // Lifecycle state that exists before OpenCode is up: the mode is the server's environment, not a probe.
     getOpenCodePluginDelivery: () => openCodePluginDelivery({
       external: isExternalOpenCode || ENV_SKIP_OPENCODE_START,
@@ -3241,6 +3263,7 @@ async function main(options = {}) {
     messageQueueRuntime,
     autoReviewRuntime,
     prWatchRuntime,
+    extensionWaitsRuntime,
     routingRuntime,
     mergeFollowRuntime,
     workflowRuntime,

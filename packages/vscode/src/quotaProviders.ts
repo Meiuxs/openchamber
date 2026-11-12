@@ -1595,7 +1595,8 @@ let claudeCooldownUntil = 0;
 const claudeCooldownFromResponse = (response: Response): number => {
   const raw = response.headers.get('retry-after');
   const seconds = raw ? Number(raw) : Number.NaN;
-  if (Number.isFinite(seconds) && seconds > 0) {
+  // `Retry-After: 0` asks for an immediate retry, so it ends the cooldown.
+  if (Number.isFinite(seconds) && seconds >= 0) {
     return Math.min(seconds * 1000, CLAUDE_MAX_COOLDOWN_MS);
   }
   if (raw) {
@@ -1742,13 +1743,24 @@ const fetchClaudeQuota = async (): Promise<ProviderResult> => {
       return buildClaudeRateLimitResult();
     }
 
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       return buildResult({
         providerId: 'claude',
         providerName: 'Claude',
         ok: false,
         configured: true,
         error: 'Claude session expired. Open Claude Code to sign in again.',
+      });
+    }
+
+    // A valid token without the `user:profile` scope (every `claude setup-token` token) gets 403.
+    if (response.status === 403) {
+      return buildResult({
+        providerId: 'claude',
+        providerName: 'Claude',
+        ok: false,
+        configured: true,
+        error: 'Anthropic does not let this Claude token read usage. A token from `claude setup-token` cannot; a Claude Code sign-in (`/login`) can.',
       });
     }
 
@@ -4410,7 +4422,13 @@ const fetchQuotaForProviderUncoalesced = async (providerId: string): Promise<Pro
         const credential = openCodeZenCredential(auth);
         if (!credential) return buildResult({ providerId, providerName: 'OpenCode Zen', ok: false, configured: false, error: 'Not configured' });
         const usage = await fetchOpenCodeZenUsage(credential);
-        return buildResult({ providerId, providerName: 'OpenCode Zen', ok: true, configured: true, usage });
+        return buildResult({
+          providerId,
+          providerName: 'OpenCode Zen',
+          ok: true,
+          configured: true,
+          usage: { ...usage, models: Object.keys(usage.models).length ? usage.models : undefined },
+        });
       } catch (error) {
         return buildResult({ providerId, providerName: 'OpenCode Zen', ok: false, configured: true, error: error instanceof Error ? error.message : 'Request failed' });
       }

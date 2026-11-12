@@ -17,6 +17,87 @@ kept at this root in `types.ts` and `utils.tsx`.
   states, and reveal controls. `SessionSidebarRows.tsx` is the shared desktop
   Web, Electron and VS Code sidebar row renderer. Normal and committed-search modes use the same
   model and the same `@tanstack/react-virtual` instance.
+
+Sidebar search commits an input-debounced query before rebuilding its
+projection. It searches the global active and archived cache, which does not
+bootstrap directories or load transcripts. Lifecycle, admission and exact
+project/worktree scope filter metadata before the shared search hook receives
+it. An unresolved scope disables the hook, so an empty directory list cannot
+become a global content request. VS Code keeps exact workspace admission.
+`useOmniSearchState` owns sidebar filter state for both the desktop sidebar and
+the phone sheet. It persists non-default filters while each surface owns only
+its text field. Closing a sidebar search clears its text and leaves filters
+remembered, but passes an empty query into the projection so a hidden search
+never filters the normal sidebar.
+The palette category stays outside that remembered filter state.
+Search ignores the browsing archive toggle and lists matches under their
+project captions on desktop and phone. Existing tree rows retain their
+ancestors and highlight ranges; content matches enrich those rows with an
+excerpt. Remaining matches enter the same virtual row model under the resolved
+owner. Search rows show a second line with their project outside that project's
+own header, then their space, branch, or a deleted worktree folder. Under its
+own worktree or space header the row drops that part too, since the header
+names it. The
+context comes from `conversationContextFromLocation`, the builder Archive shares.
+With "show only the main workspace" no project header is drawn, so the project
+stays on the row. A real chat has no second line, and an unregistered directory
+shows its folder. Admitted matches without a resolved owner use Chats. A
+project none of whose titles match still lists when one of its conversations
+matched by its messages. The
+shared status line stays visible during indexing and errors, and the virtual pager remains
+available even when admission removes every hit in a page. Excerpts and other
+message matches open through `openSessionLink`, so opening an archived match
+does not restore it.
+
+### Why remembered filters stay outside the closed query
+
+Filters return when search opens again. The normal sidebar receives an empty
+query while search is closed, so its browsing projection remains unfiltered.
+
+### Why search ownership has its own index
+
+The normal ownership index receives archived records separately and keeps only
+their top-level sessions in sidebar archive buckets. Search indexes every active
+and archived candidate in its primary input, including archived children of a
+deleted managed worktree, so its rows can retain the authoritative project
+placement. The normal index and `createSessionOwnershipIndex` keep their archive
+bucket contract.
+
+### Why search admission waits for the chats root
+
+Search admits a chat by its folder, and a folder is known as a chat only after
+the server names the chats root, which can arrive after the session list. The
+admitted directories depend on that root, so chats join a search when it lands
+instead of staying out until the session list next changes.
+
+A recognized filter activates search even without free text. Filter-only
+search lists every metadata record admitted by that scope and makes no content
+request. An unknown shared-hook total remains null through the collection,
+header and status controls; a loaded page length is never an exact total.
+
+Expanded message matches belong to the effective query, lifecycle, author,
+reasoning policy, search-in mode, indexing preference and runtime identity.
+Changing any of these collapses the expansion synchronously and unmounts its
+request owner. Disabled content leaves no excerpt or other-message action.
+A failed extra page keeps its prior hits, reports the error and leaves the
+pager available for retry.
+
+The selection registry preserves lifecycle for content-only rows using their
+explicit archived boolean. It does not invent a full session or an archive
+timestamp. A complete session record takes precedence when one is present.
+Restore eligibility and delete confirmation read this same registry, including
+for virtualized results without a cached session.
+
+### Why search projects results over the existing hierarchy
+
+The shared hook owns matching and the metadata/content union. The sidebar
+projects that union over its cached trees, retaining ancestors and nesting
+while adding content-only rows under their owners. Search temporarily leaves
+the browsing work zones and time grouping aside so each conversation appears
+once under its project. The input debounce commits queries before projection;
+metadata construction depends on cache, topology and filters, not free-text
+keystrokes. Search rows keep their own height measurements because excerpts
+and expanded message matches change height independently of browsing rows.
 - `list/useSidebarGroupStatus.ts` subscribes to project and standalone Chats
   directories together. Chats uses the same `activity:chats` identity for status
   and row projection, including a Chats-only sidebar. An unresolved global list
@@ -576,7 +657,9 @@ the same Mark all as read.
   back only where an open project ends before the next one, in the middle of
   that 12px gap, from the headers' content edge (maintainer, 2026-11-01): long
   open projects ran together without it, and a run of collapsed ones keeps no
-  line.
+  line. Web, desktop and the grouped mobile list keep that line; VS Code's
+  narrow list omits it and separates open projects by the 12px gap and the
+  header alone (maintainer, #6534).
 - Rows of zones that mix projects (Pinned, In work, the list by time) are
   `'mixed-compact'`: one line with no project icon (the room goes to the
   title; the whole-row tooltip names the project, branch and model), the PR
@@ -645,6 +728,21 @@ or folder (`movedSessionIds`, `movedGroupKeys`) unless "Also show in work
 under projects" is on; search lists every zone session once, in its zone,
 either way. VS Code always keeps them in place. Chats are never in work and
 offer no Track action. An empty zone is not rendered.
+
+The bulk bar's Mark done (shown while work tracking is on and the selection
+is not archived, enabled once a selected session is in work) applies the
+composer's per-session rule to the selection: every selected root session in
+work is marked done, four at a time (`markSessionsDone` in
+`works/workActions.ts`), and leaves the working set. A work's row selects its
+subtree, so its btw and review sessions in work close with it; subagents never
+count. A worktree or space work whose every such session the batch marked
+done gets the ordinary Done of its row afterwards (`finishBulkDoneWork`):
+archive on Done for a worktree, the stop for a space, and the same toasts. A
+work only partly selected keeps its other sessions in work and is not
+archived or stopped. Afterwards only the sessions that failed stay selected,
+and the failure toast quotes the server's answer, as bulk Archive does. Once
+the runtime changes, queued sessions are not sent and the batch reports
+nothing.
 
 Search in a zone keeps a root whose subsession matches, since the one-line
 rows open to it; with Detailed rows the root stays listed though its row
@@ -900,6 +998,10 @@ already empty. Session rows receive one stable reset action rather than transien
 search-open or draft state. Closing a retained mobile search discards unsubmitted
 text.
 
+VS Code's always-visible field (`compact`) has no Enter/Esc hint row: the match
+count sits on the field's own line, so applying or clearing a search keeps the
+header at one height and the list does not move.
+
 The desktop sidebar field and its query go together: whatever hides the field
 (the search button, Escape, a click outside the sidebar, opening a session)
 also clears the query, so the list is never filtered by text that is not on
@@ -1088,6 +1190,20 @@ matching and ordering. Search does not fetch sessions or broaden list membership
   snapshot; changed targets or archive authority require confirmation again.
   The current session map comes from unfiltered project sections, so collapsing
   a project or entering search cannot hide authority for an existing selection.
+- A selection has one scope: a project (its worktrees included) or a zone.
+  Every row Pinned, In work, a section or the list by time lists selects
+  within that zone (`activity:<key>`, the zone's container key), nested rows,
+  run lanes and the sessions of a worktree work listed there included, so
+  Shift ranges and Ctrl/Cmd+A stay inside it and an unselected row of another
+  scope starts a new selection. A folded worktree or space work or run in a
+  zone still belongs to its selection, and so do the sessions an open work
+  holds back behind Show more or a folded folder: they enter the selection
+  entries without rows (`rowKey` null), so Ctrl/Cmd+A takes them and leaves
+  the work folded, while a Shift range spans rows only. A selected session shown again in another
+  scope (its In work row and its project row) unchecks there and leaves the
+  rest selected. Zone rows carried no scope before, and Ctrl/Cmd+A from one
+  swept in every row of the sidebar. A zone scope owns no folders: Move to
+  folder is not offered for it, and folder ownership stays the session's own.
 - Rename drafts stay parent-owned, while editing and menu lifecycles are keyed
   by row occurrence. Duplicate In work, project, and folder rows never open a
   second rename input, and the owning occurrence remains mounted through menu
@@ -1106,8 +1222,8 @@ matching and ordering. Search does not fetch sessions or broaden list membership
   nowhere to land swallowed the click that started it when the mouse moved
   4 px during the press.
   A cross-project child keeps its display parent, while its folder menu, drag
-  payload, bulk-selection scope and Tracker links use the authoritative owner
-  of the child's own directory. The drop action resolves the current row
+  payload, bulk-selection scope (outside a zone, which keeps its own) and
+  Tracker links use the authoritative owner of the child's own directory. The drop action resolves the current row
   occurrence and checks that owner again before any folder write; a rejected
   cross-owner or stale-row drop changes no memberships. Bulk folder actions
   require a resolved owner for every selected session, including managed Chats

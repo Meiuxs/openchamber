@@ -10,7 +10,7 @@ import {
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { Button } from '@/components/ui/button';
-import { formatPathForDisplay } from '@/lib/utils';
+import { cn, formatPathForDisplay } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n';
 import { isVSCodeRuntime } from '@/lib/desktop';
 import { sessionEvents } from '@/lib/sessionEvents';
@@ -34,6 +34,7 @@ import type { SessionGroup } from '../types';
 import { SessionSidebarRows, type SessionSidebarHeldRow } from '../SessionSidebarRows';
 import { copyDragSource, keepRowInList, ROW_DRAG_AUTO_SCROLL, useRowDragSensors } from '../rowDrag';
 import { RowDragPreview } from '../RowDragPreview';
+import { SidebarConversationRow, SidebarSearchMore, type SidebarSearchPresentation } from '../SidebarConversationRow';
 import { setSidebarBlockDrag, useSidebarBlockDragStore } from '../list/blockDrag';
 import { removeFolderFromSections, saveSidebarSections, useSidebarSectionsUiStore } from '../sections/sectionActions';
 import { useSessionDisplayStore } from '@/stores/useSessionDisplayStore';
@@ -95,6 +96,7 @@ type GroupActions = Pick<SessionGroupSectionProps,
 >;
 
 export type SessionProjectScrollerModel = {
+  search?: SidebarSearchPresentation;
   rowModel: SessionSidebarRowModel;
   sectionsForRender: ProjectSection[];
   projectSections: ProjectSection[];
@@ -112,6 +114,8 @@ export type SessionProjectScrollerView = {
   hideDirectoryControls: boolean;
   mobileVariant: boolean;
   alwaysShowActions: boolean;
+  /** VS Code draws no line between open projects; see DOCUMENTATION.md, "One view". */
+  isVSCode: boolean;
   projectSortOrder: ProjectSortOrder;
 };
 
@@ -345,7 +349,9 @@ function SessionProjectScrollerComponent({ model, view, actions }: SessionProjec
   const renderRow = React.useCallback((row: SessionSidebarRow): React.ReactNode => {
     if (row.kind === 'activity-header') {
       return sortableSection(row, <CrossfadeZoneHeader
-        className="sticky top-0 z-20 bg-sidebar"
+        // The touch sidebar sits on the editor's background rather than the
+        // sidebar surface, so its sticky header takes the list's own colour.
+        className={cn('sticky top-0 z-20', view.mobileVariant ? 'bg-background' : 'bg-sidebar')}
         data-sidebar-sticky-header="true"
       >
         <SessionSidebarActivityHeader
@@ -484,6 +490,7 @@ function SessionProjectScrollerComponent({ model, view, actions }: SessionProjec
       </DroppableFolderWrapper>;
     }
     if (row.kind === 'session') {
+      if (row.searchResult && row.context) return <SidebarConversationRow result={row.searchResult} context={row.context} depth={row.depth} search={model.search} />;
       const subtreeContainsEditing = new Set<string>();
       if (nodeContainsSessionId(row.node, model.state.editingId)) subtreeContainsEditing.add(row.node.session.id);
       return <div onFocusCapture={() => setFocusedRowKey(row.key)} onBlurCapture={() => setFocusedRowKey((current) => current === row.key ? null : current)}>
@@ -507,6 +514,10 @@ function SessionProjectScrollerComponent({ model, view, actions }: SessionProjec
         />
       </div>;
     }
+    if (row.kind === 'search-result') {
+      return <SidebarConversationRow result={row.result} context={row.context} search={model.search} />;
+    }
+    if (row.kind === 'search-more') return <SidebarSearchMore onLoadMore={model.search?.loadMore} />;
     if (row.kind === 'draft') {
       return <SessionDraftRow
         draft={row.draft} depth={row.depth} detailed={row.detailed} mixed={row.mixed}
@@ -719,7 +730,7 @@ function SessionProjectScrollerComponent({ model, view, actions }: SessionProjec
           onDragEnd={handleDragEnd}
         >
           <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-            <SessionSidebarRows model={model.rowModel} scrollElement={scrollElement} pinnedRowIndexes={pinnedRowIndexes} renderRow={renderRow} onFirstVisibleIndexChange={handleFirstVisibleIndexChange} getStickyHeaderHeight={getPinnedZoneHeaderHeight} heldRowRef={heldRowRef} />
+            <SessionSidebarRows model={model.rowModel} scrollElement={scrollElement} pinnedRowIndexes={pinnedRowIndexes} renderRow={renderRow} onFirstVisibleIndexChange={handleFirstVisibleIndexChange} getStickyHeaderHeight={getPinnedZoneHeaderHeight} heldRowRef={heldRowRef} projectDivider={!view.isVSCode} />
           </SortableContext>
           {/* Dropped, the header is where it lands at once: no flight back. */}
           <DragOverlay dropAnimation={null}>{dragSource ? <RowDragPreview copy={dragSource} /> : null}</DragOverlay>
