@@ -84,6 +84,7 @@ import { shareFileFromNativeApp } from '@/lib/nativeFileShare';
 import { WorktreeRequiresGitRepositoryError } from '@/lib/worktrees/worktreeCreate';
 import { buildTurnImageExportSource, cloneMessageImageExportSource, fitMessageImageExportLayout, resolveMessageImageExportPixelRatio, resolveMessageImageExportWidth } from './imageExport';
 import { hasTextSelectionInside } from '@/lib/textSelection';
+import { DiffCount } from '@/components/ui/diff-count';
 
 
 const CONTAIN_LAYOUT_STYLE = { contain: 'layout' as const, transform: 'translateZ(0)' };
@@ -109,11 +110,7 @@ const TurnChangedFileChipContent = React.memo(({ file, interactive = false }: { 
         <FileTypeIcon filePath={file.file} className="h-3.5 w-3.5 flex-shrink-0" />
         <span className="max-w-52 truncate text-foreground/80" title={file.file}>{getDisplayFileName(file.file)}</span>
         {file.additions !== undefined && file.deletions !== undefined ? (
-            <span className="flex-shrink-0 inline-flex items-center gap-0 typography-meta" style={{ fontSize: '0.8rem', lineHeight: '1' }}>
-                <span style={{ color: 'var(--status-success)' }}>+{file.additions}</span>
-                <span className="text-muted-foreground/70">/</span>
-                <span style={{ color: 'var(--status-error)' }}>-{file.deletions}</span>
-            </span>
+            <DiffCount added={file.additions} removed={file.deletions} className="typography-meta" />
         ) : null}
     </span>
 ));
@@ -839,7 +836,8 @@ const UserMessageBody = React.memo(({ parts, messageCreatedAt, isMobile, alwaysS
                 })}
             </div>
             {(showMessageExpandToggle || promptOrigin) && (
-                <div className="mt-1 flex min-w-0 items-center justify-end gap-1.5 text-sm text-muted-foreground">
+                // Caption size and muted, as the sidebar's "Show more".
+                <div className="mt-1 flex min-w-0 items-center justify-end gap-1.5 typography-micro text-muted-foreground">
                     {promptOrigin ? <PromptOriginLink origin={promptOrigin} /> : null}
                     {promptOrigin && showMessageExpandToggle ? <span aria-hidden="true">·</span> : null}
                     {showMessageExpandToggle && (
@@ -2344,7 +2342,12 @@ const AssistantMessageBody = React.memo(({
                                                     providerId={footerProviderID}
                                                     alt=""
                                                     fallback={<AgentModelIcon agentName={footerAgentName} />}
-                                                    className="h-[13px] w-[13px] flex-shrink-0"
+                                                    // The footer is metadata: the mark reads in the
+                                                    // footer text's own muted colour. A logo that is an
+                                                    // image (uploaded, from an extension) cannot take a
+                                                    // colour, so it goes grey and recedes instead.
+                                                    tint
+                                                    className="h-[13px] w-[13px] flex-shrink-0 text-muted-foreground [&:is(img)]:grayscale [&:is(img)]:opacity-60"
                                                 />
                                             ) : (
                                                 <AgentModelIcon agentName={footerAgentName} />

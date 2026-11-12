@@ -212,11 +212,45 @@ ends, and a row's own Send sends just that message. Like any send, it dismisses
 open permission requests and forms. Scheduled items stay visible in the
 queue rows with reorder and remove, but no edit or send action.
 
-While a turn runs and the composer has content, a follow-up button sits above
-Stop (inside the pill on collapsed mobile). It takes the same path as plain
-Enter under the follow-up setting: with Queue it queues and shows the rotated
-icon labelled "Queue message"; with Steer it steers into the running turn and
-looks like the ordinary send button.
+The action button (`ComposerActionButtons`, and the same rule in the
+collapsed mobile pill) is one disc in one slot: 28px on desktop, the footer's
+button size in VS Code, and a 28px disc inside the 32px touch target on
+phones. It is drawn by `.oc-action-disc` in `design-system.css`: the
+composer's text colour with the glyph cut out in the composer's own fill
+(`--oc-composer-foreground` over `--oc-composer-background`), flat, no ring
+or shadow. Disabled, it is a quiet tone step of the text colour with the
+glyph in the muted text. Which glyph it shows:
+
+- idle: Send (`arrow-up`);
+- a turn running, input empty: Stop, its square in the theme's error colour
+  (`--status-error`) on the quiet disc (`data-idle`): a bright disc for the
+  whole length of a run pulled the eye; the bare Stop shown beside
+  Send (below) takes the same red square;
+- a turn running, input with content: Send again, taking the same path as
+  plain Enter under the follow-up setting: with Queue it queues and is
+  labelled "Queue message", with Steer it steers into the running turn.
+  Ctrl/Cmd+Enter sends now instead of the setting's choice, as it does for
+  Enter.
+
+A run stays stoppable with the draft intact. Whether double Escape
+(`abort_run`, `hooks/useComposerAbortEscape.ts`) reaches a composer's session
+is decided in one place, `state/abortShortcutReach.ts`, which `ChatInput`
+passes down as `escapeStops`:
+
+| Surface | Running with a draft |
+| --- | --- |
+| Main window (and a chat pinned in its side panel), with a keyboard | One disc (Send); double Escape stops, named in the Send tooltip |
+| Mini Chat, with a keyboard | The same: `useMiniChatKeyboardShortcuts` wires the gesture to Mini Chat's own session |
+| BTW | A bare Stop icon before the disc: BTW's Escape collapses BTW, and the shortcut skips its composer |
+| Touch (the mobile composers, or a device with no hover and a coarse pointer) | A bare Stop icon before the disc, at the touch-target size |
+| Anything else (`unknown`) | A bare Stop icon before the disc, until the surface is wired |
+
+The visible Stop appears only in that state and takes room from the row on
+its left, so the disc does not move.
+
+Only the glyph changes as a run starts or ends, so nothing beside it moves. On
+desktop the footer's end padding is 8px, so the disc sits as far from the
+composer's right edge as from its bottom edge.
 
 `BackgroundShellsStrip` lists the commands that went to the background (not the ones
 a turn is waiting for, see `background` in `sync/background-shells.ts`) of

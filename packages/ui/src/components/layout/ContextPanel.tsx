@@ -262,7 +262,7 @@ const getTabIcon = (
   }
 
   if (tab.mode === 'context') {
-    return <Icon name="donut-chart-fill" className="h-3.5 w-3.5" />;
+    return <Icon name="pie-chart" className="h-3.5 w-3.5" />;
   }
 
   if (tab.mode === 'workflows') {
@@ -1304,10 +1304,9 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
           zone === 'bottom' && (leftZoneShown ? 'ms-0' : 'ms-2'),
           zone === 'bottom' && (rightSlotFilled ? 'me-0' : 'me-1.5'),
           isVertical ? null : 'h-[calc(100%-0.5rem)]',
-          // A framed card, inset from the chat: its own border and radius rather
-          // than a divider running the length of the window.
-          // The dropdown's hairline ring (`oc-panel-edge`), shared with the
-          // work-status card.
+          // A framed card, inset from the chat: its own colour, hairline ring
+          // and radius rather than a divider running the length of the window
+          // (`oc-panel-edge`, shared with the work-status card).
           'oc-panel-edge overflow-hidden rounded-[10px] bg-background',
           // Size animates in sync with the zone (surface switches, resize
           // release).

@@ -65,7 +65,7 @@ import { createOpenCodeNetworkRuntime } from './lib/opencode/network-runtime.js'
 import { createOpenCodeAuthStateRuntime } from './lib/opencode/auth-state-runtime.js';
 import { createProjectDirectoryRuntime } from './lib/opencode/project-directory-runtime.js';
 import { createSettingsNormalizationRuntime } from './lib/opencode/settings-normalization-runtime.js';
-import { createSettingsHelpers } from './lib/opencode/settings-helpers.js';
+import { createSettingsHelpers, isMessageSearchEnabled } from './lib/opencode/settings-helpers.js';
 import { createThemeRuntime } from './lib/opencode/theme-runtime.js';
 import { createFeatureRoutesRuntime } from './lib/opencode/feature-routes-runtime.js';
 import { createPluginSwitchStore } from './lib/opencode/plugin-switches.js';
@@ -142,7 +142,8 @@ import { createJevClient } from './lib/routing/jev.js';
 import { createSessionWorkRuntime } from './lib/session-work/runtime.js';
 import { createSessionLineage } from './lib/session-lineage.js';
 import { createGracefulShutdownRuntime } from './lib/opencode/shutdown-runtime.js';
-import { beginGuestServiceHost, beginGuestServiceShutdown, getServiceStatus, holdGuestService, proxyGuestServiceRequest, stopAllGuestServices } from './lib/guests/service.js';
+import { beginGuestServiceHost, beginGuestServiceShutdown, getServiceStatus, holdGuestService, onGuestServiceEnded, proxyGuestServiceRequest, stopAllGuestServices } from './lib/guests/service.js';
+import { guestMarks } from './lib/guests/marks.js';
 import { guestServiceRegistryDir } from './lib/guests/service-registry.js';
 import { findInstalledGuest, listInstalledGuests, setGuestConfigurationNote } from './lib/guests/catalog.js';
 import { createExtensionSessionEvents } from './lib/guests/session-events.js';
@@ -1488,7 +1489,7 @@ const messageSearchRuntime = createMessageSearchRuntime({
   applyOwnedArchiveState,
   readSettings: async () => {
     const settings = await readSettingsFromDisk();
-    return { enabled: settings.messageSearchEnabled === true, reasoning: settings.messageSearchReasoningEnabled === true };
+    return { enabled: isMessageSearchEnabled(settings), reasoning: settings.messageSearchReasoningEnabled === true };
   },
 });
 
@@ -2289,6 +2290,12 @@ const insideSpaceTaskNaming = process.env.OPENCHAMBER_SPACE_TASK_TITLE_FILE && p
     announce: broadcastOpenChamberUiEvent,
   }) : null;
 
+const announceGuestMarksChanged = () => broadcastOpenChamberUiEvent({ type: 'openchamber:guest-marks-changed', properties: {} });
+// A mark lives as long as the process that set it.
+onGuestServiceEnded((guestId) => {
+  if (guestMarks.dropEnded(guestId)) announceGuestMarksChanged();
+});
+
 const serviceHostApi = createServiceHostApi({
   listGuests: () => listInstalledGuests({ persistPath: extensionsPersistPath(OPENCHAMBER_DATA_DIR) }),
   control: {
@@ -2307,6 +2314,13 @@ const serviceHostApi = createServiceHostApi({
   }),
   setConfigurationNote: (guestId, message) => {
     if (setGuestConfigurationNote(guestId, message)) broadcastOpenChamberUiEvent({ type: 'openchamber:guests-changed', properties: {} });
+  },
+  marks: {
+    set: (...args) => {
+      const outcome = guestMarks.set(...args);
+      if (outcome === 'changed') announceGuestMarksChanged();
+      return outcome;
+    },
   },
 });
 serviceHostApi.register();
@@ -3168,6 +3182,7 @@ async function main(options = {}) {
     onGuestDeactivated: async (event) => {
       guestSurfaceRuntime?.endForGuest(event.guestId);
       setGuestConfigurationNote(event.guestId, null);
+      if (guestMarks.clearGuest(event.guestId)) announceGuestMarksChanged();
       if (event.removed) await guestInstructions.remove(event.guestId);
       return browserControlRouter.handleGuestDeactivated(event);
     },

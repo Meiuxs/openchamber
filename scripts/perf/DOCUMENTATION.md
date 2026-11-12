@@ -380,6 +380,13 @@ globbing (`isolated-server.mjs` writes them into the project under
 `agent-100tools-x5-300cps` makes its hundred calls five at a time: twenty
 steps whose messages hold five tool parts each, the turn that windowing by
 messages left fully mounted.
+`agent-20tools-wait3000ms-300cps` waits three seconds before each step's first
+token, as a hosted model does. Every step's assistant message then exists
+without parts for that long, which the instant fixtures never show; that wait
+is what once made the client reload the transcript page once per step. Read
+what a turn requested in `pageSignals.requestsByRoute` of the summary, a count
+per route with ids replaced and the `limit` kept
+(`GET /api/session/:id/message?limit=30`).
 `perf/unicode-300cps` (and `unicode-1200cps`) streams prose with em dashes,
 curly quotes and whole Cyrillic paragraphs, and a 150-line TypeScript fence
 whose comments and strings carry the same characters. V8 stores a string with
@@ -1221,7 +1228,8 @@ The measurement rules are in `.agents/skills/performance-engineering/SKILL.md`, 
 | `cdp.mjs` | Chrome launch, target discovery, minimal CDP client. Owns the anti-throttling launch flags and the per-run temporary Chrome profile (`resolveProfileDir`, which also removes the `openchamber-perf-*` profiles earlier runs left: those whose `SingletonLock` symlink names a dead process); `profile:browser` alone keeps a reusable profile, for a manually driven session. |
 | `metrics.mjs` | Metric derivations shared by the profilers: growth rates, percentiles, long-task, frame-budget, windowed longest-task, trace-event and per-thread summaries. |
 | `process-cpu.mjs` | CPU per process from cumulative counters: Chrome through browser-level `SystemInfo`, the server and its OpenCode child through `ps`. Context switches (wakes) and idle wakeups per process from macOS `top`, read around the measured window. Unresolved processes are reported as missing, never as zero. |
-| `fixture-provider.mjs` | Deterministic OpenAI-compatible provider: one fixed document at a rate chosen by model name. |
+| `fixture-provider.mjs` | Deterministic OpenAI-compatible provider: one fixed document at a rate chosen by model name. A prompt from `fixture-conversations.mjs` gets that conversation's scripted answer instead. |
+| `fixture-conversations.mjs` | Scripted conversations keyed by prompt, with tool steps OpenCode runs for real, and the scratch project files they edit. `scripts/design/shots.mjs` seeds its sessions from them; no perf scenario sends these prompts. |
 | `seed-long-session.mjs` | Builds a long session (default 120 turns) through the `openchamber session` CLI and the fixture provider's seeding models. |
 | `aggregate-runs.mjs` | Median, p95, min and max per metric over repeated single-run captures, excluding runs whose validity flags say they measured nothing. |
 | `network.mjs` | Request and byte accounting over the CDP Network domain, grouped by endpoint pattern. |

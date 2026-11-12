@@ -73,7 +73,7 @@ export const MobileSessionRow: React.FC<{
   const hasActivityDuration = useHasSessionTurnDuration(session.id, isStreaming);
   const showActivityDuration = (isStreaming || showUnread) && hasActivityDuration;
   const hasChildren = node.children.length > 0;
-  const expanded = row.forceExpanded === true || row.expanded === true;
+  const expanded = row.expanded === true;
   // A folded row stands for its subsessions too: their waiting requests count here.
   const familyIds = React.useMemo(
     () => (hasChildren && !expanded ? [session.id, ...collectDescendantIds(node)] : [session.id]),
@@ -120,7 +120,7 @@ export const MobileSessionRow: React.FC<{
     </span>
   ) : null);
   const inSpace = row.secondaryMeta?.inSpace === true;
-  const toggle = hasChildren && !row.forceExpanded
+  const toggle = hasChildren
     ? () => toggleParent(sessionExpansionKey(row.renderContext, row.archived, session.id))
     : undefined;
 
@@ -152,7 +152,7 @@ export const MobileSessionRow: React.FC<{
     ? <Icon name="check" className="size-3.5 shrink-0 text-muted-foreground" aria-label={t('sessions.sidebar.session.work.doneSuggested')} />
     : null;
   const titleText = (
-    <span dir="auto" className={cn('block min-w-0 flex-1 truncate oc-ui-start-align typography-ui-label', mobileSessionTitleClass({ active, unread: showUnread, running: isStreaming, pending: pendingRequests }))}>
+    <span dir="auto" className={cn('block min-w-0 flex-1 truncate oc-ui-start-align typography-ui-label', mobileSessionTitleClass({ active, repeat: row.repeat, unread: showUnread, running: isStreaming, pending: pendingRequests }))}>
       {title}
     </span>
   );
@@ -269,7 +269,9 @@ export const MobileSessionRow: React.FC<{
       revealed={revealed}
       onRevealedChange={setRevealed}
       dataActiveSession={active}
-      contentClassName={cn('relative flex w-full items-center bg-background transition-colors', active && MOBILE_ACTIVE_ROW_CLASS)}
+      // A repeat of the open session (Pinned or In work above its project)
+      // takes no fill, as on the desktop: its full-strength title marks it.
+      contentClassName={cn('relative flex w-full items-center bg-background transition-colors', active && !row.repeat && MOBILE_ACTIVE_ROW_CLASS)}
       actions={(
         <MobileSessionRowActions
           sessionId={session.id}
