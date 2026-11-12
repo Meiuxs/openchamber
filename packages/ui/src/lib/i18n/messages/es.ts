@@ -53,6 +53,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -246,6 +247,7 @@ export const dict: Record<I18nKey, string> = {
   ...pluginsGridI18n.es,
   ...integrationsCatalogI18n['es'],
   ...diffFindI18n['es'],
+  ...gitlabIssueI18n['es'],
   ...markdownOutlineI18n['es'],
   ...markdownGithubI18n['es'],
   ...autocompleteScopeI18n['es'],
@@ -777,6 +779,7 @@ export const dict: Record<I18nKey, string> = {
   "sessions.sidebar.project.actions.edit": "Editar",
   "sessions.sidebar.project.actions.newDraftSession": "Nueva sesión de borrador",
   "sessions.sidebar.project.actions.copyPath": "Copiar ruta",
+  "sessions.sidebar.project.actions.newGitlabIssue": "Nueva incidencia de GitLab",
   "sessions.sidebar.project.copyPath.success": "Ruta del proyecto copiada",
   "sessions.sidebar.project.copyPath.error": "No se pudo copiar la ruta del proyecto",
   "sessions.sidebar.session.menu.rename": "Cambiar nombre",
@@ -2532,6 +2535,8 @@ export const dict: Record<I18nKey, string> = {
   "chat.commandAutocomplete.command.issueWorkDescription": "Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.",
   "chat.chatInput.toast.localIssuesFailed": "Failed to run the local issues command",
   "chat.chatInput.toast.issueWorkFailed": "Failed to start issue work",
+  "chat.commandAutocomplete.command.gitlabIssueDescription": "Abrir el diálogo de incidencia de GitLab para este proyecto.",
+  "chat.chatInput.toast.gitlabIssueNoProject": "Ningún proyecto coincide con esta carpeta.",
   "chat.commandAutocomplete.empty": "No se encontraron comandos",
   "chat.agentMentionAutocomplete.badge.system": "sistema",
   "chat.agentMentionAutocomplete.empty": "No se encontraron agentes",
@@ -2915,6 +2920,7 @@ export const dict: Record<I18nKey, string> = {
   "commandPalette.item.newMiniChat": "Nueva ventana Mini Chat",
   "commandPalette.item.quickWorktree": "Worktree rápido",
   "commandPalette.item.newWorktreeDialog": "Nuevo worktree…",
+  "commandPalette.item.newGitlabIssue": "Nueva incidencia de GitLab…",
   "commandPalette.item.addProject": "Añadir proyecto",
   "commandPalette.item.showSessionSwitcher": "Mostrar cambiador de sesiones",
   "commandPalette.item.toggleSidebar": "Mostrar u ocultar barra lateral",

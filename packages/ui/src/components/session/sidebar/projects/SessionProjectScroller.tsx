@@ -16,6 +16,7 @@ import { isVSCodeRuntime } from '@/lib/desktop';
 import { sessionEvents } from '@/lib/sessionEvents';
 import { CHAT_DRAFT_PROJECT_ID } from '@/lib/chatDirectories';
 import { useSessionFoldersStore } from '@/stores/useSessionFoldersStore';
+import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { useChildStoreManager } from '@/sync/sync-context';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
@@ -258,6 +259,15 @@ function SessionProjectScrollerComponent({ model, view, actions }: SessionProjec
     });
   }, [files, t]);
 
+  // Filing needs the project's bot account, so the menu entry follows the same setting.
+  const projects = useProjectsStore((state) => state.projects);
+  const gitlabIssueProjectIds = React.useMemo(
+    () => new Set(projects
+      .filter((entry) => Boolean(entry.gitlabIssueBotAccountId))
+      .map((entry) => entry.id)),
+    [projects],
+  );
+
   const stickyDescriptorIndex = React.useMemo(() => model.rowModel.stickyHeaders.findIndex(
     (descriptor) => `${descriptor.kind}:${descriptor.id}` === stickyIdentity,
   ), [model.rowModel.stickyHeaders, stickyIdentity]);
@@ -416,6 +426,9 @@ function SessionProjectScrollerComponent({ model, view, actions }: SessionProjec
         onManageWorktrees={() => actions.openWorktreesPage(project.id)}
         onManageSpaces={spacesPageAvailable ? () => useUIStore.getState().setSpacesPageProjectId(project.id) : undefined}
         onOpenSourceBoard={openProjectOnBoard ? () => openProjectOnBoard(project.id) : undefined}
+        onNewGitlabIssue={gitlabIssueProjectIds.has(project.id)
+          ? () => useUIStore.getState().setGitlabIssueDialogProjectId(project.id)
+          : undefined}
         onNewFolder={() => {
           if (row.collapsed) actions.toggleProject(project.id);
           const folder = useSessionFoldersStore.getState().createFolder(project.normalizedPath, t('sessions.sidebar.folders.newFolderTitle'));

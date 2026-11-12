@@ -96,6 +96,17 @@ describe('planLocalSlashCommand', () => {
         }
     });
 
+    test('/gitlab-issue opens the confirmation dialog, with or without a session', () => {
+        expect(planLocalSlashCommand('/gitlab-issue', 'normal', true, true)).toEqual({
+            command: { name: 'gitlab-issue', argument: '' },
+            kind: 'action',
+            attachedContext: 'retain',
+        });
+        // A new-session draft has a project but no session yet.
+        expect(planLocalSlashCommand('/gitlab-issue', 'normal', false, false)?.kind).toBe('action');
+        expect(findMagicPromptCommand('gitlab-issue')).toBeNull();
+    });
+
     test('shell mode and server-owned commands stay outside local planning', () => {
         expect(planLocalSlashCommand('/compact', 'shell', true, true)).toBeNull();
         expect(planLocalSlashCommand('/project-command', 'normal', true, true)).toBeNull();

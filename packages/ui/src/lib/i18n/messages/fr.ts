@@ -52,6 +52,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -235,6 +236,7 @@ export const dict = {
   ...pluginsGridI18n.fr,
   ...integrationsCatalogI18n['fr'],
   ...diffFindI18n['fr'],
+  ...gitlabIssueI18n['fr'],
   ...markdownOutlineI18n['fr'],
   ...markdownGithubI18n['fr'],
   ...autocompleteScopeI18n['fr'],
@@ -605,6 +607,7 @@ export const dict = {
   'sessions.sidebar.project.actions.edit': 'Modifier',
   'sessions.sidebar.project.actions.newDraftSession': 'Nouveau brouillon de session',
   'sessions.sidebar.project.actions.copyPath': 'Copier le chemin',
+  'sessions.sidebar.project.actions.newGitlabIssue': 'Nouveau ticket GitLab',
   'sessions.sidebar.project.copyPath.success': 'Chemin du projet copié',
   'sessions.sidebar.project.copyPath.error': 'Impossible de copier le chemin du projet',
   'sessions.sidebar.session.menu.rename': 'Renommer',
@@ -2641,6 +2644,7 @@ export const dict = {
   'commandPalette.item.newMiniChat': 'Nouvelle mini-fenêtre de discussion',
   'commandPalette.item.quickWorktree': 'Worktree rapide',
   'commandPalette.item.newWorktreeDialog': 'Nouveau worktree…',
+  'commandPalette.item.newGitlabIssue': 'Nouveau ticket GitLab…',
   'commandPalette.item.addProject': 'Ajouter un projet',
   'commandPalette.item.showSessionSwitcher': 'Afficher le sélecteur de session',
   'commandPalette.item.toggleSidebar': 'Basculer la barre latérale',
@@ -3565,6 +3569,8 @@ export const dict = {
   'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
   'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
   'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
+  'chat.commandAutocomplete.command.gitlabIssueDescription': 'Ouvrir la fenêtre de ticket GitLab pour ce projet.',
+  'chat.chatInput.toast.gitlabIssueNoProject': 'Aucun projet ne correspond à ce dossier.',
   'chat.questionCard.submitFailed': 'Impossible d’envoyer la réponse',
   'chat.questionCard.dismissFailed': 'Impossible d’ignorer la question',
   'chat.questionCard.noLongerPending': 'Cette question n’attend plus de réponse.',

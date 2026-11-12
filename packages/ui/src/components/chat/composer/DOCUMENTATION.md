@@ -845,7 +845,9 @@ command can leave the queue untouched and delivery can take only part of it.
   the Magic Prompts that apply in the directory the send lands in, chosen
   when the send starts: the `/btw` fork, the session, else the new-session
   draft; a new chat has no folder yet and reads the global prompts. A failed
-  read sends nothing and restores the input. Session actions are planned only when
+  read sends nothing and restores the input. `/gitlab-issue` opens the
+  confirmation dialog for the resolved project instead of sending a prompt, so
+  it also runs from a new-session draft. Session actions are planned only when
   a session exists, so typing one into a new-session draft stays on the normal
   send path. A local command is never queued as text: queueing runs it
   instead. `/fork [text]` (`submit/forkCommand.ts`) forks after the last

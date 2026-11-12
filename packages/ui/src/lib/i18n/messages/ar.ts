@@ -52,6 +52,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -699,6 +700,7 @@ export const dict = {
   'sessions.sidebar.project.actions.closeProject': 'إغلاق المشروع',
   'sessions.sidebar.project.actions.newDraftSession': 'مسودة جلسة جديدة',
   'sessions.sidebar.project.actions.copyPath': 'نسخ المسار',
+  'sessions.sidebar.project.actions.newGitlabIssue': 'مشكلة GitLab جديدة',
   'sessions.sidebar.project.copyPath.success': 'تم نسخ مسار المشروع',
   'sessions.sidebar.project.copyPath.error': 'تعذر نسخ مسار المشروع',
   'sessions.sidebar.session.menu.rename': 'إعادة تسمية',
@@ -2470,6 +2472,8 @@ export const dict = {
   'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
   'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
   'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
+  'chat.commandAutocomplete.command.gitlabIssueDescription': 'افتح نافذة مشكلة GitLab لهذا المشروع.',
+  'chat.chatInput.toast.gitlabIssueNoProject': 'لا يوجد مشروع يطابق هذا المجلد.',
   'chat.commandAutocomplete.command.btwDescription': 'اطرح سؤالًا جانبيًا في جلسة فرعية مؤقتة دون تشتيت هذه المحادثة.',
   'chat.commandAutocomplete.command.forkDescription': 'اشتقاق هذه المحادثة من آخر رد مكتمل والمتابعة هناك؛ يُرسل النص بعد /fork إلى النسخة المشتقة.',
   'chat.commandAutocomplete.empty': 'لم يتم العثور على أوامر',
@@ -2867,6 +2871,7 @@ export const dict = {
   'commandPalette.item.newMiniChat': 'نافذة محادثة مصغّرة جديدة',
   'commandPalette.item.quickWorktree': 'شجرة عمل (worktree) سريعة',
   'commandPalette.item.newWorktreeDialog': 'شجرة عمل (worktree) جديدة…',
+  'commandPalette.item.newGitlabIssue': 'مشكلة GitLab جديدة…',
   'commandPalette.item.addProject': 'إضافة مشروع',
   'commandPalette.item.showSessionSwitcher': 'إظهار مبدّل الجلسات',
   'commandPalette.item.toggleSidebar': 'إظهار/إخفاء الشريط الجانبي',
@@ -3954,6 +3959,7 @@ export const dict = {
   ...pluginsGridI18n.ar,
   ...integrationsCatalogI18n['ar'],
   ...diffFindI18n['ar'],
+  ...gitlabIssueI18n['ar'],
   ...markdownOutlineI18n['ar'],
   ...markdownGithubI18n['ar'],
   ...autocompleteScopeI18n['ar'],

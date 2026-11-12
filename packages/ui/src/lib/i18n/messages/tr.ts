@@ -52,6 +52,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -174,6 +175,7 @@ export const dict = {
   ...pluginsGridI18n.tr,
   ...integrationsCatalogI18n['tr'],
   ...diffFindI18n['tr'],
+  ...gitlabIssueI18n['tr'],
   ...markdownOutlineI18n['tr'],
   ...markdownGithubI18n['tr'],
   ...autocompleteScopeI18n['tr'],
@@ -685,6 +687,7 @@ export const dict = {
   'sessions.sidebar.project.actions.closeProject': 'Projeyi kapat',
   'sessions.sidebar.project.actions.newDraftSession': 'Yeni taslak session',
   'sessions.sidebar.project.actions.copyPath': 'Yolu kopyala',
+  'sessions.sidebar.project.actions.newGitlabIssue': 'Yeni GitLab sorunu',
   'sessions.sidebar.project.copyPath.success': 'Proje yolu kopyalandı',
   'sessions.sidebar.project.copyPath.error': 'Proje yolu kopyalanamadı',
   'sessions.sidebar.session.menu.rename': 'Yeniden adlandır',
@@ -2420,6 +2423,8 @@ export const dict = {
   'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
   'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
   'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
+  'chat.commandAutocomplete.command.gitlabIssueDescription': 'Bu proje için GitLab sorunu penceresini aç.',
+  'chat.chatInput.toast.gitlabIssueNoProject': 'Bu klasörle eşleşen proje yok.',
   'chat.commandAutocomplete.empty': 'Komut bulunamadı',
   'chat.agentMentionAutocomplete.badge.system': 'sistem',
   'chat.agentMentionAutocomplete.empty': 'Agent bulunamadı',
@@ -2786,6 +2791,7 @@ export const dict = {
   'commandPalette.item.newMiniChat': 'Yeni Mini Sohbet Penceresi',
   'commandPalette.item.quickWorktree': 'Hızlı worktree',
   'commandPalette.item.newWorktreeDialog': 'Yeni worktree…',
+  'commandPalette.item.newGitlabIssue': 'Yeni GitLab sorunu…',
   'commandPalette.item.addProject': 'Proje Ekle',
   'commandPalette.item.showSessionSwitcher': 'Session değiştiriciyi göster',
   'commandPalette.item.toggleSidebar': 'Kenar çubuğunu aç/kapat',

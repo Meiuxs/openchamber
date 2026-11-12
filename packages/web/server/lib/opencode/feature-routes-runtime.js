@@ -99,6 +99,7 @@ import { createOpenCodeClient } from '../openchamber-sessions/opencode-client.js
 import { createGitlabIssueDispatcher } from '../gitlab-issues/dispatcher.js';
 import { createGitlabIssueWorkspace } from '../gitlab-issues/workspace.js';
 import { createClientForAccount, createGitlabIssueApi } from '../gitlab-issues/gitlab.js';
+import { registerGitlabIssueRoutes } from '../gitlab-issues/routes.js';
 import { createSourceControlProviders } from '../source-control/provider-registry.js';
 import { createGitCredentialResolver, createHttpsCredentialReference, parseGitCredentialReference } from '../git/credential-resolver.js';
 import { createGitRepositoryCredentialRuntime } from '../git/repository-credential-runtime.js';
@@ -802,6 +803,13 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       logger: console,
     });
     gitlabIssueDispatcher.start();
+    registerGitlabIssueRoutes(app, {
+      readProjects: async () => sanitizeProjects((await readSettingsFromDiskMigrated())?.projects || []),
+      bindingService: walkthroughBindingService,
+      authStore: sourceControlAuthStore,
+      normalizeDirectoryPath,
+      logger: console,
+    });
     await registerBuiltInGuests({ persistPath: extensionsPersistPath(openchamberDataDir), root: routeDependencies.builtInExtensionsDir });
     // A change every client reads again from the server; the event carries nothing.
     const announceChange = (type) => {

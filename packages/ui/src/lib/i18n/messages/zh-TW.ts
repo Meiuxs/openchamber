@@ -53,6 +53,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -236,6 +237,7 @@ export const dict: Record<I18nKey, string> = {
   ...pluginsGridI18n['zh-TW'],
   ...integrationsCatalogI18n['zh-TW'],
   ...diffFindI18n['zh-TW'],
+  ...gitlabIssueI18n['zh-TW'],
   ...markdownOutlineI18n['zh-TW'],
   ...markdownGithubI18n['zh-TW'],
   ...autocompleteScopeI18n['zh-TW'],
@@ -793,6 +795,7 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.actions.edit': '編輯',
   'sessions.sidebar.project.actions.newDraftSession': '新增草稿會話',
   'sessions.sidebar.project.actions.copyPath': '複製路徑',
+  'sessions.sidebar.project.actions.newGitlabIssue': '新增 GitLab 議題',
   'sessions.sidebar.project.copyPath.success': '已複製專案路徑',
   'sessions.sidebar.project.copyPath.error': '無法複製專案路徑',
   'sessions.sidebar.session.menu.rename': '重新命名',
@@ -2541,6 +2544,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.commandAutocomplete.command.issueWorkDescription': '處理已指派的本地議題：從選單挑選、核實錨點、確認後修復。',
   'chat.chatInput.toast.localIssuesFailed': '本地議題命令執行失敗',
   'chat.chatInput.toast.issueWorkFailed': '議題修復啟動失敗',
+  'chat.commandAutocomplete.command.gitlabIssueDescription': '為目前專案開啟 GitLab 議題視窗。',
+  'chat.chatInput.toast.gitlabIssueNoProject': '找不到符合此資料夾的專案。',
   'chat.commandAutocomplete.empty': '找不到命令',
   'chat.agentMentionAutocomplete.badge.system': '系統',
   'chat.agentMentionAutocomplete.empty': '找不到 Agent',
@@ -2936,6 +2941,7 @@ export const dict: Record<I18nKey, string> = {
   'commandPalette.item.newMiniChat': '新增 Mini Chat 視窗',
   'commandPalette.item.quickWorktree': '快速 worktree',
   'commandPalette.item.newWorktreeDialog': '新增 worktree…',
+  'commandPalette.item.newGitlabIssue': '新增 GitLab 議題…',
   'commandPalette.item.addProject': '新增專案',
   'commandPalette.item.showSessionSwitcher': '顯示會話切換器',
   'commandPalette.item.toggleSidebar': '切換側邊欄',

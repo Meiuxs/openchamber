@@ -146,6 +146,8 @@ interface SortableProjectItemProps extends ProjectIdentityProps {
   onManageSpaces?: () => void;
   /** The issues and PRs board on this project's repository; absent in VS Code. */
   onOpenSourceBoard?: () => void;
+  /** Opens the New GitLab issue dialog; absent without a configured bot account. */
+  onNewGitlabIssue?: () => void;
   onNewFolder?: () => void;
   onOpenFolder?: () => void;
   onRenameStart: () => void;
@@ -185,6 +187,7 @@ export const SortableProjectItem: React.FC<SortableProjectItemProps> = ({
   onManageWorktrees,
   onManageSpaces,
   onOpenSourceBoard,
+  onNewGitlabIssue,
   onNewFolder,
   onOpenFolder,
   onRenameStart,
@@ -261,6 +264,12 @@ export const SortableProjectItem: React.FC<SortableProjectItemProps> = ({
         <Item onClick={onOpenSourceBoard}>
           <Icon name="git-pull-request" className="me-1.5 h-4 w-4" />
           {t('sourceBoard.title')}
+        </Item>
+      )}
+      {isRepo && !hideDirectoryControls && onNewGitlabIssue && (
+        <Item onClick={onNewGitlabIssue}>
+          <Icon name="gitlab" className="me-1.5 h-4 w-4" />
+          {t('sessions.sidebar.project.actions.newGitlabIssue')}
         </Item>
       )}
       {!hideDirectoryControls && onNewFolder && (

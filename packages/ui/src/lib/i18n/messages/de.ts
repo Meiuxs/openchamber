@@ -52,6 +52,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -235,6 +236,7 @@ export const dict = {
   ...pluginsGridI18n.de,
   ...integrationsCatalogI18n['de'],
   ...diffFindI18n['de'],
+  ...gitlabIssueI18n['de'],
   ...markdownOutlineI18n['de'],
   ...markdownGithubI18n['de'],
   ...autocompleteScopeI18n['de'],
@@ -694,6 +696,7 @@ export const dict = {
   'sessions.sidebar.project.actions.closeProject': 'Projekt schließen',
   'sessions.sidebar.project.actions.newDraftSession': 'Neue Entwurfs-Sitzung',
   'sessions.sidebar.project.actions.copyPath': 'Pfad kopieren',
+  'sessions.sidebar.project.actions.newGitlabIssue': 'Neues GitLab-Issue',
   'sessions.sidebar.project.copyPath.success': 'Projektpfad kopiert',
   'sessions.sidebar.project.copyPath.error': 'Projektpfad konnte nicht kopiert werden',
   'sessions.sidebar.session.menu.rename': 'Umbenennen',
@@ -2296,6 +2299,8 @@ export const dict = {
   'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
   'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
   'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
+  'chat.commandAutocomplete.command.gitlabIssueDescription': 'GitLab-Issue-Dialog für dieses Projekt öffnen.',
+  'chat.chatInput.toast.gitlabIssueNoProject': 'Kein Projekt passt zu diesem Ordner.',
   'chat.commandAutocomplete.empty': 'Keine Befehle gefunden',
   'chat.agentMentionAutocomplete.badge.system': 'System',
   'chat.agentMentionAutocomplete.empty': 'Keine Agenten gefunden',
@@ -2669,6 +2674,7 @@ export const dict = {
   'commandPalette.item.newMiniChat': 'Neues Mini-Chat-Fenster',
   'commandPalette.item.quickWorktree': 'Schneller Worktree',
   'commandPalette.item.newWorktreeDialog': 'Neuer Worktree…',
+  'commandPalette.item.newGitlabIssue': 'Neues GitLab-Issue…',
   'commandPalette.item.addProject': 'Projekt hinzufügen',
   'commandPalette.item.showSessionSwitcher': 'Sitzungsumschalter anzeigen',
   'commandPalette.item.toggleSidebar': 'Seitenleiste umschalten',

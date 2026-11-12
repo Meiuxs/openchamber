@@ -980,6 +980,8 @@ interface UIStore {
   spacesPageProjectId: string | null;
   isSettingsDialogOpen: boolean;
   isNewWorktreeDialogOpen: boolean;
+  /** Project whose New GitLab issue dialog is open, or null. */
+  gitlabIssueDialogProjectId: string | null;
   isModelSelectorOpen: boolean;
   sidebarSection: SidebarSection;
 
@@ -1351,6 +1353,7 @@ interface UIStore {
   closeMainSurfaces: () => void;
   setSettingsDialogOpen: (open: boolean) => void;
   setNewWorktreeDialogOpen: (open: boolean) => void;
+  setGitlabIssueDialogProjectId: (projectId: string | null) => void;
   setModelSelectorOpen: (open: boolean) => void;
   applyTheme: () => void;
   setSidebarSection: (section: SidebarSection) => void;
@@ -1627,6 +1630,7 @@ export const useUIStore = create<UIStore>()(
         spacesPageProjectId: null,
         isSettingsDialogOpen: false,
         isNewWorktreeDialogOpen: false,
+        gitlabIssueDialogProjectId: null,
         isModelSelectorOpen: false,
         sidebarSection: 'sessions',
         settingsPage: 'home',
@@ -2682,6 +2686,10 @@ export const useUIStore = create<UIStore>()(
 
         setNewWorktreeDialogOpen: (open) => {
           set({ isNewWorktreeDialogOpen: open });
+        },
+
+        setGitlabIssueDialogProjectId: (projectId) => {
+          set({ gitlabIssueDialogProjectId: projectId });
         },
 
         setModelSelectorOpen: (open) => {

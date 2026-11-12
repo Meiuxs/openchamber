@@ -192,6 +192,10 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
         ? [{ id: 'openchamber:explore', name: 'explore', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.exploreDescription'), isOpenChamber: true }]
         : []
       ),
+      ...(canStartSessionCommand
+        ? [{ id: 'openchamber:gitlab-issue', name: 'gitlab-issue', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.gitlabIssueDescription'), isOpenChamber: true }]
+        : []
+      ),
     ];
     const extensionCommands: CommandInfo[] = guestCommands.map((entry) => ({
       id: `extension:${entry.guestId}:${entry.command.name}`,

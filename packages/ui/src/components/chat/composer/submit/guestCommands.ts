@@ -15,7 +15,7 @@ import { parseSlashCommand } from './slashCommands';
 const COMPOSER_LOCAL_COMMAND_NAMES = [
     'init', 'review', 'undo', 'redo', 'timeline', 'compact', 'fork', 'btw', 'summary', 'workspace-review', 'handoff-review',
     'plan-feature', 'craft-goal', 'schedule-task', 'catch-up', 'debug', 'weigh', 'explore',
-    'local-issues', 'issue-work',
+    'local-issues', 'issue-work', 'gitlab-issue',
 ];
 
 /**
