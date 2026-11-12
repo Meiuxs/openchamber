@@ -498,6 +498,9 @@
     "allowedInsecureGitOrigins": {
       "scope": "profile"
     },
+    "npmRegistry": {
+      "scope": "profile"
+    },
     "defaultFileViewerPreview": {
       "scope": "profile"
     },
