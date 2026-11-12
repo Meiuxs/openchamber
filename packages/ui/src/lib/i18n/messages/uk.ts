@@ -53,6 +53,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -246,6 +247,7 @@ export const dict: Record<I18nKey, string> = {
   ...pluginsGridI18n.uk,
   ...integrationsCatalogI18n['uk'],
   ...diffFindI18n['uk'],
+  ...gitlabIssueI18n['uk'],
   ...markdownOutlineI18n['uk'],
   ...markdownGithubI18n['uk'],
   ...autocompleteScopeI18n['uk'],
@@ -777,6 +779,7 @@ export const dict: Record<I18nKey, string> = {
   "sessions.sidebar.project.actions.edit": "Редагувати",
   "sessions.sidebar.project.actions.newDraftSession": "Нова чернетка сесії",
   "sessions.sidebar.project.actions.copyPath": "Копіювати шлях",
+  "sessions.sidebar.project.actions.newGitlabIssue": "Нова задача GitLab",
   "sessions.sidebar.project.copyPath.success": "Шлях проєкту скопійовано",
   "sessions.sidebar.project.copyPath.error": "Не вдалося скопіювати шлях проєкту",
   "sessions.sidebar.session.menu.rename": "Перейменувати",
@@ -2532,6 +2535,8 @@ export const dict: Record<I18nKey, string> = {
   "chat.commandAutocomplete.command.issueWorkDescription": "Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.",
   "chat.chatInput.toast.localIssuesFailed": "Failed to run the local issues command",
   "chat.chatInput.toast.issueWorkFailed": "Failed to start issue work",
+  "chat.commandAutocomplete.command.gitlabIssueDescription": "Відкрити вікно завдання GitLab для цього проєкту.",
+  "chat.chatInput.toast.gitlabIssueNoProject": "Жоден проєкт не відповідає цій теці.",
   "chat.commandAutocomplete.empty": "Команди не знайдено",
   "chat.agentMentionAutocomplete.badge.system": "система",
   "chat.agentMentionAutocomplete.empty": "Агентів не знайдено",
@@ -2915,6 +2920,7 @@ export const dict: Record<I18nKey, string> = {
   "commandPalette.item.newMiniChat": "Нове вікно Mini Chat",
   "commandPalette.item.quickWorktree": "Швидкий worktree",
   "commandPalette.item.newWorktreeDialog": "Новий worktree…",
+  "commandPalette.item.newGitlabIssue": "Нова задача GitLab…",
   "commandPalette.item.addProject": "Додати проєкт",
   "commandPalette.item.showSessionSwitcher": "Показати перемикач сесій",
   "commandPalette.item.toggleSidebar": "Перемкнути бічну панель",

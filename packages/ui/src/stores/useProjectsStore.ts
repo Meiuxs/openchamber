@@ -699,7 +699,7 @@ export const useProjectsStore = create<ProjectsStore>()(
           return null;
         }
         const normalizedPath = validation.normalizedPath;
-        const existing = get().projects.find((project) => project.path === normalizedPath);
+        const existing = get().projects.find((project) => normalizeProjectPath(project.path) === normalizeProjectPath(normalizedPath));
         if (existing) {
           return existing;
         }
@@ -722,7 +722,12 @@ export const useProjectsStore = create<ProjectsStore>()(
       }
 
       const normalizedPath = validation.normalizedPath;
-      const existing = get().projects.find((project) => project.path === normalizedPath);
+      // The stored path and the validated one can differ in separator spelling
+      // (a Windows settings record keeps backslashes); a match must not add a
+      // second entry for the same folder and drop its meta.
+      const existing = get().projects.find((project) => (
+        normalizeProjectPath(project.path) === normalizeProjectPath(normalizedPath)
+      ));
       if (existing) {
         get().setActiveProject(existing.id);
         return existing;

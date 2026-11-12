@@ -17,6 +17,7 @@ import { useSelectionStore } from '@/sync/selection-store';
 import { prepareUserMessageResume } from '@/sync/user-message-resume';
 import { prepareLocalAttachments, useDraftAttachedFiles, useInputStore, type ComposerAddress, type SyntheticContextPart } from '@/sync/input-store';
 import { useProjectsStore } from '@/stores/useProjectsStore';
+import { resolveProjectForSessionDirectory } from '@/lib/projectResolution';
 import { openParallelComposer } from '@/lib/multirun/openParallelComposer';
 import { useParallelComposer } from './composer/parallel/useParallelComposer';
 import { ParallelComposerStrip } from './composer/parallel/ParallelComposerStrip';
@@ -2331,7 +2332,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         // Action commands change session or UI state and send nothing. The
         // command text goes; the queue and whatever the composer had attached
         // stay exactly where they are.
-        if (commandPlan?.kind === 'action' && currentSessionId) {
+        const runsWithoutSession = commandPlan?.command.name === 'gitlab-issue';
+        if (commandPlan?.kind === 'action' && (currentSessionId || runsWithoutSession)) {
             const actionName = commandPlan.command.name;
             setMessage('');
             confirmedMentionsRef.current.clear();
@@ -2341,17 +2343,26 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
             if (!isBtwActive) setExpandedInput(false);
             if (isMobile) composerRef.current?.blur();
             try {
-                if (actionName === 'undo') {
+                if (currentSessionId && actionName === 'undo') {
                     await useSessionUIStore.getState().handleSlashUndo(currentSessionId);
                     scrollToBottom?.();
-                } else if (actionName === 'redo') {
+                } else if (currentSessionId && actionName === 'redo') {
                     await useSessionUIStore.getState().handleSlashRedo(currentSessionId);
                     scrollToBottom?.();
                 } else if (actionName === 'timeline') {
                     openTimelineDialog();
                 } else if (actionName === 'handoff-review') {
                     setReviewDialogOpen(true);
-                } else if (actionName === 'fork') {
+                } else if (actionName === 'gitlab-issue') {
+                    // The dialog confirms and files; the bot token never reaches the model.
+                    const project = resolveProjectForSessionDirectory(
+                        useProjectsStore.getState().projects,
+                        useSessionUIStore.getState().availableWorktreesByProject,
+                        currentDirectory,
+                    );
+                    if (project) useUIStore.getState().setGitlabIssueDialogProjectId(project.id);
+                    else toast.error(t('chat.chatInput.toast.gitlabIssueNoProject'));
+                } else if (currentSessionId && actionName === 'fork') {
                     const forkOutcome = await runForkCommand(currentSessionId, commandPlan.command.argument, {
                         // The fork branches the main session, so it keeps that session's
                         // selection even while the btw panel owns the composer.
@@ -2378,7 +2389,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
                         restoreText: (target, text) => useInputStore.setState({ pendingComposerRestore: { target, text, files: [] } }),
                     });
                     if (forkOutcome === 'send-failed') toast.error(t('chat.chatInput.toast.forkSendFailed'));
-                } else if (actionName === 'compact') {
+                } else if (currentSessionId && actionName === 'compact') {
                     await sessionActions.waitForConnectionOrThrow();
                     const compactDirectory = useSessionUIStore.getState().getDirectoryForSession(currentSessionId) || currentDirectory || undefined;
                     // Compaction belongs to the main session, including its

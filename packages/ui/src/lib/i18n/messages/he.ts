@@ -52,6 +52,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -699,6 +700,7 @@ export const dict = {
   'sessions.sidebar.project.actions.closeProject': 'סגור פרויקט',
   'sessions.sidebar.project.actions.newDraftSession': 'טיוטת הפעלה חדשה',
   'sessions.sidebar.project.actions.copyPath': 'העתק נתיב',
+  'sessions.sidebar.project.actions.newGitlabIssue': 'בעיית GitLab חדשה',
   'sessions.sidebar.project.copyPath.success': 'נתיב הפרויקט הועתק',
   'sessions.sidebar.project.copyPath.error': 'לא ניתן להעתיק את נתיב הפרויקט',
   'sessions.sidebar.session.menu.rename': 'שנה שם',
@@ -2470,6 +2472,8 @@ export const dict = {
   'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
   'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
   'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
+  'chat.commandAutocomplete.command.gitlabIssueDescription': 'פתח את חלון גיליון GitLab עבור הפרויקט הזה.',
+  'chat.chatInput.toast.gitlabIssueNoProject': 'אין פרויקט שמתאים לתיקייה הזו.',
   'chat.commandAutocomplete.command.btwDescription': 'שאלה צדדית בהפעלת משנה זמנית, בלי להסיט את הצ\'אט הזה.',
   'chat.commandAutocomplete.command.forkDescription': 'פיצול הצ\'אט מהתגובה האחרונה שהסתיימה והמשך שם; טקסט אחרי /fork נשלח להפעלה המפוצלת.',
   'chat.commandAutocomplete.empty': 'לא נמצאו פקודות',
@@ -2867,6 +2871,7 @@ export const dict = {
   'commandPalette.item.newMiniChat': 'חלון מיני צ\'אט חדש',
   'commandPalette.item.quickWorktree': 'עץ עבודה (worktree) מהיר',
   'commandPalette.item.newWorktreeDialog': 'עץ עבודה (worktree) חדש…',
+  'commandPalette.item.newGitlabIssue': 'בעיית GitLab חדשה…',
   'commandPalette.item.addProject': 'הוסף פרויקט',
   'commandPalette.item.showSessionSwitcher': 'הצג את מחליף ההפעלות',
   'commandPalette.item.toggleSidebar': 'הצג/הסתר סרגל צד',
@@ -3954,6 +3959,7 @@ export const dict = {
   ...pluginsGridI18n.he,
   ...integrationsCatalogI18n['he'],
   ...diffFindI18n['he'],
+  ...gitlabIssueI18n['he'],
   ...markdownOutlineI18n['he'],
   ...markdownGithubI18n['he'],
   ...autocompleteScopeI18n['he'],

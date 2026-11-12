@@ -57,6 +57,13 @@ export const parseIssueTemplate = (issue) => {
   return { kind, targetBranch };
 };
 
+/** The machine-readable header the dispatcher parses, plus the author's body. */
+export const buildIssueDescription = ({ kind, targetBranch, description }) => {
+  const header = `类型: ${kind}\n目标分支: \`${isString(targetBranch) ? targetBranch.trim() : ''}\``;
+  const body = isString(description) ? description.trim() : '';
+  return body ? `${header}\n\n${body}` : header;
+};
+
 export const resolveProjectConfig = (project) => {
   const rawPrefix = project?.gitlabIssueBranchPrefix;
   const hasPrefix = isString(rawPrefix);
@@ -129,6 +136,7 @@ export function createGitlabIssueApi({ client }) {
       withLabelsDetails: true,
     }), ISSUE_SCAN_PAGES),
     getIssue: (projectId, iid) => client.Issues.show(iid, { projectId }),
+    createIssue: (projectId, title, description) => client.Issues.create(projectId, title, { description }),
     listNotes: (projectId, iid) => readAll((page) => client.IssueNotes.all(projectId, iid, {
       perPage: page.perPage,
       page: page.page,

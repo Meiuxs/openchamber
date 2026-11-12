@@ -8,7 +8,7 @@ const hasRefSpecialChar = (name: string): boolean => {
   return false;
 };
 
-const isValidGitRefName = (name: string): boolean => {
+export const isValidGitRefName = (name: string): boolean => {
   if (!name || name.length > 255) return false;
   if (name === '@' || name.startsWith('-') || name.startsWith('.') || name.endsWith('.') || name.endsWith('/')) return false;
   if (name.includes('..') || name.includes('@{') || name.includes('//')) return false;

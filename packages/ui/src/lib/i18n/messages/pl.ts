@@ -53,6 +53,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -236,6 +237,7 @@ export const dict: Record<I18nKey, string> = {
   ...pluginsGridI18n.pl,
   ...integrationsCatalogI18n['pl'],
   ...diffFindI18n['pl'],
+  ...gitlabIssueI18n['pl'],
   ...markdownOutlineI18n['pl'],
   ...markdownGithubI18n['pl'],
   ...autocompleteScopeI18n['pl'],
@@ -593,6 +595,7 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.actions.edit': 'Edytuj',
   'sessions.sidebar.project.actions.newDraftSession': 'Nowa sesja robocza',
   'sessions.sidebar.project.actions.copyPath': 'Kopiuj ścieżkę',
+  'sessions.sidebar.project.actions.newGitlabIssue': 'Nowe zgłoszenie GitLab',
   'sessions.sidebar.project.copyPath.success': 'Skopiowano ścieżkę projektu',
   'sessions.sidebar.project.copyPath.error': 'Nie udało się skopiować ścieżki projektu',
   'sessions.sidebar.session.menu.rename': 'Zmień nazwę',
@@ -1114,6 +1117,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
   'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
   'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
+  'chat.commandAutocomplete.command.gitlabIssueDescription': 'Otwórz okno zgłoszenia GitLab dla tego projektu.',
+  'chat.chatInput.toast.gitlabIssueNoProject': 'Żaden projekt nie pasuje do tego folderu.',
   'chat.commandAutocomplete.empty': 'Nie znaleziono poleceń',
   'chat.agentMentionAutocomplete.badge.system': 'system',
   'chat.agentMentionAutocomplete.empty': 'Nie znaleziono agentów',
@@ -1734,6 +1739,7 @@ export const dict: Record<I18nKey, string> = {
   'commandPalette.item.newMiniChat': 'Nowe okno Mini Chat',
   'commandPalette.item.quickWorktree': 'Szybki worktree',
   'commandPalette.item.newWorktreeDialog': 'Nowy worktree…',
+  'commandPalette.item.newGitlabIssue': 'Nowe zgłoszenie GitLab…',
   'commandPalette.item.addProject': 'Dodaj projekt',
   'commandPalette.item.openSettings': 'Otwórz ustawienia...',
   'commandPalette.item.showContextUsage': 'Pokaż użycie kontekstu',

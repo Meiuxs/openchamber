@@ -53,6 +53,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -236,6 +237,7 @@ export const dict: Record<I18nKey, string> = {
   ...pluginsGridI18n.ko,
   ...integrationsCatalogI18n['ko'],
   ...diffFindI18n['ko'],
+  ...gitlabIssueI18n['ko'],
   ...markdownOutlineI18n['ko'],
   ...markdownGithubI18n['ko'],
   ...autocompleteScopeI18n['ko'],
@@ -773,6 +775,7 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.actions.edit': '편집',
   'sessions.sidebar.project.actions.newDraftSession': '새 드래프트 세션',
   'sessions.sidebar.project.actions.copyPath': '경로 복사',
+  'sessions.sidebar.project.actions.newGitlabIssue': '새 GitLab 이슈',
   'sessions.sidebar.project.copyPath.success': '프로젝트 경로를 복사했습니다',
   'sessions.sidebar.project.copyPath.error': '프로젝트 경로를 복사하지 못했습니다',
   'sessions.sidebar.session.menu.rename': '이름 변경',
@@ -2564,6 +2567,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
   'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
   'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
+  'chat.commandAutocomplete.command.gitlabIssueDescription': '이 프로젝트의 GitLab 이슈 대화상자를 엽니다.',
+  'chat.chatInput.toast.gitlabIssueNoProject': '이 폴더와 일치하는 프로젝트가 없습니다.',
   'chat.commandAutocomplete.empty': '명령 없음',
   'chat.agentMentionAutocomplete.badge.system': 'system',
   'chat.agentMentionAutocomplete.empty': '에이전트 없음',
@@ -2959,6 +2964,7 @@ export const dict: Record<I18nKey, string> = {
   'commandPalette.item.newMiniChat': '새 Mini Chat 창',
   'commandPalette.item.quickWorktree': '빠른 worktree',
   'commandPalette.item.newWorktreeDialog': '새 worktree…',
+  'commandPalette.item.newGitlabIssue': '새 GitLab 이슈…',
   'commandPalette.item.addProject': '프로젝트 추가',
   'commandPalette.item.showSessionSwitcher': '세션 전환기 표시',
   'commandPalette.item.toggleSidebar': '토글 사이드바',

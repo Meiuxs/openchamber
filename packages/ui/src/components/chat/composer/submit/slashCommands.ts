@@ -9,8 +9,8 @@
  * commands are data.
  *
  * Commands that are not "send a prompt pair" (undo, redo, timeline, compact,
- * handoff-review, fork) stay with the composer: they manipulate session state or
- * open UI rather than producing a message.
+ * handoff-review, fork, gitlab-issue) stay with the composer: they manipulate
+ * session state or open UI rather than producing a message.
  */
 
 import type { I18nKey } from '@/lib/i18n';
@@ -69,6 +69,12 @@ const issueWorkVariables = (argument: string) => ({
     visible: { focus_block: argument ? ` Focus: ${argument}.` : '' },
     instructions: { focus_block: argument ? ` ${argument}` : '' },
 });
+
+/**
+ * `/gitlab-issue` files through the confirmation dialog rather than the model:
+ * the dialog is the confirmation step, and the bot token lives on the server.
+ */
+const GITLAB_ISSUE_COMMAND = 'gitlab-issue';
 
 export const MAGIC_PROMPT_COMMANDS: readonly MagicPromptCommand[] = [
     {
@@ -215,6 +221,15 @@ export function planLocalSlashCommand(
     if (LOCAL_ACTION_COMMANDS.has(command.name)) {
         if (!hasSession) return null;
 
+        return {
+            command,
+            kind: 'action',
+            attachedContext: hasAttachedContext ? 'retain' : 'none',
+        };
+    }
+
+    // The dialog owns the whole flow, so a new-session draft runs it too.
+    if (command.name === GITLAB_ISSUE_COMMAND) {
         return {
             command,
             kind: 'action',

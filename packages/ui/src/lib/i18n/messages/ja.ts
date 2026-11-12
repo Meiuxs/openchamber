@@ -53,6 +53,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -236,6 +237,7 @@ export const dict: Record<I18nKey, string> = {
   ...pluginsGridI18n.ja,
   ...integrationsCatalogI18n['ja'],
   ...diffFindI18n['ja'],
+  ...gitlabIssueI18n['ja'],
   ...markdownOutlineI18n['ja'],
   ...markdownGithubI18n['ja'],
   ...autocompleteScopeI18n['ja'],
@@ -773,6 +775,7 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.actions.edit': '編集',
   'sessions.sidebar.project.actions.newDraftSession': '新しい下書きセッション',
   'sessions.sidebar.project.actions.copyPath': 'パスをコピー',
+  'sessions.sidebar.project.actions.newGitlabIssue': 'GitLab イシューを作成',
   'sessions.sidebar.project.copyPath.success': 'プロジェクトのパスをコピーしました',
   'sessions.sidebar.project.copyPath.error': 'プロジェクトのパスをコピーできませんでした',
   'sessions.sidebar.session.menu.rename': '名前の変更',
@@ -2560,6 +2563,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
   'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
   'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
+  'chat.commandAutocomplete.command.gitlabIssueDescription': 'このプロジェクトの GitLab イシューダイアログを開きます。',
+  'chat.chatInput.toast.gitlabIssueNoProject': 'このフォルダーに一致するプロジェクトがありません。',
   'chat.commandAutocomplete.empty': 'コマンドが見つかりません',
   'chat.agentMentionAutocomplete.badge.system': 'システム',
   'chat.agentMentionAutocomplete.empty': 'エージェントが見つかりません',
@@ -2958,6 +2963,7 @@ export const dict: Record<I18nKey, string> = {
   'commandPalette.item.newMiniChat': '新しいMini Chatウィンドウ',
   'commandPalette.item.quickWorktree': 'クイックワークツリー',
   'commandPalette.item.newWorktreeDialog': '新しいワークツリー…',
+  'commandPalette.item.newGitlabIssue': 'GitLab イシューを作成…',
   'commandPalette.item.addProject': 'プロジェクトを追加',
   'commandPalette.item.showSessionSwitcher': 'セッションスイッチャーを表示',
   'commandPalette.item.toggleSidebar': 'サイドバーの切り替え',

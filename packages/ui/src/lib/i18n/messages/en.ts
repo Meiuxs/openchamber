@@ -52,6 +52,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -235,6 +236,7 @@ export const dict = {
   ...pluginsGridI18n.en,
   ...integrationsCatalogI18n['en'],
   ...diffFindI18n['en'],
+  ...gitlabIssueI18n['en'],
   ...markdownOutlineI18n['en'],
   ...markdownGithubI18n['en'],
   ...autocompleteScopeI18n['en'],
@@ -772,6 +774,7 @@ export const dict = {
   'sessions.sidebar.project.actions.closeProject': 'Close project',
   'sessions.sidebar.project.actions.newDraftSession': 'New draft session',
   'sessions.sidebar.project.actions.copyPath': 'Copy path',
+  'sessions.sidebar.project.actions.newGitlabIssue': 'New GitLab issue',
   'sessions.sidebar.project.copyPath.success': 'Project path copied',
   'sessions.sidebar.project.copyPath.error': 'Failed to copy the project path',
   'sessions.sidebar.session.menu.rename': 'Rename',
@@ -2562,6 +2565,8 @@ export const dict = {
   'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
   'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
   'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
+  'chat.commandAutocomplete.command.gitlabIssueDescription': 'Open the GitLab issue dialog for this project.',
+  'chat.chatInput.toast.gitlabIssueNoProject': 'No project matches this folder.',
   'chat.commandAutocomplete.command.btwDescription': 'Ask a side question in a temporary child session without derailing this chat.',
   'chat.commandAutocomplete.command.forkDescription': 'Fork this chat from the last finished reply and continue there; text after /fork is sent to the fork.',
   'chat.commandAutocomplete.empty': 'No commands found',
@@ -2959,6 +2964,7 @@ export const dict = {
   'commandPalette.item.newMiniChat': 'New Mini Chat Window',
   'commandPalette.item.quickWorktree': 'Quick Worktree',
   'commandPalette.item.newWorktreeDialog': 'New Worktree…',
+  'commandPalette.item.newGitlabIssue': 'New GitLab issue…',
   'commandPalette.item.addProject': 'Add Project',
   'commandPalette.item.showSessionSwitcher': 'Show Session Switcher',
   'commandPalette.item.toggleSidebar': 'Toggle Sidebar',

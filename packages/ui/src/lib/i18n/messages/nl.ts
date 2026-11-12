@@ -52,6 +52,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -235,6 +236,7 @@ export const dict = {
   ...pluginsGridI18n.nl,
   ...integrationsCatalogI18n['nl'],
   ...diffFindI18n['nl'],
+  ...gitlabIssueI18n['nl'],
   ...markdownOutlineI18n['nl'],
   ...markdownGithubI18n['nl'],
   ...autocompleteScopeI18n['nl'],
@@ -767,6 +769,7 @@ export const dict = {
   'sessions.sidebar.project.actions.closeProject': 'Project sluiten',
   'sessions.sidebar.project.actions.newDraftSession': 'Nieuwe concept-sessie',
   'sessions.sidebar.project.actions.copyPath': 'Pad kopiëren',
+  'sessions.sidebar.project.actions.newGitlabIssue': 'Nieuw GitLab-issue',
   'sessions.sidebar.project.copyPath.success': 'Projectpad gekopieerd',
   'sessions.sidebar.project.copyPath.error': 'Kan het projectpad niet kopiëren',
   'sessions.sidebar.session.menu.rename': 'Naam wijzigen',
@@ -2562,6 +2565,8 @@ export const dict = {
   'chat.commandAutocomplete.command.issueWorkDescription': 'Work the assigned local issues: pick from a menu, verify the anchors, fix with confirmation.',
   'chat.chatInput.toast.localIssuesFailed': 'Failed to run the local issues command',
   'chat.chatInput.toast.issueWorkFailed': 'Failed to start issue work',
+  'chat.commandAutocomplete.command.gitlabIssueDescription': 'Het GitLab-issuevenster voor dit project openen.',
+  'chat.chatInput.toast.gitlabIssueNoProject': 'Geen project komt overeen met deze map.',
   'chat.commandAutocomplete.command.btwDescription': 'Stel een bijvraag in een tijdelijke subsessie zonder deze chat uit de koers te halen.',
   'chat.commandAutocomplete.command.forkDescription': 'Fork deze chat vanaf het laatst afgeronde antwoord en ga daar verder; tekst na /fork wordt naar de fork gestuurd.',
   'chat.commandAutocomplete.empty': 'Geen opdrachten gevonden',
@@ -2959,6 +2964,7 @@ export const dict = {
   'commandPalette.item.newMiniChat': 'Nieuw Mini Chat-venster',
   'commandPalette.item.quickWorktree': 'Snelle worktree',
   'commandPalette.item.newWorktreeDialog': 'Nieuwe worktree…',
+  'commandPalette.item.newGitlabIssue': 'Nieuw GitLab-issue…',
   'commandPalette.item.addProject': 'Project toevoegen',
   'commandPalette.item.showSessionSwitcher': 'Sessiewisselaar tonen',
   'commandPalette.item.toggleSidebar': 'Zijbalk tonen of verbergen',

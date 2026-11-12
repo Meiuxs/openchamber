@@ -5,6 +5,7 @@ import { AppStartupOverlay } from '@/components/ui/AppStartupOverlay';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { AppLinkConfirmDialog } from '@/components/chat/AppLinkConfirmDialog';
 import { SnippetQuickCreateDialog } from '@/components/snippets/SnippetQuickCreateDialog';
+import { GitlabIssueDialog } from '@/components/gitlab-issues/GitlabIssueDialog';
 import { SharedTrustConfirmDialog } from '@/components/projects/SharedTrustConfirmDialog';
 import { OpenCodeTrustDialog } from '@/components/projects/OpenCodeTrustDialog';
 import { FireworksProvider } from '@/contexts/FireworksContext';
@@ -887,6 +888,7 @@ function App({ apis }: AppProps) {
                   <Toaster />
                   <AppLinkConfirmDialog />
                   <SnippetQuickCreateDialog />
+                  <GitlabIssueDialog />
                   <SharedTrustConfirmDialog />
                   <OpenCodeTrustDialog />
                   <ConfigUpdateOverlay />

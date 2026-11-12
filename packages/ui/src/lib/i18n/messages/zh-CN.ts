@@ -53,6 +53,7 @@ import { mcpGridI18n } from './mcp-grid.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
+import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -236,6 +237,7 @@ export const dict: Record<I18nKey, string> = {
   ...pluginsGridI18n['zh-CN'],
   ...integrationsCatalogI18n['zh-CN'],
   ...diffFindI18n['zh-CN'],
+  ...gitlabIssueI18n['zh-CN'],
   ...markdownOutlineI18n['zh-CN'],
   ...markdownGithubI18n['zh-CN'],
   ...autocompleteScopeI18n['zh-CN'],
@@ -773,6 +775,7 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.actions.edit': '编辑',
   'sessions.sidebar.project.actions.newDraftSession': '新建草稿会话',
   'sessions.sidebar.project.actions.copyPath': '复制路径',
+  'sessions.sidebar.project.actions.newGitlabIssue': '新建 GitLab 议题',
   'sessions.sidebar.project.copyPath.success': '已复制项目路径',
   'sessions.sidebar.project.copyPath.error': '无法复制项目路径',
   'sessions.sidebar.session.menu.rename': '重命名',
@@ -2530,6 +2533,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.commandAutocomplete.command.issueWorkDescription': '处理已指派的本地议题：从菜单挑选、核实锚点、确认后修复。',
   'chat.chatInput.toast.localIssuesFailed': '本地议题命令执行失败',
   'chat.chatInput.toast.issueWorkFailed': '议题修复启动失败',
+  'chat.commandAutocomplete.command.gitlabIssueDescription': '为当前项目打开 GitLab 议题弹窗。',
+  'chat.chatInput.toast.gitlabIssueNoProject': '没有与当前文件夹匹配的项目。',
   'chat.commandAutocomplete.empty': '未找到命令',
   'chat.agentMentionAutocomplete.badge.system': '系统',
   'chat.agentMentionAutocomplete.empty': '未找到智能体',
@@ -2925,6 +2930,7 @@ export const dict: Record<I18nKey, string> = {
   'commandPalette.item.newMiniChat': '新建 Mini Chat 窗口',
   'commandPalette.item.quickWorktree': '快速工作树',
   'commandPalette.item.newWorktreeDialog': '新建工作树…',
+  'commandPalette.item.newGitlabIssue': '新建 GitLab 议题…',
   'commandPalette.item.addProject': '添加项目',
   'commandPalette.item.showSessionSwitcher': '显示会话切换器',
   'commandPalette.item.toggleSidebar': '切换侧边栏',

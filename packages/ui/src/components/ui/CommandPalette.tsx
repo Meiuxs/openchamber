@@ -325,6 +325,13 @@ export const CommandPalette: React.FC = () => {
         searchText: t('commandPalette.item.newWorktreeDialog'),
         onSelect: run(openNewWorktreeDialog),
       },
+      ...(activeProject?.gitlabIssueBotAccountId ? [{
+        id: 'new-gitlab-issue',
+        title: t('commandPalette.item.newGitlabIssue'),
+        icon: <Icon name="gitlab" className="me-2 h-4 w-4" />,
+        searchText: t('commandPalette.item.newGitlabIssue'),
+        onSelect: run(() => useUIStore.getState().setGitlabIssueDialogProjectId(activeProject.id)),
+      }] : []),
       {
         id: 'add-project',
         title: t('commandPalette.item.addProject'),
@@ -601,6 +608,7 @@ export const CommandPalette: React.FC = () => {
     setSettingsDialogOpen,
     activeProject?.id,
     activeProject?.path,
+    activeProject?.gitlabIssueBotAccountId,
     projectActions,
     overviewAvailable,
   ]);
