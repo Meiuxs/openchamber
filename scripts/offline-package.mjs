@@ -15,13 +15,20 @@
 //   openchamber-web-<version>.tgz   @openchamber/web，服务端 + CLI（内含打包好的 SDK）
 //   install.ps1 / install.sh        各平台安装脚本（scripts/delivery）
 //   INSTALL.txt                     手工安装、配置与启动说明
+//   skills/<name>/                  随包安装到 ~/.agents/skills 的 agent skills
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const deliveryDir = path.join(repoRoot, 'scripts', 'delivery');
+// Agent skills that ship with the offline package. The install scripts copy
+// each of these into the user's ~/.agents/skills, where OpenChamber and
+// OpenCode discover user-level skills.
+const deliveredSkills = ['gitlab-issue-create'];
+const skillsRoot = path.join(repoRoot, '.agents', 'skills');
 const argv = process.argv.slice(2);
 const has = (name) => argv.includes(name);
 const value = (name, fallback = null) => {
@@ -133,17 +140,40 @@ const zipPath = path.join(repoRoot, `openchamber-intranet-${version}.zip`);
 // Compress-Archive 只接受 .zip 后缀，临时名同样要用 .zip。
 const tmpZipPath = path.join(repoRoot, `openchamber-intranet-${version}-tmp.zip`);
 if (fs.existsSync(tmpZipPath)) fs.rmSync(tmpZipPath);
-const inputs = ['install.ps1', 'install.sh', 'INSTALL.txt', 'RELEASE-NOTES.md', 'policy.example.json']
-  .map((name) => path.join(deliveryDir, name))
-  .concat([sdkTgz, webTgz]);
-if (process.platform === 'win32') {
-  run(`powershell -NoProfile -Command "Compress-Archive -Path '${inputs.join("','")}' -DestinationPath '${tmpZipPath}' -Force"`);
-} else {
-  // -j 去掉目录层级，让 tgz 和安装脚本在 zip 根目录里并列。
-  if (!toolExists('zip')) fail('未找到 zip 命令，无法组装交付包；请先安装（Debian/UOS: apt install zip）后重跑。');
-  run(`zip -j ${quote(tmpZipPath)} ${inputs.map(quote).join(' ')}`);
+
+for (const name of deliveredSkills) {
+  if (!fs.existsSync(path.join(skillsRoot, name, 'SKILL.md'))) {
+    fail(`缺少随包 skill：.agents/skills/${name}/SKILL.md`);
+  }
 }
+// 组装目录：zip 要同时收文件和 skills 目录，flat 的 -j / 逐个 Path 列不够用。
+const stagingDir = path.join(repoRoot, `openchamber-intranet-${version}-staging`);
+fs.rmSync(stagingDir, { recursive: true, force: true });
+fs.mkdirSync(path.join(stagingDir, 'skills'), { recursive: true });
+const deliveryFiles = ['install.ps1', 'install.sh', 'INSTALL.txt', 'RELEASE-NOTES.md', 'policy.example.json'];
+for (const name of deliveryFiles) {
+  fs.copyFileSync(path.join(deliveryDir, name), path.join(stagingDir, name));
+}
+for (const tgz of [sdkTgz, webTgz]) {
+  fs.copyFileSync(tgz, path.join(stagingDir, path.basename(tgz)));
+}
+for (const name of deliveredSkills) {
+  fs.cpSync(path.join(skillsRoot, name), path.join(stagingDir, 'skills', name), { recursive: true });
+}
+// 安装脚本只按这份清单装 skill；仓库 .agents/skills 下的其它开发技能不会进包，
+// 也不会因为将来有人往 skills/ 里多放目录而被顺手装到用户机器上。
+fs.writeFileSync(
+  path.join(stagingDir, 'skills', 'manifest.json'),
+  `${JSON.stringify({ skills: deliveredSkills }, null, 2)}\n`,
+);
 try {
+  if (process.platform === 'win32') {
+    run(`powershell -NoProfile -Command "Compress-Archive -Path '${path.join(stagingDir, '*')}' -DestinationPath '${tmpZipPath}' -Force"`);
+  } else {
+    if (!toolExists('zip')) fail('未找到 zip 命令，无法组装交付包；请先安装（Debian/UOS: apt install zip）后重跑。');
+    const inputs = fs.readdirSync(stagingDir);
+    run(`zip -r ${quote(tmpZipPath)} ${inputs.map(quote).join(' ')}`, { cwd: stagingDir });
+  }
   if (fs.existsSync(zipPath)) fs.rmSync(zipPath);
   fs.renameSync(tmpZipPath, zipPath);
 } catch (error) {
@@ -155,6 +185,8 @@ try {
     ].join('\n'));
   }
   throw error;
+} finally {
+  fs.rmSync(stagingDir, { recursive: true, force: true });
 }
 console.log(`交付 zip：${zipPath}（${(fs.statSync(zipPath).size / 1048576).toFixed(1)} MB）`);
 
@@ -169,6 +201,15 @@ if (install) {
   if (preferOffline.status !== 0) {
     console.warn('缓存优先安装失败，改用常规 npm 安装...');
     run(`npm install -g ${quote(webTgz)}`);
+  }
+  // 与 install.ps1 / install.sh 一样，把随包 skill 放到用户级 skill 目录。
+  const skillsTarget = path.join(os.homedir(), '.agents', 'skills');
+  for (const name of deliveredSkills) {
+    const dest = path.join(skillsTarget, name);
+    fs.mkdirSync(skillsTarget, { recursive: true });
+    fs.rmSync(dest, { recursive: true, force: true });
+    fs.cpSync(path.join(skillsRoot, name), dest, { recursive: true });
+    console.log(`已安装 skill：${dest}`);
   }
 }
 

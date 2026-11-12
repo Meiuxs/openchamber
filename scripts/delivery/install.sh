@@ -202,6 +202,56 @@ else
   echo "警告: 既没有 web 包内副本，也没有全局 @openchamber/sdk；服务无法启动。请重跑本脚本重装。" >&2
 fi
 
+# --- 随包 skills -------------------------------------------------------------
+# 只装 skills/manifest.json 列出的 skill，不扫描目录：仓库 .agents/skills 下的
+# 其它开发技能既不进包，也不会因为 zip 里多放了目录就被装到用户机器上。
+# 装到用户级 skill 目录，OpenChamber 与 OpenCode 都从 ~/.agents/skills 读取；
+# 同名目录按新版本覆盖，本地新增的 skill 不受影响。
+title "随包 skills"
+SKILLS_SOURCE="$SCRIPT_DIR/skills"
+SKILLS_TARGET="$HOME/.agents/skills"
+SKILLS_MANIFEST="$SKILLS_SOURCE/manifest.json"
+if [[ ! -f "$SKILLS_MANIFEST" ]]; then
+  echo "  随包未包含 skills 清单（旧交付包），跳过。"
+else
+  # node 在前置检查里已校验可用；一行一个 skill 名，损坏的清单直接跳过。
+  if ! skill_names="$(node -e '
+    const fs = require("fs");
+    const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const list = Array.isArray(data) ? data : (data && Array.isArray(data.skills) ? data.skills : []);
+    for (const name of list) if (typeof name === "string") console.log(name);
+  ' "$SKILLS_MANIFEST")"; then
+    echo "警告: 无法解析 $SKILLS_MANIFEST，跳过随包 skills。" >&2
+    skill_names=""
+  fi
+  if [[ -z "$skill_names" ]]; then
+    echo "  清单里没有 skill，跳过。"
+  else
+    while IFS= read -r skill_name; do
+      [[ -n "$skill_name" ]] || continue
+      if [[ ! "$skill_name" =~ ^[a-z0-9-]+$ ]]; then
+        echo "警告: 跳过非法 skill 名：$skill_name" >&2
+        continue
+      fi
+      skill_dir="$SKILLS_SOURCE/$skill_name"
+      if [[ ! -f "$skill_dir/SKILL.md" ]]; then
+        echo "警告: 跳过缺少 SKILL.md 的 skill：$skill_name" >&2
+        continue
+      fi
+      skill_dest="$SKILLS_TARGET/$skill_name"
+      if [[ $DRY_RUN -eq 1 ]]; then
+        echo "  [dry-run] 复制 $skill_dir -> $skill_dest（覆盖同名 skill）"
+        continue
+      fi
+      mkdir -p "$SKILLS_TARGET"
+      rm -rf "$skill_dest"
+      cp -R "$skill_dir" "$skill_dest"
+      echo "  已安装 skill：$skill_dest"
+    done <<< "$skill_names"
+    echo "  只安装清单列出的 skill；新会话中生效（服务从 ~/.agents/skills 读取）。"
+  fi
+fi
+
 # --- 数据目录 ---------------------------------------------------------------
 title "数据目录"
 DATA_DIR="${OPENCHAMBER_DATA_DIR:-$HOME/.config/openchamber}"

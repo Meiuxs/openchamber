@@ -10,6 +10,7 @@ SDK tarball 读取版本号，换新版本 zip 不需要改脚本。
                                 已把 @openchamber/sdk 打进包内
 - openchamber-sdk-<version>.tgz  @openchamber/sdk，带类型定义的 guest SDK
 - install.ps1 / install.sh       Windows / Linux、macOS 一键安装与原地更新脚本
+- skills/                        随包 agent skills，安装时复制到用户级 skill 目录
 - RELEASE-NOTES.md               本版本更新内容
 - INSTALL.txt                    本说明
 
@@ -48,6 +49,21 @@ Linux / macOS（bash）：
     -OpenCodePort / --opencode-port <n> 连接外部 OpenCode 服务
     -Start / --start                    安装后拉起服务
     -DryRun / --dry-run                 只打印动作，不做修改
+
+随包 skills
+===========
+安装脚本只安装 skills/manifest.json 列出的 skill：把对应目录复制到
+~/.agents/skills/<name>/，同名目录按新版本覆盖，用户自己新增的 skill 不受影响。
+skills/ 下未列入清单的目录一律跳过，安装脚本不扫描目录。安装后在新的 OpenCode
+会话中可用。
+
+当前随包：
+
+    gitlab-issue-create   按仓库模板创建 GitLab issue，供 GitLab 议题自动化使用。
+                          GITLAB_TOKEN（api scope）走 REST，不需要 glab。
+                          默认只建 issue，由人确认后手动加 ai-ready；加 --ai-ready
+                          时由调用者账号打标签，该账号成为触发者，需要是项目
+                          Developer 且在 OpenChamber 中绑定同实例账号。
 
 安装
 ====

@@ -4,9 +4,9 @@
   OpenChamber 内网安装 / 更新脚本（Windows）。
 
 .DESCRIPTION
-  安装与本脚本同目录的两个 npm tarball，准备配置文件，打印更新内容
-  （RELEASE-NOTES.md）和服务启动命令。全程以当前用户身份运行，不需要管理员权限。
-  对已有安装重复执行即为原地更新，首次安装和更新走同一条路径。
+  安装与本脚本同目录的两个 npm tarball，安装随包 agent skills，准备配置文件，
+  打印更新内容（RELEASE-NOTES.md）和服务启动命令。全程以当前用户身份运行，
+  不需要管理员权限。对已有安装重复执行即为原地更新，首次安装和更新走同一条路径。
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File .\install.ps1
@@ -216,6 +216,43 @@ else {
   else {
     Write-Warning '既没有 web 包内副本，也没有全局 @openchamber/sdk；服务无法启动。请重跑本脚本重装。'
   }
+}
+
+# --- 随包 skills ------------------------------------------------------------
+# 只装 skills/manifest.json 列出的 skill，不扫描目录：仓库 .agents/skills 下的
+# 其它开发技能既不进包，也不会因为 zip 里多放了目录就被装到用户机器上。
+# 装到用户级 skill 目录，OpenChamber 与 OpenCode 都从 ~/.agents/skills 读取；
+# 同名目录按新版本覆盖，本地新增的 skill 不受影响。
+Write-Title '随包 skills'
+$skillsSource = Join-Path $PSScriptRoot 'skills'
+$skillsTarget = Join-Path $env:USERPROFILE '.agents\skills'
+$skillsManifest = Join-Path $skillsSource 'manifest.json'
+if (-not (Test-Path -LiteralPath $skillsManifest)) {
+  Write-Host '  随包未包含 skills 清单（旧交付包），跳过。'
+}
+else {
+  $skillNames = @((Get-Content -LiteralPath $skillsManifest -Raw -Encoding UTF8 | ConvertFrom-Json).skills)
+  foreach ($name in $skillNames) {
+    if ($name -notmatch '^[a-z0-9-]+$') {
+      Write-Warning "跳过非法 skill 名：$name"
+      continue
+    }
+    $source = Join-Path $skillsSource $name
+    if (-not (Test-Path -LiteralPath (Join-Path $source 'SKILL.md'))) {
+      Write-Warning "跳过缺少 SKILL.md 的 skill：$name"
+      continue
+    }
+    $dest = Join-Path $skillsTarget $name
+    if ($DryRun) {
+      Write-Host "  [dry-run] 复制 $source -> $dest（覆盖同名 skill）"
+      continue
+    }
+    New-Item -ItemType Directory -Force -Path $skillsTarget | Out-Null
+    if (Test-Path -LiteralPath $dest) { Remove-Item -Recurse -Force -LiteralPath $dest }
+    Copy-Item -Recurse -Force -LiteralPath $source -Destination $dest
+    Write-Host "  已安装 skill：$dest"
+  }
+  Write-Host '  只安装 skills/manifest.json 列出的 skill；新会话中生效。'
 }
 
 # --- 数据目录 --------------------------------------------------------------
