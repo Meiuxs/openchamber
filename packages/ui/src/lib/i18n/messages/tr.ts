@@ -19,6 +19,7 @@ import { aboutReleaseNotesI18n } from './about-release-notes.i18n';
 import { updateCheckErrorsI18n } from './update-check-errors.i18n';
 import { secretRequestI18n } from './secret-request.i18n';
 import { sessionNoticesI18n } from './session-notices.i18n';
+import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
@@ -143,6 +144,7 @@ export const dict = {
   ...updateCheckErrorsI18n.tr,
   ...secretRequestI18n.tr,
   ...sessionNoticesI18n.tr,
+  ...settingsHintsI18n.tr,
   ...usageStatsI18n.tr,
   ...webSearchI18n.tr,
   ...sessionWarmingI18n.tr,
@@ -2272,6 +2274,7 @@ export const dict = {
   'session.newWorktree.fromSource': '{source} kaynağından',
   'session.newWorktree.actions.cancel': 'İptal',
   'session.newWorktree.actions.creating': 'Oluşturuluyor...',
+  'session.newWorktree.creatingWithCommand': 'Oluşturma komutun çalışıyor…',
   'session.newWorktree.actions.createWorktree': 'Worktree oluştur',
   'session.newWorktree.actions.reset': 'Sıfırla',
   'session.newWorktree.actions.unlink': 'Bağlantıyı kaldır',
@@ -2744,6 +2747,7 @@ export const dict = {
   'chat.modelControls.addNewProvider': 'Yeni provider ekle',
   'chat.modelControls.noAgentSelected': 'Agent seçilmedi.',
   'chat.modelControls.agentUnavailable': '"{agent}" agent\'ı bu session\'ın klasöründe yok. Başka bir agent seç.',
+  'chat.modelControls.modelUnavailable': '"{model}" modeli artık kullanılamıyor. Sağlayıcısı kaldırıldı veya kapatıldı. Başka bir model seç.',
   'chat.modelControls.searchModels': 'Modelleri ara',
   'chat.modelControls.modelListAria': 'Modeller',
   'chat.modelControls.searchAgents': 'Agent\'leri ara',
@@ -3262,6 +3266,8 @@ export const dict = {
   'vscodeLayout.actions.cancel': 'İptal',
   'vscodeLayout.actions.newSessionAria': 'Yeni session',
   'vscodeLayout.actions.resizeSessionsSidebarAria': 'Session\'lar kenar çubuğunu yeniden boyutlandır',
+  'vscodeLayout.actions.showSessionsAria': 'Oturumları göster',
+  'vscodeLayout.actions.hideSessionsAria': 'Oturumları gizle',
   'vscodeLayout.actions.settingsAria': 'Ayarlar',
   'updateDialog.header.updateAvailable': 'Güncelleme Var',
   'updateDialog.header.updating': 'OpenChamber güncelleniyor...',

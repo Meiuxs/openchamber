@@ -19,6 +19,7 @@ import { aboutReleaseNotesI18n } from './about-release-notes.i18n';
 import { updateCheckErrorsI18n } from './update-check-errors.i18n';
 import { secretRequestI18n } from './secret-request.i18n';
 import { sessionNoticesI18n } from './session-notices.i18n';
+import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
@@ -2318,6 +2319,7 @@ export const dict = {
   'session.newWorktree.fromSource': 'מתוך {source}',
   'session.newWorktree.actions.cancel': 'ביטול',
   'session.newWorktree.actions.creating': 'יוצר…',
+  'session.newWorktree.creatingWithCommand': 'פקודת היצירה שלך רצה…',
   'session.newWorktree.actions.createWorktree': 'צור עץ עבודה',
   'session.newWorktree.actions.reset': 'אפס',
   'session.newWorktree.actions.unlink': 'בטל קישור',
@@ -2824,6 +2826,7 @@ export const dict = {
   'chat.modelControls.addNewProvider': 'הוסף ספק חדש',
   'chat.modelControls.noAgentSelected': 'לא נבחר סוכן.',
   'chat.modelControls.agentUnavailable': 'הסוכן "{agent}" אינו זמין בתיקייה של הפעלה זו. יש לבחור סוכן אחר.',
+  'chat.modelControls.modelUnavailable': 'המודל "{model}" כבר לא זמין. הספק שלו הוסר או כובה. יש לבחור מודל אחר.',
   'chat.modelControls.searchModels': 'חיפוש מודלים',
   'chat.modelControls.modelListAria': 'מודלים',
   'chat.modelControls.searchAgents': 'חיפוש סוכנים',
@@ -3358,6 +3361,8 @@ export const dict = {
   'vscodeLayout.actions.cancel': 'ביטול',
   'vscodeLayout.actions.newSessionAria': 'הפעלה חדשה',
   'vscodeLayout.actions.resizeSessionsSidebarAria': 'שינוי גודל סרגל הצד של ההפעלות',
+  'vscodeLayout.actions.showSessionsAria': 'הצג סשנים',
+  'vscodeLayout.actions.hideSessionsAria': 'הסתר סשנים',
   'vscodeLayout.actions.settingsAria': 'הגדרות',
   'updateDialog.header.updateAvailable': 'יש עדכון זמין',
   'updateDialog.header.updating': 'מעדכן את OpenChamber…',
@@ -3930,6 +3935,7 @@ export const dict = {
   ...updateCheckErrorsI18n.he,
   ...secretRequestI18n.he,
   ...sessionNoticesI18n.he,
+  ...settingsHintsI18n.he,
   ...usageStatsI18n.he,
   ...webSearchI18n.he,
   ...sessionWarmingI18n.he,

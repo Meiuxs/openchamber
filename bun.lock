@@ -139,7 +139,7 @@
     },
     "packages/sdk/examples/agent-desk": {
       "name": "@openchamber/example-agent-desk",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@openchamber/sdk": "workspace:*",
       },
@@ -234,7 +234,7 @@
     },
     "packages/sdk/examples/tools-only": {
       "name": "@openchamber/example-tools-only",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "dependencies": {
         "@openchamber/sdk": "workspace:*",
       },

@@ -19,6 +19,7 @@ import { aboutReleaseNotesI18n } from './about-release-notes.i18n';
 import { updateCheckErrorsI18n } from './update-check-errors.i18n';
 import { secretRequestI18n } from './secret-request.i18n';
 import { sessionNoticesI18n } from './session-notices.i18n';
+import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
@@ -2318,6 +2319,7 @@ export const dict = {
   'session.newWorktree.fromSource': 'من {source}',
   'session.newWorktree.actions.cancel': 'إلغاء',
   'session.newWorktree.actions.creating': 'جارٍ الإنشاء…',
+  'session.newWorktree.creatingWithCommand': 'جارٍ تشغيل أمر الإنشاء الخاص بك…',
   'session.newWorktree.actions.createWorktree': 'إنشاء شجرة عمل (worktree)',
   'session.newWorktree.actions.reset': 'إعادة تعيين',
   'session.newWorktree.actions.unlink': 'إلغاء الربط',
@@ -2824,6 +2826,7 @@ export const dict = {
   'chat.modelControls.addNewProvider': 'إضافة موفر جديد',
   'chat.modelControls.noAgentSelected': 'لم يتم اختيار وكيل.',
   'chat.modelControls.agentUnavailable': 'الوكيل "{agent}" غير متاح في مجلد هذه الجلسة. اختر وكيلًا آخر.',
+  'chat.modelControls.modelUnavailable': 'النموذج "{model}" لم يعد متاحًا. أُزيل مزوّده أو أُوقف. اختر نموذجًا آخر.',
   'chat.modelControls.searchModels': 'البحث في النماذج',
   'chat.modelControls.modelListAria': 'النماذج',
   'chat.modelControls.searchAgents': 'البحث في الوكلاء',
@@ -3358,6 +3361,8 @@ export const dict = {
   'vscodeLayout.actions.cancel': 'إلغاء',
   'vscodeLayout.actions.newSessionAria': 'جلسة جديدة',
   'vscodeLayout.actions.resizeSessionsSidebarAria': 'تغيير حجم الشريط الجانبي للجلسات',
+  'vscodeLayout.actions.showSessionsAria': 'إظهار الجلسات',
+  'vscodeLayout.actions.hideSessionsAria': 'إخفاء الجلسات',
   'vscodeLayout.actions.settingsAria': 'الإعدادات',
   'updateDialog.header.updateAvailable': 'يتوفر تحديث',
   'updateDialog.header.updating': 'جارٍ تحديث OpenChamber…',
@@ -3930,6 +3935,7 @@ export const dict = {
   ...updateCheckErrorsI18n.ar,
   ...secretRequestI18n.ar,
   ...sessionNoticesI18n.ar,
+  ...settingsHintsI18n.ar,
   ...usageStatsI18n.ar,
   ...webSearchI18n.ar,
   ...sessionWarmingI18n.ar,

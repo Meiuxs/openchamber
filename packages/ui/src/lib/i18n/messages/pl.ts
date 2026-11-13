@@ -20,6 +20,7 @@ import { aboutReleaseNotesI18n } from './about-release-notes.i18n';
 import { updateCheckErrorsI18n } from './update-check-errors.i18n';
 import { secretRequestI18n } from './secret-request.i18n';
 import { sessionNoticesI18n } from './session-notices.i18n';
+import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
@@ -205,6 +206,7 @@ export const dict: Record<I18nKey, string> = {
   ...updateCheckErrorsI18n.pl,
   ...secretRequestI18n.pl,
   ...sessionNoticesI18n.pl,
+  ...settingsHintsI18n.pl,
   ...usageStatsI18n.pl,
   ...webSearchI18n.pl,
   ...sessionWarmingI18n.pl,
@@ -1627,6 +1629,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.modelControls.model': 'Model',
   'chat.modelControls.noAgentSelected': 'Nie wybrano agenta.',
   'chat.modelControls.agentUnavailable': 'Agent "{agent}" nie jest dostępny w folderze tej sesji. Wybierz innego agenta.',
+  'chat.modelControls.modelUnavailable': 'Model "{model}" nie jest już dostępny. Jego dostawcę usunięto lub wyłączono. Wybierz inny model.',
   'chat.modelControls.noModelsFound': 'Nie znaleziono modeli',
   'chat.modelControls.output': 'Wyjście',
   'chat.modelControls.permissionLabel.allow': 'Zezwól',
@@ -3278,6 +3281,7 @@ export const dict: Record<I18nKey, string> = {
   'session.newWorktree.actions.cancel': 'Anuluj',
   'session.newWorktree.actions.createWorktree': 'Utwórz drzewo pracy',
   'session.newWorktree.actions.creating': 'Tworzenie...',
+  'session.newWorktree.creatingWithCommand': 'Trwa wykonywanie Twojego polecenia tworzenia…',
   'session.newWorktree.actions.reset': 'Resetuj',
   'session.newWorktree.actions.unlink': 'Odłącz',
   'session.newWorktree.start.title': 'Punkt startowy',
@@ -3522,6 +3526,8 @@ export const dict: Record<I18nKey, string> = {
   'vscodeLayout.actions.cancel': 'Anuluj',
   'vscodeLayout.actions.newSessionAria': 'Nowa sesja',
   'vscodeLayout.actions.resizeSessionsSidebarAria': 'Zmień rozmiar panelu sesji',
+  'vscodeLayout.actions.showSessionsAria': 'Pokaż sesje',
+  'vscodeLayout.actions.hideSessionsAria': 'Ukryj sesje',
   'vscodeLayout.actions.settingsAria': 'Ustawienia',
   'vscodeLayout.title.chat': 'Czat',
   'vscodeLayout.title.newSession': 'Nowa sesja',

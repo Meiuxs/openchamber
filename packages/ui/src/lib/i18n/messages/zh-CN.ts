@@ -20,6 +20,7 @@ import { aboutReleaseNotesI18n } from './about-release-notes.i18n';
 import { updateCheckErrorsI18n } from './update-check-errors.i18n';
 import { secretRequestI18n } from './secret-request.i18n';
 import { sessionNoticesI18n } from './session-notices.i18n';
+import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
@@ -205,6 +206,7 @@ export const dict: Record<I18nKey, string> = {
   ...updateCheckErrorsI18n['zh-CN'],
   ...secretRequestI18n['zh-CN'],
   ...sessionNoticesI18n['zh-CN'],
+  ...settingsHintsI18n['zh-CN'],
   ...usageStatsI18n['zh-CN'],
   ...webSearchI18n['zh-CN'],
   ...sessionWarmingI18n['zh-CN'],
@@ -2377,6 +2379,7 @@ export const dict: Record<I18nKey, string> = {
   'session.newWorktree.fromSource': '来自 {source}',
   'session.newWorktree.actions.cancel': '取消',
   'session.newWorktree.actions.creating': '创建中...',
+  'session.newWorktree.creatingWithCommand': '正在运行你的创建命令…',
   'session.newWorktree.actions.createWorktree': '创建工作树',
   'session.newWorktree.actions.reset': '重置',
   'session.newWorktree.actions.unlink': '取消关联',
@@ -2883,6 +2886,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.modelControls.addNewProvider': '添加新提供商',
   'chat.modelControls.noAgentSelected': '未选择智能体。',
   'chat.modelControls.agentUnavailable': '此会话的文件夹中没有智能体 "{agent}"。请选择其他智能体。',
+  'chat.modelControls.modelUnavailable': '模型 "{model}" 已不可用。它的提供商已被移除或停用。请选择其他模型。',
   'chat.modelControls.searchModels': '搜索模型',
   'chat.modelControls.modelListAria': '模型',
   'chat.modelControls.searchAgents': '搜索智能体',
@@ -3414,6 +3418,8 @@ export const dict: Record<I18nKey, string> = {
   "vscodeLayout.actions.cancel": "取消",
   'vscodeLayout.actions.newSessionAria': '新建会话',
   'vscodeLayout.actions.resizeSessionsSidebarAria': '调整会话侧边栏大小',
+  'vscodeLayout.actions.showSessionsAria': '显示会话',
+  'vscodeLayout.actions.hideSessionsAria': '隐藏会话',
   'vscodeLayout.actions.settingsAria': '设置',
   'updateDialog.header.updateAvailable': '有可用更新',
   'updateDialog.header.updating': '正在更新 OpenChamber...',
