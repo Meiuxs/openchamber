@@ -19,6 +19,7 @@ import { updateDialogCanaryI18n } from './update-dialog-canary.i18n';
 import { aboutReleaseNotesI18n } from './about-release-notes.i18n';
 import { updateCheckErrorsI18n } from './update-check-errors.i18n';
 import { secretRequestI18n } from './secret-request.i18n';
+import { questionsInChatI18n } from './questions-in-chat.i18n';
 import { sessionNoticesI18n } from './session-notices.i18n';
 import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
@@ -28,12 +29,15 @@ import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
+import { sharePagesI18n } from './share-pages.i18n';
+import { receivedPagesI18n } from './received-pages.i18n';
 import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
 import { agentStatusI18n } from './agent-status.i18n';
+import { androidWidgetsI18n } from './android-widgets.i18n';
 import { selectionApprovalI18n } from './selection-approval.i18n';
 import { snippetsI18n } from './snippets.i18n';
 import { sidebarWorkI18n } from './sidebar-work.i18n';
@@ -205,6 +209,7 @@ export const dict: Record<I18nKey, string> = {
   ...aboutReleaseNotesI18n.ja,
   ...updateCheckErrorsI18n.ja,
   ...secretRequestI18n.ja,
+  ...questionsInChatI18n.ja,
   ...sessionNoticesI18n.ja,
   ...settingsHintsI18n.ja,
   ...usageStatsI18n.ja,
@@ -214,12 +219,15 @@ export const dict: Record<I18nKey, string> = {
   ...heapSnapshotI18n.ja,
   ...consoleBudgetsI18n.ja,
   ...imageToolI18n.ja,
+  ...sharePagesI18n.ja,
+  ...receivedPagesI18n.ja,
   ...memoryDreamingI18n.ja,
   ...usageToolI18n.ja,
   ...openchamberToolsLayoutI18n.ja,
   ...openchamberToolOutputI18n.ja,
   ...opencodeToolOutputI18n.ja,
   ...agentStatusI18n.ja,
+  ...androidWidgetsI18n.ja,
   ...snippetsI18n.ja,
   ...sidebarWorkI18n.ja,
   ...sidebarSectionsI18n.ja,
@@ -851,7 +859,7 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.session.status.backgroundCommand': 'コマンドがバックグラウンドで実行中',
   'sessions.sidebar.session.status.backgroundImage': 'バックグラウンドで画像を生成中',
   'sessions.sidebar.session.status.waitingOnPullRequest': 'チェックまたはレビューを待機中',
-  'sessions.sidebar.session.status.waitingOnExtension': '拡張機能を待機中',
+  'sessions.sidebar.session.status.waitingOnExtension': 'タイマーまたは拡張機能を待機中',
   'sessions.sidebar.session.status.pinned': 'ピン留めされたセッション',
   'sessions.sidebar.session.status.movingToWorktree': 'セッションを新しいworktreeへ移動中',
   'sessions.sidebar.session.status.permissionRequired': '権限が必要です',
@@ -1621,6 +1629,7 @@ export const dict: Record<I18nKey, string> = {
   'contextPanel.browser.device.schemeSystem': '自動',
   'contextPanel.browser.device.schemeLight': 'ライト',
   'contextPanel.browser.device.schemeDark': 'ダーク',
+  'contextPanel.browser.device.scheme': "ページの外観",
   'contextPanel.browser.device.schemeFailed': 'ページの外観を変更できませんでした',
   'contextPanel.browser.frameTitle': 'ブラウザ',
   'contextPanel.browser.loadFailed': 'このページを読み込めませんでした',
@@ -1649,7 +1658,6 @@ export const dict: Record<I18nKey, string> = {
   'contextPanel.browser.annotate.tool.draw': '描画',
   'contextPanel.browser.annotate.commentPlaceholder': '変更内容を記述...',
   'contextPanel.browser.annotate.submit': '添付',
-  'contextPanel.browser.trustNotice': 'ここで開かれたページはOpenChamberへの完全なアクセス権を持ちます — 検査とスクリーンショットに必要です。信頼できるサイトのみを開いてください: 悪意のあるページがデータを読み取ったりあなたの代わりに行動したりする可能性があります。',
   'contextPanel.tab.closeTabAria': '{label}タブを閉じる',
   'contextPanel.tab.menu.close': '閉じる',
   'contextPanel.tab.menu.closeOthers': '他を閉じる',
@@ -2539,6 +2547,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.toast.opencodeRestartInterrupted.description': '応答の生成中に OpenCode が再起動しました。続行するにはメッセージを送信してください。',
   'chat.toast.opencodeRestartInterrupted.autoResumeDescription': '応答の生成中に OpenCode が再起動しました。チャットは自動的に再開されます。再開しない場合はメッセージを送信してください。',
   'chat.toast.opencodeRestartInterrupted.openSession': 'セッションを開く',
+  'chat.toast.shareAnswer.openSession': 'セッションを開く',
   'chat.errorBoundary.title': 'チャットエラー',
   'chat.errorBoundary.description': 'チャットインターフェースでエラーが発生しました。一時的なネットワーク問題または破損したメッセージデータが原因の可能性があります。',
   'chat.errorBoundary.sessionLabel': 'セッション',
@@ -3123,8 +3132,8 @@ export const dict: Record<I18nKey, string> = {
   'projects.sharedTrust.actions': 'アクション',
   'projects.sharedTrust.skip': '今回は実行しない',
   'projects.sharedTrust.trust': '信頼して実行',
-  'projects.opencodeTrust.title': 'このフォルダーのコードを OpenCode に実行させますか？',
-  'projects.opencodeTrust.description': 'OpenCode はフォルダーを開いた時点で、{path} の設定にあるプラグインとコマンドを実行します。一度信頼すると、変更があった場合のみ OpenChamber が再度確認します。',
+  'projects.opencodeTrust.title': 'このフォルダーの OpenCode 設定を信頼しますか？',
+  'projects.opencodeTrust.description': 'OpenCode はフォルダーを開いた時点で、{path} の設定から以下のすべてを適用します。一度信頼すると、変更があった場合のみ OpenChamber が再度確認します。',
   'projects.opencodeTrust.plugins': 'プラグイン',
   'projects.opencodeTrust.commands': 'コマンド',
   'projects.opencodeTrust.kind.package': '{name}（npm パッケージ）',
@@ -3133,6 +3142,12 @@ export const dict: Record<I18nKey, string> = {
   'projects.opencodeTrust.kind.lsp': '言語サーバー {name}',
   'projects.opencodeTrust.kind.formatter': 'フォーマッター {name}',
   'projects.opencodeTrust.kind.shell': 'シェル',
+  'projects.opencodeTrust.kind.env': '環境変数 {name}',
+  'projects.opencodeTrust.kind.file': 'ファイル {path}',
+  'projects.opencodeTrust.values': '外部に送信される可能性のある、このマシンの値',
+  'projects.opencodeTrust.permissions': '許可される権限',
+  'projects.opencodeTrust.permission.agent': 'エージェント {name}',
+  'projects.opencodeTrust.permission.everyAgent': 'すべてのエージェント',
   'projects.opencodeTrust.paused': '信頼しない場合、このフォルダーではエージェントは動作しませんが、ファイルと Git の変更は引き続き閲覧できます。',
   'projects.opencodeTrust.skip': '今回は開かない',
   'projects.opencodeTrust.trust': '信頼して開く',
@@ -3695,6 +3710,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.workStatus.telemetry.toolDurationDescription': '失敗した呼び出しも含むツールの実行時間です。同時に動いたツールの時間は重複して加算しません。',
   'chat.workStatus.telemetry.ttft': '平均 TTFT',
   'chat.workStatus.telemetry.ttftDescription': '各モデルステップで最初のテキストや推論が始まるまでの平均待ち時間です。作成後に開始時刻がないステップがあれば表示しません。ツールのみのステップや、作成時刻だけが記録されたパートでよく起こります。',
+  'chat.workStatus.telemetry.firstOutput': '平均初回出力',
+  'chat.workStatus.telemetry.firstOutputDescription': '各モデルステップの開始から、テキスト・推論・ツール呼び出しのいずれかの最初の出力までの平均待ち時間。TTFT と異なり、ツール呼び出しで始まるステップも含みます。OpenCode 2.3.0 より前のステップでは表示されません。',
   'chat.workStatus.telemetry.steps': 'ステップ数',
   'chat.workStatus.telemetry.stepsDescription': 'このプロンプトでモデルを呼び出した回数です。ツールの結果を読み、次の処理を決める際は通常もう一度呼び出します。',
   'chat.workStatus.telemetry.tokens': 'トークン',
