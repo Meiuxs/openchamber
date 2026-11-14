@@ -39,6 +39,7 @@ import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
 import { agentStatusI18n } from './agent-status.i18n';
 import { androidWidgetsI18n } from './android-widgets.i18n';
 import { selectionApprovalI18n } from './selection-approval.i18n';
+import { promptEnhancementI18n } from './prompt-enhancement.i18n';
 import { snippetsI18n } from './snippets.i18n';
 import { sidebarWorkI18n } from './sidebar-work.i18n';
 import { sidebarSectionsI18n } from './sidebar-sections.i18n';
@@ -229,6 +230,7 @@ export const dict: Record<I18nKey, string> = {
   ...agentStatusI18n['zh-TW'],
   ...androidWidgetsI18n['zh-TW'],
   ...snippetsI18n['zh-TW'],
+  ...promptEnhancementI18n['zh-TW'],
   ...sidebarWorkI18n['zh-TW'],
   ...sidebarSectionsI18n['zh-TW'],
   ...worktreeArchiveI18n['zh-TW'],

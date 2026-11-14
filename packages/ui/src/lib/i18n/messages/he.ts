@@ -38,6 +38,7 @@ import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
 import { agentStatusI18n } from './agent-status.i18n';
 import { androidWidgetsI18n } from './android-widgets.i18n';
 import { selectionApprovalI18n } from './selection-approval.i18n';
+import { promptEnhancementI18n } from './prompt-enhancement.i18n';
 import { snippetsI18n } from './snippets.i18n';
 import { sidebarWorkI18n } from './sidebar-work.i18n';
 import { sidebarSectionsI18n } from './sidebar-sections.i18n';
@@ -3970,6 +3971,7 @@ export const dict = {
   ...agentStatusI18n.he,
   ...androidWidgetsI18n.he,
   ...snippetsI18n.he,
+  ...promptEnhancementI18n.he,
   ...sidebarWorkI18n.he,
   ...sidebarSectionsI18n.he,
   ...worktreeArchiveI18n.he,
