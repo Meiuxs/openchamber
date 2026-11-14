@@ -38,6 +38,7 @@ import type { AttachIssueRequest } from '@openchamber/sdk';
 import { getInlineCommentDraftKey, useInlineCommentDraftStore, type InlineCommentDraft, type InlineCommentDraftTarget } from '@/stores/useInlineCommentDraftStore';
 import { useSnippetsStore } from '@/stores/useSnippetsStore';
 import { loadMagicPrompts } from '@/lib/magicPrompts';
+import { enhancePromptDraft, PromptEnhancementError } from '@/lib/promptEnhancement';
 import { getRuntimeKey, subscribeRuntimeEndpointWillChange } from '@/lib/runtime-switch';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import {
@@ -253,6 +254,7 @@ import {
     buildCommandVariables,
     canRunCommand,
     findMagicPromptCommand,
+    parseSlashCommand,
     planLocalSlashCommand,
 } from './composer/submit/slashCommands';
 import { runForkCommand } from './composer/submit/forkCommand';
@@ -551,6 +553,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     const [mobileDraftPicker, setMobileDraftPicker] = React.useState<'project' | 'branch' | null>(null);
     // Message history navigation state (up/down arrow to recall previous messages)
     const composerRef = React.useRef<ComposerEditorHandle>(null);
+    const [isEnhancingPrompt, setIsEnhancingPrompt] = React.useState(false);
+    const enhanceAbortRef = React.useRef<AbortController | null>(null);
     const [mentionCompletion] = React.useState(() => new MentionCompletionState());
     const completingMentionRef = React.useRef(false);
     // The mobile composer swaps between the collapsed pill and the full
@@ -2135,12 +2139,12 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     const trackerDescriptors = useTrackerDescriptors();
     const trackerSources = useTrackerSources();
 
-    const getSubmitErrorMessage = (error: unknown, fallback: string) => {
+    const getSubmitErrorMessage = React.useCallback((error: unknown, fallback: string) => {
         const message = error instanceof Error ? error.message : '';
         return message.toLowerCase().includes('runtime changed')
             ? t('chat.chatInput.toast.messageSendFailed')
             : message || fallback;
-    };
+    }, [t]);
 
     const handleSubmit = async (options?: SubmitOptions) => {
         // Comment mode's only submit is attach; every other send path must be
@@ -5077,6 +5081,136 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     // The collapsed phone pill shows the draft; nothing can be typed into it.
     const pillText = useComposerTextValue(composerText, (text) => (isMobile && !mobileComposerExpanded ? text : ''));
     const waitingForOpenCode = useOpenCodeStartupStore((state) => state.waitingSends > 0);
+    const enhanceDraftText = useComposerTextValue(composerText, (text) => text);
+
+    const canEnhancePrompt = !isMobile
+        && !isBtwActive
+        && !parallelRun
+        && inputMode === 'normal'
+        && !waitingForOpenCode
+        && !parseSlashCommand(enhanceDraftText)
+        && /\p{L}/u.test(enhanceDraftText)
+        && Boolean(currentProviderId && currentModelId);
+
+    const showEnhancePrompt = !isMobile
+        && !isBtwActive
+        && !parallelRun
+        && inputMode === 'normal'
+        && !parseSlashCommand(enhanceDraftText);
+
+    const enhancePromptDisabledReason = !/\p{L}/u.test(enhanceDraftText)
+        ? t('chat.chatInput.enhancePrompt.disabledNoText')
+        : !currentProviderId || !currentModelId
+            ? t('chat.chatInput.toast.noModelSelected')
+            : waitingForOpenCode
+                ? t('chat.chatInput.waitingForOpenCode')
+                : undefined;
+
+    const handleEnhancePrompt = React.useCallback(async () => {
+        if (isEnhancingPrompt || !canEnhancePrompt) return;
+        const snapshot = composerText.get();
+        const identity = chatDraftIdentity;
+        const directory = currentSessionDirectoryForSync ?? currentDirectory ?? null;
+        const providerID = currentProviderId;
+        const modelID = currentModelId;
+        if (!providerID || !modelID) {
+            toast.error(t('chat.chatInput.toast.noModelSelected'));
+            return;
+        }
+
+        const controller = new AbortController();
+        enhanceAbortRef.current = controller;
+        setIsEnhancingPrompt(true);
+        try {
+            const prompts = await loadMagicPrompts(directory);
+            const result = await enhancePromptDraft({
+                draft: snapshot,
+                prompts,
+                directory,
+                providerID,
+                modelID,
+                attachmentFilenames: attachedFiles.map((file) => file.filename),
+                signal: controller.signal,
+            });
+            if (controller.signal.aborted) return;
+            const currentIdentity = currentChatDraftIdentityRef.current;
+            const identityChanged = !identity
+                || !currentIdentity
+                || getChatDraftIdentityKey(currentIdentity) !== getChatDraftIdentityKey(identity);
+            if (identityChanged || composerText.get() !== snapshot) {
+                toast.info(t('chat.chatInput.toast.enhanceDraftChanged'));
+                return;
+            }
+            if (!result.changed) {
+                toast.info(t('chat.chatInput.toast.enhanceNoChange'));
+                return;
+            }
+            setMessage(result.text);
+            toast.success(t('chat.chatInput.toast.enhanceSuccess'), {
+                id: 'prompt-enhance',
+                duration: 4000,
+                action: {
+                    label: t('chat.chatInput.actions.undo'),
+                    onClick: () => {
+                        if (composerText.get() !== result.text) {
+                            toast.info(t('chat.chatInput.toast.enhanceDraftChanged'));
+                            return;
+                        }
+                        setMessage(snapshot);
+                        requestAnimationFrame(() => composerRef.current?.focus());
+                    },
+                },
+            });
+            requestAnimationFrame(() => composerRef.current?.focus());
+        } catch (error) {
+            if (controller.signal.aborted) return;
+            if (error instanceof PromptEnhancementError && error.code === 'timeout') {
+                toast.error(t('chat.chatInput.toast.enhanceTimeout'));
+            } else if (error instanceof PromptEnhancementError && error.code === 'references-changed') {
+                toast.error(t('chat.chatInput.toast.enhanceReferencesChanged'));
+            } else {
+                toast.error(getSubmitErrorMessage(error, t('chat.chatInput.toast.enhanceFailed')));
+            }
+        } finally {
+            if (enhanceAbortRef.current === controller) {
+                enhanceAbortRef.current = null;
+                setIsEnhancingPrompt(false);
+            }
+        }
+    }, [
+        attachedFiles,
+        canEnhancePrompt,
+        chatDraftIdentity,
+        composerText,
+        currentDirectory,
+        currentModelId,
+        currentProviderId,
+        currentSessionDirectoryForSync,
+        getSubmitErrorMessage,
+        isEnhancingPrompt,
+        setMessage,
+        t,
+    ]);
+
+    const enhancePrompt = React.useMemo(() => ({
+        state: !showEnhancePrompt
+            ? 'hidden' as const
+            : isEnhancingPrompt
+                ? 'loading' as const
+                : canEnhancePrompt
+                    ? 'ready' as const
+                    : 'disabled' as const,
+        disabledReason: enhancePromptDisabledReason,
+        onClick: handleEnhancePrompt,
+    }), [canEnhancePrompt, enhancePromptDisabledReason, handleEnhancePrompt, isEnhancingPrompt, showEnhancePrompt]);
+
+    React.useEffect(() => () => {
+        enhanceAbortRef.current?.abort();
+    }, []);
+
+    React.useEffect(() => {
+        enhanceAbortRef.current?.abort();
+    }, [chatDraftIdentity]);
 
     const footerPaddingClass = isMobile ? 'px-1.5 py-1.5' : (isVSCode ? 'px-1.5 py-1' : 'px-2.5 py-1.5');
     const buttonSizeClass = isMobile ? 'h-8 w-8' : (isVSCode ? 'h-5 w-5' : 'h-6 w-6');
@@ -5545,6 +5679,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
                         onRunInParallel={!isMobile && !isBtwActive && !columnPinned ? handleRunInParallel : undefined}
                         parallelRun={parallelRun}
                         waitingForOpenCode={waitingForOpenCode}
+                        enhancePrompt={enhancePrompt}
                     />
                     {mobileModelAgentRow}
                     </div>

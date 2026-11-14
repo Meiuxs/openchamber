@@ -22,7 +22,7 @@
  */
 
 import React from 'react';
-import { history, historyKeymap, insertNewline, standardKeymap } from '@codemirror/commands';
+import { history, historyKeymap, insertNewline, isolateHistory, standardKeymap } from '@codemirror/commands';
 import { Annotation, Compartment, EditorState, Prec, type ChangeDesc, type Extension } from '@codemirror/state';
 import {
     EditorView,
@@ -480,7 +480,10 @@ export const ComposerEditor = React.memo(React.forwardRef<ComposerEditorHandle, 
             // the previous one.
             view.dispatch({
                 ...replaceWithCaret(view.state, 0, current.length, value),
-                annotations: valuePropWrite.of(true),
+                // An external rewrite is its own undo step: without the
+                // isolation it joins the typing before it and one undo
+                // discards both.
+                annotations: [valuePropWrite.of(true), isolateHistory.of('full')],
             });
             // A large insert can push the caret below the fold, and a
             // transaction-time `scrollIntoView` cannot reach it: wrapped-line

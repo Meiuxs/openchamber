@@ -30,6 +30,7 @@ import { isDictationCaptureSupported } from '@/lib/dictation/use-dictation-audio
 import { ModelControls } from '../../ModelControls';
 import { ComposerActionButtons } from './ComposerActionButtons';
 import { ComposerAttachmentControls, type ComposerTrackerPicker } from './ComposerAttachmentControls';
+import { ComposerEnhanceButton } from './ComposerEnhanceButton';
 import { PermissionAutoAcceptButton } from './PermissionAutoAcceptButton';
 import type { PermissionMode } from '@/stores/utils/permissionAutoAccept';
 import type { BtwSelection } from '@/stores/useBtwStore';
@@ -96,6 +97,11 @@ interface ComposerFooterProps {
     parallelRun?: { runCount: number; launching: boolean; onLaunch: () => void } | null;
     /** A sent message is held until OpenCode's first connection. */
     waitingForOpenCode: boolean;
+    enhancePrompt: {
+        state: 'hidden' | 'disabled' | 'ready' | 'loading';
+        disabledReason?: string;
+        onClick: () => void;
+    };
 }
 
 /** Quiet note beside the send button while a sent message waits for OpenCode to start. */
@@ -163,6 +169,7 @@ function ComposerFooterView(props: ComposerFooterProps) {
         onRunInParallel,
         parallelRun = null,
         waitingForOpenCode,
+        enhancePrompt,
     } = props;
 
     const dictationEnabled = useConfigStore((state) => state.dictationEnabled);
@@ -310,6 +317,15 @@ function ComposerFooterView(props: ComposerFooterProps) {
                     <div className={cn('flex items-center flex-1 justify-end', isVSCode ? cn(footerGapClass, 'md:gap-x-3') : 'gap-x-2')} data-dictation-chain="true">
                         {waitingForOpenCode ? <OpenCodeStartupNote className="flex-shrink-0" /> : null}
                         {parallelRun ? <MemoModelControls className={cn('flex-1 min-w-0')} agentOnly /> : isBtw ? <ModelControls className={cn('flex-1 min-w-0 justify-end')} sessionId={modelSessionId ?? null} selection={btwSelection} rememberVariantPicks={false} modelSelectorOpen={btwModelSelectorOpen} onModelSelectorOpenChange={onBtwModelSelectorOpenChange} /> : pinnedSelection ? <ModelControls className={cn('flex-1 min-w-0 justify-end')} sessionId={currentSessionId} selection={pinnedSelection} rememberVariantPicks /> : <MemoModelControls className={cn('flex-1 min-w-0 justify-end')} onRunInParallel={onRunInParallel} />}
+                        {enhancePrompt.state !== 'hidden' ? (
+                            <ComposerEnhanceButton
+                                state={enhancePrompt.state}
+                                disabledReason={enhancePrompt.disabledReason}
+                                footerIconButtonClass={footerIconButtonClass}
+                                iconSizeClass={iconSizeClass}
+                                onClick={enhancePrompt.onClick}
+                            />
+                        ) : null}
                         {!isBtw ? <MemoComposerDictation
                             radius={chatInputRadius}
                             isMobile={isMobile}
