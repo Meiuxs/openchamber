@@ -5081,24 +5081,29 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     // The collapsed phone pill shows the draft; nothing can be typed into it.
     const pillText = useComposerTextValue(composerText, (text) => (isMobile && !mobileComposerExpanded ? text : ''));
     const waitingForOpenCode = useOpenCodeStartupStore((state) => state.waitingSends > 0);
-    const enhanceDraftText = useComposerTextValue(composerText, (text) => text);
+    // Booleans, not the draft: ChatInput must not re-render on every keystroke.
+    const enhanceHasText = useComposerTextValue(composerText, (text) => /\p{L}/u.test(text));
+    const enhanceIsSlashCommand = useComposerTextValue(
+        composerText,
+        (text) => text.startsWith('/') && Boolean(parseSlashCommand(text)),
+    );
 
     const canEnhancePrompt = !isMobile
         && !isBtwActive
         && !parallelRun
         && inputMode === 'normal'
         && !waitingForOpenCode
-        && !parseSlashCommand(enhanceDraftText)
-        && /\p{L}/u.test(enhanceDraftText)
+        && !enhanceIsSlashCommand
+        && enhanceHasText
         && Boolean(currentProviderId && currentModelId);
 
     const showEnhancePrompt = !isMobile
         && !isBtwActive
         && !parallelRun
         && inputMode === 'normal'
-        && !parseSlashCommand(enhanceDraftText);
+        && !enhanceIsSlashCommand;
 
-    const enhancePromptDisabledReason = !/\p{L}/u.test(enhanceDraftText)
+    const enhancePromptDisabledReason = !enhanceHasText
         ? t('chat.chatInput.enhancePrompt.disabledNoText')
         : !currentProviderId || !currentModelId
             ? t('chat.chatInput.toast.noModelSelected')

@@ -97,6 +97,10 @@ describe('extractProtectedFragments', () => {
     expect(fragments).toContain('[diagram.png]');
     expect(fragments).not.toContain('$5');
   });
+
+  test('an attachment the draft does not cite is not a protected fragment', () => {
+    expect(extractProtectedFragments('summarize this', ['report.pdf'])).toEqual([]);
+  });
 });
 
 describe('validatePromptEnhancementOutput', () => {
@@ -147,6 +151,13 @@ describe('validatePromptEnhancementOutput', () => {
     const draft = 'Fix the bug';
     const reply = 'Fix the bug '.repeat(200);
     expect(errorCode(() => validatePromptEnhancementOutput(draft, [], reply))).toBe('too-long');
+  });
+
+  test('an attachment the draft does not cite does not have to appear', () => {
+    expect(validatePromptEnhancementOutput('summarize this', ['report.pdf'], 'Summarize this.')).toEqual({
+      text: 'Summarize this.',
+      changed: true,
+    });
   });
 });
 

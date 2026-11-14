@@ -54,7 +54,8 @@ export const extractProtectedFragments = (
     fragments.add(match[0]);
   }
   for (const filename of attachmentFilenames) {
-    fragments.add(`[${filename}]`);
+    const citation = `[${filename}]`;
+    if (draft.includes(citation)) fragments.add(citation);
   }
   return [...fragments];
 };
