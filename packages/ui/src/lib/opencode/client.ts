@@ -1977,9 +1977,15 @@ class OpencodeService {
   }
 
   /** One stateless generation with the server's default model unless `model` is given. */
-  async generateText(prompt: string, options?: { model?: ModelSelection; directory?: string | null }): Promise<string> {
+  async generateText(
+    prompt: string,
+    options?: { model?: ModelSelection; directory?: string | null; signal?: AbortSignal },
+  ): Promise<string> {
     const result = await call("generate.text", () =>
-      this.clientFor(options?.directory).experimental.generate.text({ prompt, model: options?.model ? toModelRef(options.model) : undefined }),
+      this.clientFor(options?.directory).experimental.generate.text(
+        { prompt, model: options?.model ? toModelRef(options.model) : undefined },
+        options?.signal ? { signal: options.signal } : undefined,
+      ),
     )
     return result.text
   }

@@ -36,3 +36,28 @@ describe('provider catalog instance ownership', () => {
     expect(requests).toEqual(roundTrip ? catalogRequests : [...catalogRequests, ...catalogRequests]);
   });
 });
+
+test('generateText forwards the caller signal to the OpenCode request', async () => {
+  const controller = new AbortController();
+  let seen: AbortSignal | undefined;
+  const transport = spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === '/auth/url-token') return new Response(null, { status: 404 });
+    seen = input instanceof Request ? input.signal : init?.signal ?? undefined;
+    return Response.json({ data: { text: 'ok' } });
+  });
+  try {
+    switchRuntimeEndpoint({ apiBaseUrl: 'http://generate.test', runtimeKey: 'generate-test' });
+    opencodeClient.reconnectToRuntimeBaseUrl();
+
+    const result = await opencodeClient.generateText('hello', {
+      model: { providerID: 'provider', id: 'model' },
+      signal: controller.signal,
+    });
+    expect(result).toBe('ok');
+
+    expect(seen).toBe(controller.signal);
+  } finally {
+    transport.mockRestore();
+  }
+});
