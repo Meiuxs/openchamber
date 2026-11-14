@@ -254,6 +254,23 @@ test('a draft changed during the request is not overwritten', async () => {
   }
 });
 
+test('a draft of only references keeps the wand disabled', async () => {
+  const { container, root, view } = await mountComposer();
+  try {
+    await typeDraft(view, '@src/foo.ts');
+    await act(async () => {
+      useConfigStore.setState({ currentProviderId: 'provider', currentModelId: 'model' });
+      await new Promise((done) => setTimeout(done, 300));
+    });
+
+    const button = container.querySelector<HTMLButtonElement>('button[aria-label="Enhance prompt"]');
+    expect(button?.disabled).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
 test('a rewrite that drops a reference keeps the original', async () => {
   const { container, root, view } = await mountComposer();
   enhanceResponse = Response.json({ text: 'Please fix the bug.' });

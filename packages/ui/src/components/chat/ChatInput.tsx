@@ -478,6 +478,11 @@ const resolveChatDraftIdentity = (column: ChatColumnSession | null): ChatDraftId
     return createChatDraftIdentity(getRuntimeKey(), directory, sessionId ?? resolveWorkDraftComposerKey(draft));
 };
 
+const REFERENCE_TOKEN = /(?:^|\s)(?:@[^\s]+|\$[A-Za-z_][\w-]*|#[^\s]+)|https?:\/\/[^\s)]+|\[[^\]]+\]/g;
+
+/** A draft made only of references has no request for the model to rewrite. */
+const hasEnhanceableText = (text: string): boolean => /\p{L}/u.test(text.replace(REFERENCE_TOKEN, ' '));
+
 type AttachmentPickerInputProps = {
     ref: React.Ref<HTMLInputElement>;
     onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -5082,7 +5087,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     const pillText = useComposerTextValue(composerText, (text) => (isMobile && !mobileComposerExpanded ? text : ''));
     const waitingForOpenCode = useOpenCodeStartupStore((state) => state.waitingSends > 0);
     // Booleans, not the draft: ChatInput must not re-render on every keystroke.
-    const enhanceHasText = useComposerTextValue(composerText, (text) => /\p{L}/u.test(text));
+    const enhanceHasText = useComposerTextValue(composerText, hasEnhanceableText);
     const enhanceIsSlashCommand = useComposerTextValue(
         composerText,
         (text) => text.startsWith('/') && Boolean(parseSlashCommand(text)),
