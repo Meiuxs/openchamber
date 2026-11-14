@@ -182,6 +182,14 @@ const PROMPT_PAGE_MAP: Record<string, PromptPageConfig> = {
       { id: 'session.fusion.codeInstructions', titleKey: 'settings.magicPrompts.page.block.codeFusionInstructions' },
     ],
   },
+  'session.promptEnhance': {
+    titleKey: 'settings.magicPrompts.page.group.promptEnhance.title',
+    descriptionKey: 'settings.magicPrompts.page.group.promptEnhance.description',
+    blocks: [
+      { id: 'session.promptEnhance.visible', titleKey: 'settings.magicPrompts.page.block.visiblePrompt' },
+      { id: 'session.promptEnhance.instructions', titleKey: 'settings.magicPrompts.page.block.instructions' },
+    ],
+  },
   'memory.tidy': {
     titleKey: 'settings.magicPrompts.page.group.memoryTidy.title',
     descriptionKey: 'settings.magicPrompts.page.group.memoryTidy.description',

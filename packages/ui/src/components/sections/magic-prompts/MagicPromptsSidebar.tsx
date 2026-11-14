@@ -47,6 +47,7 @@ export const MagicPromptsSidebar: React.FC<MagicPromptsSidebarProps> = ({ onItem
           { id: 'session.debug', titleKey: 'settings.magicPrompts.sidebar.item.sessionDebug' },
           { id: 'session.weigh', titleKey: 'settings.magicPrompts.sidebar.item.sessionWeigh' },
           { id: 'session.fusion', titleKey: 'settings.magicPrompts.sidebar.item.sessionFusion' },
+          { id: 'session.promptEnhance', titleKey: 'settings.magicPrompts.sidebar.item.promptEnhance' },
         ],
       },
       {

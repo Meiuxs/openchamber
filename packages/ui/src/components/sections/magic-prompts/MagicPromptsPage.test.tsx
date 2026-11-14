@@ -364,3 +364,14 @@ test('text typed while a save is in flight stays in the editor', async () => {
   expect(field('Visible prompt')?.value).toBe('Saved text, and more');
   expect(server.global).toEqual({ kind: 'ok', prompts: { [VISIBLE]: 'Saved text' } });
 });
+
+test('shows the prompt enhancement templates', async () => {
+  useProjects([{ id: 'proj', path: '/work/proj' }]);
+  useMagicPromptsStore.getState().setSelectedPromptId('session.promptEnhance');
+
+  await mount();
+
+  expect(container.textContent).toContain('Prompt Enhancement');
+  expect(field('Visible prompt')?.value).toContain('rewrite');
+  expect(field('Instructions')?.value).toContain('{{draft}}');
+});
