@@ -228,4 +228,15 @@ describe('GhosttyTerminalCore', () => {
     core.write('\x1b[<u');
     expect(core.encodeMacWordShortcut(optionKey('Backspace'), 'MacIntel')).toBe('\x17');
   });
+
+  test('select all spans the scrollback and clearing empties the selection text', async () => {
+    const core = await createCore();
+    core.write(Array.from({ length: 12 }, (_, index) => `row-${index}`).join('\r\n'));
+    core.selectAll();
+    const text = core.selectionText();
+    expect(text).toContain('row-0');
+    expect(text).toContain('row-11');
+    core.clearSelection();
+    expect(core.selectionText()).toBe('');
+  });
 });

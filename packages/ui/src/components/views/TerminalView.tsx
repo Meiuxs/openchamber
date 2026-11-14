@@ -889,9 +889,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ visible, directory, 
     }, [createTab, disconnectStream, terminalDirectory, setActiveTab]);
 
     const handleAttachSelection = React.useCallback(() => {
-        const selection = terminalControllerRef.current?.getSelection();
+        const controller = terminalControllerRef.current;
+        if (!controller) return;
+        let selection = controller.getSelection();
+        let wholeOutput = false;
+        if (!selection) {
+            // No selection reads as "everything the terminal shows": the core
+            // selects all, yields the text, and no selection is left behind.
+            const whole = controller.getEntireBufferText()?.trimEnd() ?? null;
+            if (!whole) {
+                toast.info(t('terminalView.toast.emptyTerminal'));
+                return;
+            }
+            wholeOutput = true;
+            selection = { text: whole, startLine: 1, endLine: whole.split('\n').length };
+        }
         const target = readComposerDraftTarget(contextDirectory);
-        if (!selection || !target || !activeTab) return;
+        if (!target || !activeTab) return;
         const draftId = addContextDraft(target, {
             source: 'terminal',
             fileLabel: activeTab.label,
@@ -906,17 +920,32 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ visible, directory, 
             toast.error(t('inlineComment.toast.noRoom'));
             return;
         }
+        if (wholeOutput) toast.success(t('terminalView.toast.wholeOutputAttached'));
         queueMicrotask(focusChatInput);
     }, [activeTab, addContextDraft, contextDirectory, t]);
 
     // Touch hosts have no keyboard shortcut for copy, so the toolbar offers the
     // same action the desktop gets from Cmd/Ctrl+C on a selection.
     const handleCopySelection = React.useCallback(() => {
-        const selection = terminalControllerRef.current?.getSelection();
-        if (!selection?.text) return;
-        void copyTextToClipboard(selection.text).then((result) => {
-            if (result.ok) toast.success(t('terminalView.toast.selectionCopied'));
-            else toast.error(t('terminalView.toast.copyFailed'));
+        const controller = terminalControllerRef.current;
+        if (!controller) return;
+        let text = controller.getSelection()?.text ?? null;
+        let wholeOutput = false;
+        if (!text) {
+            const whole = controller.getEntireBufferText()?.trimEnd() ?? null;
+            if (!whole) {
+                toast.info(t('terminalView.toast.emptyTerminal'));
+                return;
+            }
+            text = whole;
+            wholeOutput = true;
+        }
+        void copyTextToClipboard(text).then((result) => {
+            if (result.ok) {
+                toast.success(t(wholeOutput ? 'terminalView.toast.wholeOutputCopied' : 'terminalView.toast.selectionCopied'));
+            } else {
+                toast.error(t('terminalView.toast.copyFailed'));
+            }
         });
     }, [t]);
 

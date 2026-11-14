@@ -1160,6 +1160,19 @@ export class GhosttyTerminalSurface {
     return this.core.selectionText();
   }
 
+  /**
+   * The whole buffer, scrollback included, as text with no selection left
+   * behind. Hosts use it when an action wants the terminal's output and the
+   * user has not selected anything. Returns null when the buffer holds no text.
+   */
+  getEntireBufferText(): string | null {
+    if (this.disposed) return null;
+    this.core.selectAll();
+    const text = this.core.selectionText();
+    this.clearSelection();
+    return text.trim().length > 0 ? text : null;
+  }
+
   getSelectionPosition(): GhosttySelectionPosition | null {
     if (!this.selectionAnchorScreen || !this.selectionEndScreen || !this.hasSelection())
       return null;

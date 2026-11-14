@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Window } from 'happy-dom';
+import { toast } from 'sonner';
 
 import type { TerminalHandlers } from '@/lib/api/types';
 import { useTerminalStore } from '@/stores/useTerminalStore';
@@ -53,7 +54,11 @@ const sessionUiState: SessionUiState = {
   newSessionDraft: null,
 };
 
-const useSessionUIStoreMock = <T,>(selector: (state: typeof sessionUiState) => T): T => selector(sessionUiState);
+const useSessionUIStoreMock = Object.assign(
+  <T,>(selector: (state: typeof sessionUiState) => T): T => selector(sessionUiState),
+  // Handler paths outside React (composer draft targets) read the store imperatively.
+  { getState: () => sessionUiState },
+);
 
 const uiState = {
   terminalFontSize: 14,
@@ -112,16 +117,40 @@ mock.module('@/lib/device', () => ({
   useTabletLayout: () => ({ enabled: false, roomyForPanels: false }),
 }));
 mock.module('@/stores/useUIStore', () => ({ useUIStore: useUiStoreMock }));
-mock.module('@/stores/useInlineCommentDraftStore', () => ({ useInlineCommentDraftStore: () => ({ addDraft: () => undefined }) }));
+type CapturedDraftTarget = { directory: string; sessionKey: string };
+type CapturedDraft = {
+  source: string;
+  fileLabel: string;
+  startLine: number;
+  endLine: number;
+  code: string;
+  language: string;
+  terminalId: string;
+  text: string;
+};
+const addDraftCalls: Array<{ target: CapturedDraftTarget; draft: CapturedDraft }> = [];
+const draftsByUser: Record<string, CapturedDraft[]> = {};
+const inlineCommentDraftState = {
+  drafts: draftsByUser,
+  addDraft: (target: CapturedDraftTarget, draft: CapturedDraft) => {
+    addDraftCalls.push({ target, draft });
+    return `icd-${addDraftCalls.length}`;
+  },
+};
+mock.module('@/stores/useInlineCommentDraftStore', () => ({
+  useInlineCommentDraftStore: <T,>(selector: (state: typeof inlineCommentDraftState) => T) => selector(inlineCommentDraftState),
+}));
+let entireBufferText: string | null = null;
 mock.module('@/components/terminal/TerminalViewport', () => ({
   TerminalViewport: React.forwardRef(function TerminalViewportMock(
     { sessionKey, chunks, isVisible, onResize }: { sessionKey: string; chunks: unknown[]; isVisible: boolean; onResize: (cols: number, rows: number) => void },
-    ref: React.ForwardedRef<{ focus: () => void; fit: () => void; getSelection: () => null; pasteClipboard: () => Promise<void> }>,
+    ref: React.ForwardedRef<{ focus: () => void; fit: () => void; getSelection: () => null; getEntireBufferText: () => string | null; pasteClipboard: () => Promise<void> }>,
   ) {
     React.useImperativeHandle(ref, () => ({
       focus: () => undefined,
       fit: () => undefined,
       getSelection: () => null,
+      getEntireBufferText: () => entireBufferText,
       pasteClipboard: async () => { pasteClipboardCalls.push(sessionKey); },
     }), [sessionKey]);
     // A real surface reports its fitted grid once it is visible; a visible tab
@@ -209,6 +238,8 @@ describe('TerminalView project action tab indicator', () => {
     connectBehavior = () => ({ close: () => undefined });
     deviceInfo = { isMobile: false, isTablet: false, hasTouchOnlyPointer: false };
     pasteClipboardCalls.length = 0;
+    addDraftCalls.length = 0;
+    entireBufferText = null;
     windowInstance = new Window({ url: 'http://localhost/' });
     Object.assign(globalThis, {
       window: windowInstance,
@@ -644,5 +675,38 @@ describe('TerminalView project action tab indicator', () => {
     expect(tabLabels).not.toContain('Worktree Terminal');
     expect(connectCalls).toEqual(['srv-parent-build']);
     expect(createSessionCalls.length).toBe(0);
+  });
+
+  test('attaching with no selection attaches the whole terminal output and reports it', async () => {
+    await act(async () => root.render(React.createElement(TerminalView, { visible: true })));
+    await flushEffects();
+
+    entireBufferText = 'alpha\r\nbeta\r\n';
+    await act(async () => {
+      host.querySelector<HTMLElement>('[aria-label="terminalView.actions.attachSelection"]')?.click();
+    });
+    await flushEffects();
+
+    expect(addDraftCalls).toHaveLength(1);
+    expect(addDraftCalls[0]!.draft.code).toBe('alpha\r\nbeta');
+    expect(addDraftCalls[0]!.draft.startLine).toBe(1);
+    expect(addDraftCalls[0]!.draft.endLine).toBe(2);
+    expect(toast.getHistory().some((entry) => 'title' in entry
+      && entry.title === 'terminalView.toast.wholeOutputAttached')).toBe(true);
+  });
+
+  test('attaching with nothing selected and an empty terminal says so instead of staying silent', async () => {
+    await act(async () => root.render(React.createElement(TerminalView, { visible: true })));
+    await flushEffects();
+
+    entireBufferText = null;
+    await act(async () => {
+      host.querySelector<HTMLElement>('[aria-label="terminalView.actions.attachSelection"]')?.click();
+    });
+    await flushEffects();
+
+    expect(addDraftCalls).toHaveLength(0);
+    expect(toast.getHistory().some((entry) => 'title' in entry
+      && entry.title === 'terminalView.toast.emptyTerminal')).toBe(true);
   });
 });

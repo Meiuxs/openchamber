@@ -23,6 +23,7 @@ type TerminalEvent =
   | { type: 'dispose' };
 const terminalEvents: TerminalEvent[] = [];
 let selectedText = '';
+let entireBufferText: string | null = null;
 let reportMouse = false;
 let focusCount = 0;
 let surfaceOptions: Parameters<TerminalSurfaceFactory>[1] | null = null;
@@ -50,6 +51,9 @@ class TerminalSurfaceDouble implements TerminalSurface {
   focus() { focusCount += 1; }
   getSelection() {
     return selectedText;
+  }
+  getEntireBufferText() {
+    return entireBufferText;
   }
   async pasteFromClipboard(readText: () => Promise<string>, isCurrent: () => boolean = () => true) {
     const data = await readText();
@@ -169,6 +173,7 @@ describe('TerminalViewport integration', () => {
   beforeEach(() => {
     terminalEvents.length = 0;
     selectedText = '';
+    entireBufferText = null;
     reportMouse = false;
     focusCount = 0;
     surfaceOptions = null;
@@ -232,6 +237,19 @@ describe('TerminalViewport integration', () => {
     expect(await navigator.clipboard.readText()).toBe('terminal output\n');
     expect(host.querySelectorAll('canvas')).toHaveLength(1);
     expect(terminalEvents.filter((event) => event.type === 'dispose')).toHaveLength(0);
+  });
+
+  test('the controller exposes the whole-buffer text when the user has not selected anything', async () => {
+    await renderViewport(root, []);
+    await flushSurfaceLoad();
+    selectedText = '';
+    expect(controller.current?.getSelection()).toBeNull();
+    entireBufferText = 'alpha\r\nbeta';
+    expect(controller.current?.getEntireBufferText()).toBe('alpha\r\nbeta');
+    // The double passes the value through; the real surface maps an empty
+    // buffer to null so the host can tell "nothing there" apart from text.
+    entireBufferText = '';
+    expect(controller.current?.getEntireBufferText()).toBe('');
   });
 
   test('writes the latest terminal selection once the previous PRIMARY write finishes', async () => {

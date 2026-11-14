@@ -33,6 +33,7 @@ export type TerminalSurface = Pick<
   | 'refresh'
   | 'focus'
   | 'getSelection'
+  | 'getEntireBufferText'
   | 'pasteFromClipboard'
   | 'getSelectionPosition'
   | 'scrollLines'
@@ -95,6 +96,8 @@ export type TerminalController = {
   focus: () => void;
   fit: () => void;
   getSelection: () => { text: string; startLine: number; endLine: number } | null;
+  /** Whole-buffer text (scrollback included) with no selection left behind; null when the terminal holds no text. */
+  getEntireBufferText: () => string | null;
   /** Reads the clipboard and sends it to the shell as a paste. Call it from the click itself. */
   pasteClipboard: () => Promise<void>;
 };
@@ -456,6 +459,7 @@ const TerminalViewport = React.forwardRef<TerminalController, Props>(({
       if (!range || !text.trim()) return null;
       return { text, startLine: range.start.y + 1, endLine: range.end.y + 1 };
     },
+    getEntireBufferText: () => surfaceRef.current?.getEntireBufferText() ?? null,
     // Touch hosts have no paste shortcut to fall back on, so their failure names none.
     pasteClipboard: () => pasteClipboard(t('terminalView.toast.pasteFailedTouch')),
   }), [pasteClipboard, t]);
