@@ -60,6 +60,8 @@ export type MagicPromptId =
   | 'session.fusion.visible'
   | 'session.fusion.instructions'
   | 'session.fusion.codeInstructions'
+  | 'session.promptEnhance.visible'
+  | 'session.promptEnhance.instructions'
   | 'memory.tidy.visible'
   | 'memory.tidy.instructions'
   | 'memory.toDocs.visible'
@@ -959,6 +961,42 @@ How to work:
 Read diffs selectively, file by file; do not print every attempt in full.
 
 --- FUSION INPUTS START ---`,
+  },
+  {
+    id: 'session.promptEnhance.visible',
+    title: 'Prompt Enhancement Role',
+    group: 'Session',
+    description: 'System message for rewriting a composer draft.',
+    template: 'You rewrite a developer\'s draft prompt so a coding agent can act on it without guessing.',
+  },
+  {
+    id: 'session.promptEnhance.instructions',
+    title: 'Prompt Enhancement Instructions',
+    group: 'Session',
+    description: 'Rules and the draft placeholder for rewriting a composer draft.',
+    placeholders: [
+      { key: 'draft', description: 'The current composer draft.' },
+    ],
+    template: `Rewrite the draft below. Return only the rewritten prompt: no preamble,
+explanations, quotes, or code fences.
+
+Rules:
+- Keep the draft's language.
+- Keep every file, agent, skill, and snippet reference exactly as written:
+  @name, $name, #name, /command, file paths, URLs, inline code, and code blocks.
+- Do not answer the request, and do not add facts, files, APIs, or requirements
+  the draft does not state.
+- Make the goal explicit and organize the request when that helps: task,
+  concrete requirements, constraints already implied, and what done looks like.
+- Use structure only when the draft has multiple parts. A short draft stays one
+  paragraph.
+- Resolve an ambiguity only when one reading is clearly intended; otherwise keep
+  it open.
+- Stay close to the original length. If the draft is already clear, return it
+  almost unchanged.
+
+Draft:
+{{draft}}`,
   },
   {
     id: 'memory.tidy.visible',

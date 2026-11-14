@@ -68,3 +68,19 @@ describe('loadMagicPrompts', () => {
     await expect(loadMagicPrompts('/work/repo')).rejects.toThrow();
   });
 });
+
+describe('prompt enhancement defaults', () => {
+  test('the visible role and the instructions are separate prompts', () => {
+    expect(getDefaultMagicPromptTemplate('session.promptEnhance.visible')).toContain('rewrite');
+    expect(getDefaultMagicPromptTemplate('session.promptEnhance.instructions')).toContain('{{draft}}');
+    expect(getDefaultMagicPromptTemplate('session.promptEnhance.instructions')).toContain('Do not answer the request');
+  });
+
+  test('an override replaces the enhancement instructions', async () => {
+    respond = () => json({ version: 1, overrides: { 'session.promptEnhance.instructions': 'Rewrite: {{draft}}' } });
+
+    const prompts = await loadMagicPrompts('/repo');
+
+    expect(prompts.render('session.promptEnhance.instructions', { draft: 'fix it' })).toBe('Rewrite: fix it');
+  });
+});
