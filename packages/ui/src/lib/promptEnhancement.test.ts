@@ -1,12 +1,70 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { RuntimeFetchOptions } from '@/lib/runtime-fetch';
+import type { PromptEnhancementErrorCode } from './promptEnhancement';
 
-import {
+type GenerateTextOptions = {
+  model?: { providerID: string; id: string };
+  directory?: string | null;
+  signal?: AbortSignal;
+};
+type GenerateTextCall = { prompt: string; options?: GenerateTextOptions };
+type RuntimeFetchCall = { input: string | URL | Request; init?: RequestInit };
+type SmallModelOptions = { notifyOnError?: boolean; silentStatuses?: number[] };
+type SmallModelCall = { init: RuntimeFetchOptions; options?: SmallModelOptions };
+type Responder<T> = (call: T) => Promise<Response>;
+
+let vscodeRuntime = false;
+let generateTextCalls: GenerateTextCall[] = [];
+let runtimeFetchCalls: RuntimeFetchCall[] = [];
+let smallModelCalls: SmallModelCall[] = [];
+
+const defaultRuntimeFetch = async ({ input }: RuntimeFetchCall): Promise<Response> => {
+  const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost');
+  if (url.pathname === '/api/small-model') {
+    return Response.json({ available: true, model: { providerID: 'provider', modelID: 'model' } });
+  }
+  return Response.json({ text: 'SMALL TEXT' });
+};
+
+const defaultSmallModel = async (): Promise<Response> => Response.json({ text: 'SMALL TEXT' });
+
+let runtimeFetchResponder: Responder<RuntimeFetchCall> = defaultRuntimeFetch;
+let smallModelResponder: Responder<SmallModelCall> = defaultSmallModel;
+
+const generateText = mock(async (prompt: string, options?: GenerateTextOptions) => {
+  generateTextCalls.push({ prompt, options });
+  return 'OPENCODE TEXT';
+});
+
+mock.module('@/lib/opencode/client', () => ({
+  opencodeClient: { generateText },
+}));
+mock.module('@/lib/desktop', () => ({
+  isVSCodeRuntime: () => vscodeRuntime,
+}));
+
+const runtimeFetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+  const call = { input, init };
+  runtimeFetchCalls.push(call);
+  return runtimeFetchResponder(call);
+});
+mock.module('@/lib/runtime-fetch', () => ({ runtimeFetch }));
+
+const requestSmallModel = mock(async (init: RuntimeFetchOptions, options?: SmallModelOptions) => {
+  const call = { init, options };
+  smallModelCalls.push(call);
+  return smallModelResponder(call);
+});
+mock.module('@/lib/smallModelRequest', () => ({ requestSmallModel }));
+
+const {
+  enhancePromptDraft,
   extractProtectedFragments,
   normalizePromptEnhancement,
   PromptEnhancementError,
-  type PromptEnhancementErrorCode,
+  renderPromptEnhancementPrompts,
   validatePromptEnhancementOutput,
-} from './promptEnhancement';
+} = await import('./promptEnhancement');
 
 const errorCode = (run: () => void): PromptEnhancementErrorCode => {
   try {
@@ -89,5 +147,121 @@ describe('validatePromptEnhancementOutput', () => {
     const draft = 'Fix the bug';
     const reply = 'Fix the bug '.repeat(200);
     expect(errorCode(() => validatePromptEnhancementOutput(draft, [], reply))).toBe('too-long');
+  });
+});
+
+const prompts = {
+  render: (id: string, variables?: Record<string, string>) => (
+    id === 'session.promptEnhance.visible' ? 'SYSTEM' : `RULES\n${variables?.draft ?? ''}`
+  ),
+};
+
+const request = (overrides: Partial<Parameters<typeof enhancePromptDraft>[0]> = {}) => ({
+  draft: 'fix the bug',
+  prompts,
+  directory: '/spaces/space-1/repo',
+  providerID: 'provider',
+  modelID: 'model',
+  attachmentFilenames: [],
+  signal: new AbortController().signal,
+  timeoutMs: 1000,
+  ...overrides,
+});
+
+describe('renderPromptEnhancementPrompts', () => {
+  test('renders the role and the instructions with the draft', () => {
+    expect(renderPromptEnhancementPrompts(prompts, 'fix the bug')).toEqual({
+      system: 'SYSTEM',
+      prompt: 'RULES\nfix the bug',
+    });
+  });
+});
+
+beforeEach(() => {
+  generateTextCalls = [];
+  runtimeFetchCalls = [];
+  smallModelCalls = [];
+  runtimeFetchResponder = defaultRuntimeFetch;
+  smallModelResponder = defaultSmallModel;
+  vscodeRuntime = false;
+});
+
+describe('enhancePromptDraft', () => {
+  test('uses the Small Model when the resolved provider matches and carries the space directory', async () => {
+    const result = await enhancePromptDraft(request());
+
+    expect(result).toEqual({ text: 'SMALL TEXT', changed: true, transport: 'small-model' });
+    expect(generateTextCalls).toHaveLength(0);
+    expect(smallModelCalls).toHaveLength(1);
+    const call = smallModelCalls[0];
+    const body = JSON.parse(String(call?.init.body));
+    expect(body.system).toBe('SYSTEM');
+    expect(body.directory).toBe('/spaces/space-1/repo');
+    expect(body.preferredProviderID).toBe('provider');
+    expect(body.preferredModelID).toBe('model');
+    expect(body.restrictToPreferredProvider).toBe(true);
+    expect(body.prompt).toContain('fix the bug');
+    expect(call?.init.directory).toBe('/spaces/space-1/repo');
+    expect(call?.options).toEqual({ notifyOnError: false });
+  });
+
+  test('uses OpenCode with the current model when the Small Model resolves to another provider', async () => {
+    runtimeFetchResponder = async () => Response.json({ available: true, model: { providerID: 'other' } });
+
+    const result = await enhancePromptDraft(request());
+
+    expect(result.transport).toBe('opencode');
+    expect(smallModelCalls).toHaveLength(0);
+    const call = generateTextCalls[0];
+    expect(call?.prompt).toBe('SYSTEM\n\nRULES\nfix the bug');
+    expect(call?.options?.model).toEqual({ providerID: 'provider', id: 'model' });
+    expect(call?.options?.directory).toBe('/spaces/space-1/repo');
+    expect(call?.options?.signal instanceof AbortSignal).toBe(true);
+  });
+
+  test('uses OpenCode when the Small Model is unavailable or the pre-flight fails', async () => {
+    runtimeFetchResponder = async () => Response.json({ available: false, model: null });
+    expect((await enhancePromptDraft(request())).transport).toBe('opencode');
+
+    runtimeFetchResponder = async () => Response.json({}, { status: 500 });
+    expect((await enhancePromptDraft(request())).transport).toBe('opencode');
+  });
+
+  test('the VS Code runtime uses OpenCode and never reads the Small Model', async () => {
+    vscodeRuntime = true;
+
+    const result = await enhancePromptDraft(request());
+
+    expect(result.transport).toBe('opencode');
+    expect(runtimeFetchCalls).toHaveLength(0);
+    expect(smallModelCalls).toHaveLength(0);
+  });
+
+  test('a small-model 404 falls back to OpenCode', async () => {
+    smallModelResponder = async () => Response.json(
+      { error: 'No small model', code: 'small-model-unavailable' },
+      { status: 404 },
+    );
+
+    const result = await enhancePromptDraft(request());
+
+    expect(result.transport).toBe('opencode');
+    expect(generateTextCalls).toHaveLength(1);
+  });
+
+  test('a hung request aborts at the timeout', async () => {
+    runtimeFetchResponder = ({ init }) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init?.signal?.reason));
+    });
+
+    let failureCode: PromptEnhancementErrorCode | null = null;
+    try {
+      await enhancePromptDraft(request({ timeoutMs: 10 }));
+    } catch (error) {
+      if (!(error instanceof PromptEnhancementError)) throw error;
+      failureCode = error.code;
+    }
+    expect(failureCode).toBe('timeout');
+    expect(generateTextCalls).toHaveLength(0);
   });
 });
