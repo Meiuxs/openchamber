@@ -60,6 +60,7 @@ import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
 import { gitlabIssueI18n } from './gitlab-issue.i18n';
+import { gitlabRunsI18n } from './gitlab-runs.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -260,6 +261,7 @@ export const dict: Record<I18nKey, string> = {
   ...integrationsCatalogI18n['uk'],
   ...diffFindI18n['uk'],
   ...gitlabIssueI18n['uk'],
+  ...gitlabRunsI18n['uk'],
   ...markdownOutlineI18n['uk'],
   ...markdownGithubI18n['uk'],
   ...autocompleteScopeI18n['uk'],

@@ -464,6 +464,8 @@ const RepositoryPreview: React.FC<{
     footer?: React.ReactNode;
     pullLinks?: React.ReactNode;
     reply?: React.ReactNode;
+    /** Above the description: what the GitLab automation is doing with the item. */
+    runControl?: React.ReactNode;
     labelsControl?: React.ReactNode;
     reviewersControl?: React.ReactNode;
     onOpenChecks?: () => void;
@@ -473,7 +475,7 @@ const RepositoryPreview: React.FC<{
     threadActions?: ReferenceThreadActions;
     onOpenStackLayer?: (layer: PullRequestStackLayer) => void;
     revisionChoice?: RevisionChoice;
-}> = ({ reference, pullStatus, detail, purpose, pinned, includeDiff, onIncludeDiffChange, now, footer: footerOverride, pullLinks, reply, labelsControl, reviewersControl, onOpenChecks, commentAttachments, stateMenu, onRefresh, threadActions, onOpenStackLayer, revisionChoice }) => {
+}> = ({ reference, pullStatus, detail, purpose, pinned, includeDiff, onIncludeDiffChange, now, footer: footerOverride, pullLinks, reply, runControl, labelsControl, reviewersControl, onOpenChecks, commentAttachments, stateMenu, onRefresh, threadActions, onOpenStackLayer, revisionChoice }) => {
     const { t } = useI18n();
     const [refreshing, setRefreshing] = React.useState(false);
     const { broken: authorBroken, onError } = useAvatarImage(reference.author?.avatarUrl);
@@ -686,6 +688,7 @@ const RepositoryPreview: React.FC<{
                 </dl>
             }
         >
+            {runControl ? <div className="border-b border-edge pb-4">{runControl}</div> : null}
             {stack ? (
                 <section className="flex flex-col gap-2 border-b border-edge pb-4">
                     <h4 className="flex items-center gap-2 typography-ui-label font-semibold text-foreground">
@@ -1040,6 +1043,8 @@ export const ReferencePreview: React.FC<{
     trackerStateControl?: React.ReactNode;
     /** After an issue's or PR's activity: a way to answer it. */
     reply?: React.ReactNode;
+    /** Above the description: what the GitLab automation is doing with the item. */
+    runControl?: React.ReactNode;
     /** Replace an issue's or PR's labels, and a PR's reviewers, with ones that change them. */
     labelsControl?: React.ReactNode;
     reviewersControl?: React.ReactNode;
@@ -1065,7 +1070,7 @@ export const ReferencePreview: React.FC<{
     onOpenStackLayer?: (layer: PullRequestStackLayer) => void;
     /** A change's revisions to pick the shown one from, where the host keeps revisions. */
     revisionChoice?: RevisionChoice;
-}> = ({ item, directory, pullStatus, trackerDetail, repositoryDetail, purpose, pinned, includeDiff, onIncludeDiffChange, now, footer, pullLinks, trackerStateControl, reply, labelsControl, reviewersControl, blockersControl, assigneeControl, onOpenChecks, commentAttachments, stateMenu, onOpenTrackerItem, onOpenTrackerIdentifier, onRefresh, threadActions, onOpenStackLayer, revisionChoice }) => {
+}> = ({ item, directory, pullStatus, trackerDetail, repositoryDetail, purpose, pinned, includeDiff, onIncludeDiffChange, now, footer, pullLinks, trackerStateControl, reply, runControl, labelsControl, reviewersControl, blockersControl, assigneeControl, onOpenChecks, commentAttachments, stateMenu, onOpenTrackerItem, onOpenTrackerIdentifier, onRefresh, threadActions, onOpenStackLayer, revisionChoice }) => {
     const { t } = useI18n();
     const rewriteMarkdown = useProjectUploadRewrite(directory, item?.source === 'repository' ? item.reference : null);
     const links = useReferenceLinks(directory, item?.source === 'repository' ? item.reference : null);
@@ -1108,6 +1113,7 @@ export const ReferencePreview: React.FC<{
                     footer={footer}
                     pullLinks={pullLinks}
                     reply={reply}
+                    runControl={runControl}
                     labelsControl={labelsControl}
                     reviewersControl={reviewersControl}
                     onOpenChecks={onOpenChecks}

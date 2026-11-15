@@ -39,6 +39,7 @@ import {
     type ReferencePickerItem,
     type ReferencePickerSelection,
 } from '@/components/references/referencePickerItems';
+import { GitlabRunsPanel } from '@/components/gitlab-runs/GitlabRunsPanel';
 import { itemDirectory } from '@/components/references/acrossRepositories';
 import { forgetRepositoryPullStatus, forgetRepositoryPullStatuses, useRepositoryAcrossReferenceList, useTrackerItemDetail, useRepositoryHostProvider, useRepositoryReadContext, useRepositoryReferenceList } from '@/components/references/referenceSources';
 import { openExternalUrl } from '@/lib/url';
@@ -76,6 +77,7 @@ import { SourceBoardTrackerStatus } from './SourceBoardTrackerStatus';
 import { SourceBoardReply } from './SourceBoardReply';
 import { SourceBoardAcrossNote } from './SourceBoardAcrossNote';
 import { SourceBoardChecksDialog } from './SourceBoardChecksDialog';
+import { SourceBoardGitlabRun } from './SourceBoardGitlabRun';
 import { SourceBoardAssignee, SourceBoardBlockers, SourceBoardLabels, SourceBoardReviewers } from './SourceBoardMetaEditors';
 import { SourceBoardContainerPicker, SourceBoardProjectPicker, SourceBoardRepositoryPicker } from './SourceBoardPickers';
 import { TrackerIssueDialog } from './TrackerIssueDialog';
@@ -238,7 +240,7 @@ const SourceBoard: React.FC<{ layout: SourceBoardLayout; onLeave?: () => void; o
         repositoryStatus: repository.status,
         trackers: { connected: connectedTrackers, pending: trackersPending },
     });
-    const tracker = tab ? trackerOfSource(tab) : null;
+    const tracker = tab && tab !== 'runs' ? trackerOfSource(tab) : null;
 
     const trackerConnected = isTrackerConnected(useTrackerAuthEntry(tracker));
     const mapping = useTrackerMapping(tracker, trackerConnected);
@@ -371,6 +373,7 @@ const SourceBoard: React.FC<{ layout: SourceBoardLayout; onLeave?: () => void; o
                 kinds={{ repository: hasRepository ? { provider: allRepositories || hostProvider === 'none' ? null : hostProvider } : null, trackers: trackerTabs }}
                 initialRepositoryKind={repositoryKind}
                 onSelectKind={selectKind}
+                onSelectRuns={() => updateChoice({ tab: 'runs' })}
                 layout={layout}
                 onScreen={onScreen}
                 onLeave={onLeave}
@@ -402,17 +405,19 @@ const SourceBoardBody: React.FC<{
     kinds: { repository: { provider: string | null } | null; trackers: readonly TrackerDescriptor[] };
     initialRepositoryKind?: RepositoryReferenceKind;
     onSelectKind: (kind: SourceBoardKind) => void;
+    /** The automation's tab, beside the repository's kinds. */
+    onSelectRuns: () => void;
     layout: SourceBoardLayout;
     /** False while the desktop board is kept mounted but closed: nothing it lists is followed then. */
     onScreen: boolean;
     onLeave?: () => void;
     /** The phone page's close button. */
     onClose?: () => void;
-}> = ({ tab, project, directory, repositoryDiscoveryPending, allRepositories, trackerContainerId, mapping, projects, scopePicker, kinds, initialRepositoryKind, onSelectKind, layout, onScreen, onLeave, onClose }) => {
+}> = ({ tab, project, directory, repositoryDiscoveryPending, allRepositories, trackerContainerId, mapping, projects, scopePicker, kinds, initialRepositoryKind, onSelectKind, onSelectRuns, layout, onScreen, onLeave, onClose }) => {
     const isMobile = layout === 'mobile';
     const { t } = useI18n();
     const { sourceControl, trackers } = useRuntimeAPIs();
-    const tracker = trackerOfSource(tab);
+    const tracker = tab !== 'runs' ? trackerOfSource(tab) : null;
     const repositoryFocus = useSourceBoardStore((state) => (tab === 'repository' ? state.repositoryFocus : null));
     // An item another surface asked to show: an issue or PR by its link, a
     // tracker item by its identifier. It is read on its own, not typed into the
@@ -485,7 +490,9 @@ const SourceBoardBody: React.FC<{
         return null;
     }, [pinnedFolder, pinnedTrackerItem, pinnedReference]);
     const browser = useReferenceBrowser({
-        source: tab,
+        // The runs tab has no references of its own; when it cannot render, the
+        // board falls back to the repository view, so the browser does too.
+        source: tab === 'runs' ? 'repository' : tab,
         directory: tracker ? null : directory,
         directories: tracker ? null : allRepositories,
         isMobile,
@@ -680,6 +687,19 @@ const SourceBoardBody: React.FC<{
     const [checksOpenFor, setChecksOpenFor] = React.useState<string | null>(null);
     const previewPull = previewItem?.source === 'repository' && previewItem.reference.kind === 'pull' ? previewItem.reference : null;
     const previewKey = previewItem ? referencePickerItemKey(previewItem) : null;
+    // The automation's row for this item: a GitLab issue or change request, read
+    // through the folder it was listed from. Tracker items and other hosts have
+    // no run to show.
+    const previewRun: { folder: string; number: number; kind: 'issue' | 'pull' } | null = previewItem?.source === 'repository'
+        && previewItem.reference.provider === 'gitlab'
+        && previewItem.reference.kind !== 'discussion'
+        && readFolder
+        ? {
+            folder: readFolder,
+            number: previewItem.reference.number,
+            kind: previewItem.reference.kind === 'pull' ? 'pull' : 'issue',
+        }
+        : null;
     const checksDialog = previewPull && readContext ? (
         <SourceBoardChecksDialog
             pull={previewPull}
@@ -764,6 +784,27 @@ const SourceBoardBody: React.FC<{
             <Icon name="add" className="size-4" />
         </Button>
     ) : null;
+    // The same button for a GitLab repository: the project is the board's
+    // directory, and the GitLab issue dialog owns the rest. Without a tracker
+    // there is no other way to file an issue from the board.
+    const gitlabProject = React.useMemo(() => {
+        if (!directory) return null;
+        return projects.find((project) => project.path === directory) ?? null;
+    }, [projects, directory]);
+    const gitlabCreateButton = !trackerCreateButton && gitlabProject?.gitlabIssueBotAccountId ? (
+        <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn('shrink-0 px-0', isMobile ? 'size-8' : 'size-7')}
+            aria-label={t('sourceBoard.tracker.newIssue')}
+            title={t('sourceBoard.tracker.newIssue')}
+            onClick={() => useUIStore.getState().setGitlabIssueDialogProjectId(gitlabProject.id)}
+        >
+            <Icon name="add" className="size-4" />
+        </Button>
+    ) : null;
+    const createIssueButton = trackerCreateButton ?? gitlabCreateButton;
     // Edit issue, beside the previewed item's state control: the form opens on
     // the item's read detail.
     const trackerEditButton = canEditIssue ? (
@@ -815,6 +856,14 @@ const SourceBoardBody: React.FC<{
             onIncludeDiffChange={() => undefined}
             now={browser.now}
             footer={actions}
+            runControl={previewRun ? (
+                <SourceBoardGitlabRun
+                    key={previewKey ?? undefined}
+                    directory={previewRun.folder}
+                    number={previewRun.number}
+                    kind={previewRun.kind}
+                />
+            ) : undefined}
             trackerStateControl={previewItem?.source === 'tracker' ? (
                 <>
                     <SourceBoardTrackerStatus item={previewItem.item} onChanged={browser.list.retry} />
@@ -936,7 +985,7 @@ const SourceBoardBody: React.FC<{
     const search = (
         <ReferenceBrowserSearch
             browser={browser}
-            trailing={trackerCreateButton ? <>{trackerCreateButton}{listRefreshButton}</> : listRefreshButton}
+            trailing={createIssueButton ? <>{createIssueButton}{listRefreshButton}</> : listRefreshButton}
             onKeyDown={(event) => {
                 if (narrow) {
                     // Typing or arrows show the results; Enter keeps the one picked.
@@ -984,6 +1033,20 @@ const SourceBoardBody: React.FC<{
         />
     );
 
+    // The automation's own list, beside what it works on: only a GitLab project
+    // has runs. A board spanning several repositories does not know its host
+    // here and keeps the tab, since the list answers "not a GitLab project"
+    // rather than failing.
+    const runsTab = kinds.repository !== null
+        && (kinds.repository.provider === 'gitlab' || kinds.repository.provider === null);
+    // A tab remembered from a GitLab project, or restored before the host is
+    // known, falls back to the repository list rather than highlighting nothing.
+    React.useEffect(() => {
+        if (tab === 'runs' && !runsTab) onSelectKind(repositoryKindOfTab(browser.repositoryKind));
+    }, [browser.repositoryKind, onSelectKind, runsTab, tab]);
+    const runsView = runsTab && tab === 'runs' ? (
+        <GitlabRunsPanel embedded directory={directory} projectId={project?.id ?? null} />
+    ) : null;
     const kindItems = [
         ...(kinds.repository
             ? repositoryKindTabs(t, repositoryTerm, repositoryDiscussions).map((tab) => ({ ...tab, icon: <Icon name={tab.icon} className="size-3.5" /> }))
@@ -994,20 +1057,26 @@ const SourceBoardBody: React.FC<{
             label: descriptor.name,
             icon: <Icon name={trackerPresentation(descriptor.id).icon} className="size-3.5" />,
         })),
+        ...(runsTab ? [{ id: 'runs', label: t('gitlabRuns.page.title'), icon: <Icon name="robot" className="size-3.5" /> }] : []),
     ];
     const kindSwitch = (
         <div className={isMobile ? 'w-full' : 'shrink-0'}>
             <SortableTabsStrip
                 items={kindItems}
-                activeId={tracker ? tab : browser.repositoryKind}
+                activeId={tab === 'runs' ? 'runs' : tracker ? tab : browser.repositoryKind}
                 onSelect={(id) => {
+                    if (id === 'runs') {
+                        onSelectRuns();
+                        return;
+                    }
                     if (id.startsWith('tracker:')) {
                         onSelectKind(trackerReferenceSource(id.slice('tracker:'.length)));
                         return;
                     }
                     const kind = repositoryKindOfTab(id);
-                    // From a tracker tab the repository list remounts on the chosen kind.
-                    if (tracker) onSelectKind(kind);
+                    // From a tracker or the runs tab the repository list remounts on the
+                    // chosen kind, which puts the list back on screen.
+                    if (tracker || tab === 'runs') onSelectKind(kind);
                     else browser.selectRepositoryKind(kind);
                 }}
                 variant="active-pill"
@@ -1071,16 +1140,18 @@ const SourceBoardBody: React.FC<{
                         <MobileBoardHeader onClose={onClose}>{scopePicker}</MobileBoardHeader>
                         <div className="flex shrink-0 flex-col gap-2 border-b border-edge px-3 py-2">
                             {kindSwitch}
-                            {search}
+                            {runsView ? null : search}
                         </div>
                     </>
                 )}
                 {pinnedDiscoveryError && !inPreview ? pinnedDiscoveryError : null}
                 {/* A crash below keeps the header, the only way to close the page on iOS. */}
                 <ErrorBoundary>
-                    <ScrollableOverlay outerClassName="min-h-0 flex-1" className={inPreview ? 'px-4 py-3' : undefined} disableHorizontal>
-                        {inPreview ? preview : list}
-                    </ScrollableOverlay>
+                    {runsView ? runsView : (
+                        <ScrollableOverlay outerClassName="min-h-0 flex-1" className={inPreview ? 'px-4 py-3' : undefined} disableHorizontal>
+                            {inPreview ? preview : list}
+                        </ScrollableOverlay>
+                    )}
                 </ErrorBoundary>
                 {worktreeDialog}
                 {checksDialog}
@@ -1097,14 +1168,14 @@ const SourceBoardBody: React.FC<{
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-edge px-2 py-2.5">
                 {kindSwitch}
                 {scopePicker}
-                {narrow ? itemTrigger : null}
+                {runsView ? null : narrow ? itemTrigger : null}
                 {/* Narrow, the search takes a row of its own rather than shrink to a few letters. */}
-                {narrow ? <div className="flex min-w-[20rem] flex-1">{search}</div> : search}
+                {runsView ? null : narrow ? <div className="flex min-w-[20rem] flex-1">{search}</div> : search}
             </div>
             {narrow ? (
                 <div className="relative min-h-0 flex-1">
-                    {preview}
-                    {listDropdown ? (
+                    {runsView ?? preview}
+                    {runsView ? null : listDropdown ? (
                         <>
                             <div className="absolute inset-0 z-10" aria-hidden onClick={() => setListOpen(false)} />
                             <div className="oc-glass-popover oc-glass-floating absolute inset-x-2 top-1 z-20 flex h-[min(28rem,75%)] flex-col overflow-hidden rounded-xl">
@@ -1115,6 +1186,8 @@ const SourceBoardBody: React.FC<{
                         </>
                     ) : null}
                 </div>
+            ) : runsView ? (
+            <div className="flex min-h-0 flex-1">{runsView}</div>
             ) : (
             <div ref={splitRef} className="flex min-h-0 flex-1">
                 {/* CSS keeps a remembered width inside the board: never under

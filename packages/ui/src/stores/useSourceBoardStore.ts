@@ -7,11 +7,16 @@ import { createDeferredSafeJSONStorage } from './utils/safeStorage';
 
 const SOURCE_BOARD_STORAGE_KEY = 'openchamber.source-board';
 
-/** The repository's own host (on whichever source-control provider), or one tracker's items (`tracker:linear`). */
-export type SourceBoardTab = 'repository' | `tracker:${string}`;
+/**
+ * The repository's own host (on whichever source-control provider), the GitLab
+ * automation runs of that repository, or one tracker's items (`tracker:linear`).
+ */
+export type SourceBoardTab = 'repository' | 'runs' | `tracker:${string}`;
 
 const TRACKER_TAB = /^tracker:[a-z][a-z0-9-]{0,31}$/;
-const isSourceBoardTab = (value: string): value is SourceBoardTab => value === 'repository' || TRACKER_TAB.test(value);
+const isSourceBoardTab = (value: string): value is SourceBoardTab => (
+  value === 'repository' || value === 'runs' || TRACKER_TAB.test(value)
+);
 
 type SourceBoardChoice = {
   /** The project whose repository the board lists; independent of the app's selected project. */

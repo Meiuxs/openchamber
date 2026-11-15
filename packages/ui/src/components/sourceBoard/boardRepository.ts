@@ -127,9 +127,12 @@ export function resolveBoardTab(options: {
     };
 }): SourceBoardTab | null {
     const { chosen, hasRepository, repositoryStatus, trackers } = options;
-    const chosenTracker = trackerOfSource(chosen);
+    const chosenTracker = chosen === 'runs' ? null : trackerOfSource(chosen);
     if (chosenTracker && trackers.connected.includes(chosenTracker)) return chosen;
     if (chosenTracker && trackers.pending) return null;
+    // The automation's tab lists runs of a repository, so it needs one just as
+    // the repository tab does, and falls back the same way without one.
+    if (chosen === 'runs' && hasRepository) return 'runs';
     if (hasRepository) return 'repository';
     if (repositoryStatus === 'pending' || trackers.pending) return null;
     const first = trackers.connected[0];

@@ -306,6 +306,12 @@ export const CommandPalette: React.FC = () => {
         icon: <Icon name="gitlab" className="me-2 h-4 w-4" />,
         searchText: t('commandPalette.item.newGitlabIssue'),
         onSelect: run(() => useUIStore.getState().setGitlabIssueDialogProjectId(activeProject.id)),
+      }, {
+        id: 'open-gitlab-runs',
+        title: t('gitlabRuns.page.title'),
+        icon: <Icon name="list-check-2" className="me-2 h-4 w-4" />,
+        searchText: t('gitlabRuns.page.title'),
+        onSelect: run(() => useUIStore.getState().setGitlabRunsPageProjectId(activeProject.id)),
       }] : []),
       {
         id: 'add-project',

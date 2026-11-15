@@ -11,11 +11,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { useI18n, type I18nKey } from '@/lib/i18n';
 import { isValidGitRefName } from '@/lib/git-ref';
+import { resolveIssueTemplates } from '@/lib/gitlab-issues/issueTemplates';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { buildManagedAccountOptions, getManagedCredentialSourceLabelKey } from '@/lib/source-control/identity';
 import { useSourceControlDescriptorOf } from '@/lib/source-control/providers/registry';
@@ -29,6 +31,10 @@ const issueResultSchema = z.object({
   webUrl: z.string().nullable(),
 });
 const issueErrorSchema = z.object({ error: z.string() });
+const branchesSchema = z.object({
+  defaultBranch: z.string().nullable(),
+  branches: z.array(z.string()),
+});
 
 const FAILURE_KEYS = {
   'project-not-found': 'gitlabIssue.error.projectNotFound',
@@ -45,6 +51,9 @@ const failureKey = (code: string): I18nKey => (
 
 type IssueKind = 'bug' | 'feature';
 type CreatedIssue = z.infer<typeof issueResultSchema>;
+
+/** The "write it yourself" option; no stored template can carry this id. */
+const NO_TEMPLATE_VALUE = '__none__';
 
 /**
  * A confirmation step before the bot files an issue. The dialog creates the
@@ -89,16 +98,25 @@ export const GitlabIssueDialog: React.FC = () => {
     return options.find((option) => option.reference.accountId === botAccountId)?.label ?? botAccountId;
   }, [authEntries, botAccountId, descriptorOf, identities, t]);
 
+  const storedTemplates = project?.gitlabIssueTemplates;
+  const templates = React.useMemo(
+    () => resolveIssueTemplates(storedTemplates, (key) => t(key)),
+    [storedTemplates, t],
+  );
+
   const [kind, setKind] = React.useState<IssueKind>('bug');
+  const [templateId, setTemplateId] = React.useState<string | null>(null);
   const [title, setTitle] = React.useState('');
   const [branch, setBranch] = React.useState('');
   const [description, setDescription] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [created, setCreated] = React.useState<CreatedIssue | null>(null);
+  const [branches, setBranches] = React.useState<string[]>([]);
 
   React.useEffect(() => {
     setKind('bug');
+    setTemplateId(null);
     setTitle('');
     setBranch('');
     setDescription('');
@@ -107,14 +125,56 @@ export const GitlabIssueDialog: React.FC = () => {
     setCreated(null);
   }, [projectId]);
 
+  // The instance owns the branch list. Reading it keeps the target branch a
+  // real ref, so a created issue never blocks with `branch-missing`.
+  const projectPath = project?.path ?? '';
+  React.useEffect(() => {
+    if (!projectId || !projectPath) return undefined;
+    let cancelled = false;
+    setBranches([]);
+    void (async () => {
+      try {
+        const response = await runtimeFetch(
+          `/api/gitlab-issues/branches?directory=${encodeURIComponent(projectPath)}`,
+        );
+        if (!response.ok) return;
+        const parsed = branchesSchema.safeParse(await response.json().catch(() => null));
+        if (!parsed.success || cancelled) return;
+        setBranches(parsed.data.branches);
+        setBranch((current) => (
+          current.trim() ? current : (parsed.data.defaultBranch ?? parsed.data.branches[0] ?? '')
+        ));
+      } catch {
+        // Without a list the field stays free text; the server still validates the ref.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [projectId, projectPath]);
+
   const trimmedTitle = title.trim();
   const trimmedBranch = branch.trim();
   // A backtick would end the `目标分支:` value the dispatcher reads.
   const branchInvalid = trimmedBranch.length > 0
     && (!isValidGitRefName(trimmedBranch) || trimmedBranch.includes('`'));
   const canSubmit = Boolean(project) && Boolean(botAccountId) && trimmedTitle.length > 0
-    && !branchInvalid && !submitting;
+    && !branchInvalid && !submitting
+    && (branches.length === 0 || trimmedBranch.length > 0);
   const createdUrl = created?.webUrl ?? null;
+  const selectedTemplate = templates.find((entry) => entry.id === templateId) ?? null;
+
+  // A template owns both the outline and the type it starts as, so picking one
+  // fills the body and moves the type with it.
+  const selectTemplate = React.useCallback((value: string) => {
+    if (value === NO_TEMPLATE_VALUE) {
+      setTemplateId(null);
+      return;
+    }
+    const template = templates.find((entry) => entry.id === value);
+    if (!template) return;
+    setTemplateId(template.id);
+    setDescription(template.body);
+    if (template.kind) setKind(template.kind);
+  }, [templates]);
 
   const openProjectSettings = React.useCallback(() => {
     if (!project) return;
@@ -184,6 +244,27 @@ export const GitlabIssueDialog: React.FC = () => {
         ) : (
           <div className="space-y-3">
             <div className="space-y-1.5">
+              <label htmlFor="gitlab-issue-template" className="typography-ui-label font-medium text-foreground">
+                {t('gitlabIssue.field.template')}
+              </label>
+              <Select
+                value={selectedTemplate?.id ?? NO_TEMPLATE_VALUE}
+                onValueChange={selectTemplate}
+                disabled={submitting}
+              >
+                <SelectTrigger id="gitlab-issue-template" className="w-full">
+                  <SelectValue placeholder={t('gitlabIssue.template.none')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_TEMPLATE_VALUE}>{t('gitlabIssue.template.none')}</SelectItem>
+                  {templates.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
               <span className="typography-ui-label font-medium text-foreground">{t('gitlabIssue.field.kind')}</span>
               <div className="flex gap-2" role="group" aria-label={t('gitlabIssue.field.kind')}>
                 {([['bug', 'gitlabIssue.kind.bug'], ['feature', 'gitlabIssue.kind.feature']] as const).map(([value, key]) => (
@@ -220,13 +301,30 @@ export const GitlabIssueDialog: React.FC = () => {
               <label htmlFor="gitlab-issue-branch" className="typography-ui-label font-medium text-foreground">
                 {t('gitlabIssue.field.branch')}
               </label>
-              <Input
-                id="gitlab-issue-branch"
-                value={branch}
-                onChange={(event) => setBranch(event.target.value)}
-                placeholder={t('gitlabIssue.field.branchPlaceholder')}
-                disabled={submitting}
-              />
+              {branches.length > 0 ? (
+                <Select
+                  value={trimmedBranch}
+                  onValueChange={(value) => setBranch(value)}
+                  disabled={submitting}
+                >
+                  <SelectTrigger id="gitlab-issue-branch" className="w-full">
+                    <SelectValue placeholder={t('gitlabIssue.field.branchPlaceholder')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches.map((name) => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="gitlab-issue-branch"
+                  value={branch}
+                  onChange={(event) => setBranch(event.target.value)}
+                  placeholder={t('gitlabIssue.field.branchPlaceholder')}
+                  disabled={submitting}
+                />
+              )}
               {branchInvalid ? (
                 <p className="typography-meta text-status-error">{t('gitlabIssue.field.branchInvalid')}</p>
               ) : null}

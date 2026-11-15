@@ -394,7 +394,9 @@ Membership, fork handling, fusion and legacy compatibility are owned by
 
 `useProjectsStore.hasServerSnapshot` distinguishes a server-confirmed project list from persisted startup hints; `serverSnapshotFailed` records a failed settings sync without clearing the last confirmed list. Successful settings adoption clears that failure even for an unchanged list. Runtime switching clears both flags. Extension project subscriptions consume these flags and project records without changing active selection.
 
-Project records also mirror the GitLab issue automation fields the settings sanitizer stores: `autoDispatchGitlabIssues`, `gitlabIssueBranchPrefix`, `gitlabIssueBotAccountId`, and `gitlabIssueTimeoutMinutes`. Parsing and `updateProjectMeta` keep the same value rules as the server, so an invalid prefix or timeout is dropped on the next settings round-trip instead of surviving locally.
+Project records also mirror the GitLab issue automation fields the settings sanitizer stores: `autoDispatchGitlabIssues`, `gitlabIssueBranchPrefix`, `gitlabIssueBotAccountId`, `gitlabIssueTimeoutMinutes`, `gitlabIssueReviewModel`, `gitlabIssueReviewVariant`, and `gitlabIssueTemplates`. Parsing and `updateProjectMeta` keep the same value rules as the server, so an invalid prefix or timeout is dropped on the next settings round-trip instead of surviving locally.
+
+`gitlabIssueTemplates` stores the whole list the settings editor sends, minus entries without an id or a name: an entry that reuses a built-in id overrides that built-in, a new id is a custom template, and an empty list drops the field so the built-ins show again. `lib/gitlab-issues/issueTemplates.ts` owns that merge.
 
 `ProjectEntry.labelSource` records where a project's label came from: `auto` for one derived from the folder name, `manual` for one the user typed. The legacy migration that lowers an old title-cased auto label runs only for records that do not say `manual`, because text alone cannot tell a rename to `Example` from the old auto label `Example`. Without that distinction the settings round-trip reverts the rename on every save and reload.
 

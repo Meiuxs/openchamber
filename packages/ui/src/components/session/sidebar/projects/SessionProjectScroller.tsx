@@ -437,8 +437,8 @@ function SessionProjectScrollerComponent({ model, view, actions }: SessionProjec
         onManageWorktrees={() => actions.openWorktreesPage(project.id)}
         onManageSpaces={spacesPageAvailable ? () => useUIStore.getState().setSpacesPageProjectId(project.id) : undefined}
         onOpenSourceBoard={openProjectOnBoard ? () => openProjectOnBoard(project.id) : undefined}
-        onNewGitlabIssue={gitlabIssueProjectIds.has(project.id)
-          ? () => useUIStore.getState().setGitlabIssueDialogProjectId(project.id)
+        onOpenGitlabRuns={gitlabIssueProjectIds.has(project.id)
+          ? () => useUIStore.getState().setGitlabRunsPageProjectId(project.id)
           : undefined}
         onNewFolder={() => {
           if (row.collapsed) actions.toggleProject(project.id);

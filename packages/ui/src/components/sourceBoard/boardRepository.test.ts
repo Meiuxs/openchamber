@@ -208,6 +208,15 @@ describe('resolveBoardTab', () => {
     expect(tab({ hasRepository: true, trackers: { connected: [], pending: true } })).toBe('repository');
   });
 
+  test('keeps a chosen runs tab while the project has a repository', () => {
+    expect(tab({ chosen: 'runs', hasRepository: true })).toBe('runs');
+    expect(tab({ chosen: 'runs', hasRepository: true, trackers: linear })).toBe('runs');
+    // Runs belong to a repository, so without one the board falls back exactly
+    // as it does for the repository tab.
+    expect(tab({ chosen: 'runs', trackers: linear })).toBe('tracker:linear');
+    expect(tab({ chosen: 'runs' })).toBeNull();
+  });
+
   test('keeps a chosen tracker while it is connected', () => {
     expect(tab({ chosen: 'tracker:linear', hasRepository: true, trackers: linear })).toBe('tracker:linear');
     expect(tab({ chosen: 'tracker:linear', trackers: linear })).toBe('tracker:linear');

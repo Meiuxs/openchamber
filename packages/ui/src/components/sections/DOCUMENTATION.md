@@ -716,6 +716,15 @@ shows one list per kind with every entry marked Team or Only me, and
   A failed read shows a retry, never an empty list that a later save would
   write back over the files.
 
+The GitLab issue section also edits `gitlabIssueTemplates`, the outlines offered
+when filing an issue. The editor sits outside the automation switch, because a
+person filing an issue by hand uses the same templates whether or not the
+automation runs. A built-in template stores nothing while it matches its default
+text, so an untouched project keeps receiving built-in changes; editing one
+stores an entry that reuses its id, and its reset action drops that entry again.
+Text fields commit on blur as one whole list, and a blur that changed nothing
+writes nothing.
+
 The Settings page keeps its tab in `projects/projectSettingsTabs.ts` so a search
 result can open the tab that holds its target (`prepareSettingsSearchTarget`).
 The dialog keeps its own tab and starts on General every time.

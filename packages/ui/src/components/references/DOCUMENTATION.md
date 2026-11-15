@@ -275,6 +275,13 @@ sidebar header (desktop and web, and the phone shell's menu; not VS Code). A
 git project's menu in the sidebar opens it on that project's repository. It
 uses `useReferenceBrowser` and the shared parts without checkboxes; the
 preview's footer holds actions instead of what the agent gets.
+- An item's GitLab automation shows as `runControl` above the description
+  (`sourceBoard/SourceBoardGitlabRun.tsx`): the run still in flight that matches
+  the item's number, its rail, a blocked reason, and cancel, reset or take over.
+  A finished run shows nothing here, and approving or rejecting a plan stays on
+  the runs page, where the whole list is in view. Tracker items and other hosts
+  have no run. It polls only while that run is moving
+  (`gitlab-runs/DOCUMENTATION.md`).
 
 - The board keeps its own project, tab and, per tracker, container (Linear team) per runtime
   (`stores/useSourceBoardStore.ts`). Switching them never changes the app's
@@ -399,7 +406,12 @@ preview's footer holds actions instead of what the agent gets.
   like the draft composer's; on a tracker a container picker, its containers
   from the tracker's project mapping, with the account in the same menu when
   the tracker connects several, `SourceBoardContainerPicker`), one switch for
-  Issues, Pull requests and each tracker, then the search and the filter. The
+  Issues, Pull requests, each tracker, and — on a GitLab project — the
+  automation's runs (`GitlabRunsPanel embedded`, which drops its page header,
+  scope switch and close button), then the search and the filter. The switch's
+  runs entry lists a run's whole directory, so the scope picker still moves it
+  from one repository to another; the search and the item picker are left out
+  there, since they narrow a list of issues, not of runs. The
   preview's footer is one row: where a tracker item starts and a PR's merge or
   ready on the left, and one
   Attach to session menu on the right: the open session (when the chat shows
