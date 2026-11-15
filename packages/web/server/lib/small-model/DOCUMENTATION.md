@@ -219,6 +219,14 @@ If the model remains unavailable, the route returns 503 with
 `code: 'small-model-unavailable'` and the model-specific reason. Commit and PR
 generation own their error toast and suppress the shared request toast.
 
+A provider that refuses the call at the transport level (`ProviderRequestError`
+with `reason: 'provider'`: connection refused, an upstream 5xx) is not retried.
+The route answers `502` with `code: 'provider-error'` and `The provider
+refused: <cause>`, and callers that would otherwise retry through the same
+provider, such as prompt enhancement, stop there instead of waiting out their
+own deadline. Rate limits and overloaded providers keep the generic response:
+another model on that provider may still answer.
+
 ## Structured output
 
 `/api/experimental/generate/text` has no structured-output mode. `responseSchema` is therefore

@@ -1102,4 +1102,35 @@ describe('small model failure response', () => {
       payload: { error: 'The selected Small Model could not complete this action. Choose another model in Settings → Sessions → Small Model and try again.' },
     });
   });
+
+  it('reports a provider that refused the request with its own code', async () => {
+    const message = 'ECONNREFUSED: Unable to connect. Is the computer able to access the url?';
+    const generate = registerWithFailure({
+      _tag: 'ProviderRequestError',
+      providerID: 'antigravity-manager',
+      reason: 'provider',
+      message,
+    });
+    const { response, read } = respond();
+    await generate({ body: { prompt: 'commit' } }, response);
+    expect(read()).toEqual({
+      status: 502,
+      payload: { error: `The provider refused: ${message}`, code: 'provider-error' },
+    });
+  });
+
+  it('keeps a rate-limited provider on the generic path', async () => {
+    const generate = registerWithFailure({
+      _tag: 'ProviderRequestError',
+      providerID: 'antigravity-manager',
+      reason: 'rate_limit',
+      message: 'slow down',
+    });
+    const { response, read } = respond();
+    await generate({ body: { prompt: 'commit' } }, response);
+    expect(read()).toEqual({
+      status: 500,
+      payload: { error: 'The selected Small Model could not complete this action. Choose another model in Settings → Sessions → Small Model and try again.' },
+    });
+  });
 });

@@ -1,3 +1,5 @@
+import { asNonEmptyString } from '../shared/guards.js';
+
 export function registerSmallModelRoutes(app, { getSmallModelService }) {
   app.get('/api/small-model', async (req, res) => {
     try {
@@ -34,15 +36,24 @@ export function registerSmallModelRoutes(app, { getSmallModelService }) {
       });
       res.json(result);
     } catch (error) {
-      const statusCode = Number(error?.statusCode) || 500;
+      // OpenCode tags a provider that refused the call itself (connection
+      // refused, a 5xx from upstream). The message names the cause, and asking
+      // the same provider again through another route cannot change the answer.
+      // A rate limit or overloaded provider stays on the generic path: another
+      // model on that provider may still answer.
+      const providerError = error?._tag === 'ProviderRequestError' && error.reason === 'provider';
+      const statusCode = providerError ? 502 : Number(error?.statusCode) || 500;
       if (statusCode >= 500) {
         console.error('Small model generation failed:', error);
       }
+      const message = asNonEmptyString(error?.message) || 'The request failed';
       res.status(statusCode).json({
-        error: statusCode === 404 || error?.code === 'small-model-unavailable' || error?.code === 'generation-timeout'
-          ? (error.message || 'No small model is available')
-          : 'The selected Small Model could not complete this action. Choose another model in Settings → Sessions → Small Model and try again.',
-        ...(error?.code ? { code: error.code } : {}),
+        error: providerError
+          ? `The provider refused: ${message}`
+          : statusCode === 404 || error?.code === 'small-model-unavailable' || error?.code === 'generation-timeout'
+            ? (error.message || 'No small model is available')
+            : 'The selected Small Model could not complete this action. Choose another model in Settings → Sessions → Small Model and try again.',
+        ...(providerError ? { code: 'provider-error' } : error?.code ? { code: error.code } : {}),
       });
     }
   });

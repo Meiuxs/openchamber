@@ -18,6 +18,7 @@ export type PromptEnhancementErrorCode =
   | 'too-long'
   | 'references-changed'
   | 'model-unavailable'
+  | 'provider-unavailable'
   | 'timeout'
   | 'aborted';
 
@@ -179,7 +180,17 @@ const requestSmallModelText = async (
 
   const parsed = smallModelPayloadSchema.safeParse(await response.json().catch(() => null));
   if (!response.ok) {
-    const detail = parsed.success && parsed.data.error ? `: ${parsed.data.error}` : '';
+    const payload = parsed.success ? parsed.data : null;
+    // The OpenCode fallback runs the session model on the same provider, so a
+    // provider that refused the call fails there too. Retrying would only
+    // spend the whole timeout before reporting the same outage.
+    if (payload?.code === 'provider-error') {
+      throw new PromptEnhancementError(
+        'provider-unavailable',
+        payload.error || 'The Small Model provider could not be reached',
+      );
+    }
+    const detail = payload?.error ? `: ${payload.error}` : '';
     throw new PromptEnhancementError('model-unavailable', `The Small Model is unavailable${detail}`);
   }
   if (!parsed.success || parsed.data.text === undefined) {

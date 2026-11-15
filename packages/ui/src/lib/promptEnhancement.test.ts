@@ -260,6 +260,24 @@ describe('enhancePromptDraft', () => {
     expect(generateTextCalls).toHaveLength(1);
   });
 
+  test('a provider failure fails over nothing: the fallback runs on the same provider', async () => {
+    smallModelResponder = async () => Response.json(
+      { error: 'The provider refused: ECONNREFUSED: Unable to connect.', code: 'provider-error' },
+      { status: 502 },
+    );
+
+    let failureCode: PromptEnhancementErrorCode | null = null;
+    try {
+      await enhancePromptDraft(request());
+    } catch (error) {
+      if (!(error instanceof PromptEnhancementError)) throw error;
+      failureCode = error.code;
+    }
+
+    expect(failureCode).toBe('provider-unavailable');
+    expect(generateTextCalls).toHaveLength(0);
+  });
+
   test('a hung request aborts at the timeout', async () => {
     runtimeFetchResponder = ({ init }) => new Promise((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => reject(init?.signal?.reason));

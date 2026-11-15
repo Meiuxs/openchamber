@@ -129,6 +129,8 @@ const runtimeAPIs = { runtime: { platform: 'web', isDesktop: false, isVSCode: fa
 let sent: string[] = [];
 
 beforeEach(() => {
+  // Drafts persist per session; each mount starts from a clean composer.
+  localStorage.removeItem('openchamber.chatDrafts.v2');
   useProjectsStore.setState({ projects: PROJECTS });
   sent = [];
   enhanceResponse = null;
@@ -248,6 +250,25 @@ test('a draft changed during the request is not overwritten', async () => {
     });
 
     expect(view.state.doc.toString()).toBe('make this better now');
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
+test('the wand stays hidden until the draft has text', async () => {
+  const { container, root, view } = await mountComposer();
+  const wand = () => Boolean(container.querySelector('button[aria-label="Enhance prompt"]'));
+  try {
+    expect(wand()).toBe(false);
+
+    await typeDraft(view, 'make this better');
+    await act(async () => {
+      useConfigStore.setState({ currentProviderId: 'provider', currentModelId: 'model' });
+      await new Promise((done) => setTimeout(done, 300));
+    });
+
+    expect(wand()).toBe(true);
   } finally {
     await act(async () => root.unmount());
     container.remove();

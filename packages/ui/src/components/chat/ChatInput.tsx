@@ -5088,6 +5088,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     const waitingForOpenCode = useOpenCodeStartupStore((state) => state.waitingSends > 0);
     // Booleans, not the draft: ChatInput must not re-render on every keystroke.
     const enhanceHasText = useComposerTextValue(composerText, hasEnhanceableText);
+    const enhanceHasContent = useComposerTextValue(composerText, (text) => text.trim().length > 0);
     const enhanceIsSlashCommand = useComposerTextValue(
         composerText,
         (text) => text.startsWith('/') && Boolean(parseSlashCommand(text)),
@@ -5102,10 +5103,13 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         && enhanceHasText
         && Boolean(currentProviderId && currentModelId);
 
+    // An empty draft has nothing to rewrite. A draft of only references stays
+    // visible but disabled, so its tooltip can say what is missing.
     const showEnhancePrompt = !isMobile
         && !isBtwActive
         && !parallelRun
         && inputMode === 'normal'
+        && enhanceHasContent
         && !enhanceIsSlashCommand;
 
     const enhancePromptDisabledReason = !enhanceHasText
