@@ -7,7 +7,8 @@
 //   node scripts/offline-package.mjs                    # 构建 + 打包 + 组 zip
 //   node scripts/offline-package.mjs --skip-build       # 跳过构建，用当前产物打包
 //   node scripts/offline-package.mjs --install          # 再把 tarball 装到全局
-//   node scripts/offline-package.mjs --install --start --port 3001
+//   node scripts/offline-package.mjs --install --stop --start --port 3001
+//   （--stop 在安装前停掉该端口上正在运行的实例，Windows 的文件锁要求先停再换）
 //
 // zip 落在仓库根目录 openchamber-intranet-<version>.zip（与其它交付 zip 一样被
 // gitignore）。zip 内容:
@@ -41,6 +42,7 @@ const value = (name, fallback = null) => {
 
 const skipBuild = has('--skip-build');
 const install = has('--install');
+const stopBeforeInstall = has('--stop');
 const start = has('--start');
 const port = value('--port', null);
 
@@ -191,6 +193,23 @@ try {
 console.log(`交付 zip：${zipPath}（${(fs.statSync(zipPath).size / 1048576).toFixed(1)} MB）`);
 
 if (install) {
+  if (stopBeforeInstall) {
+    // A running server holds the installed files open on Windows, so npm
+    // cannot replace them. Stop the instance this install targets first; a
+    // machine without the CLI still on PATH has nothing for us to stop.
+    if (toolExists('openchamber')) {
+      const stopPort = port ?? '3000';
+      console.log(`停止端口 ${stopPort} 上正在运行的实例...`);
+      const stopped = spawnSync(`openchamber stop --port ${stopPort}`, {
+        stdio: 'inherit', shell: true, cwd: repoRoot,
+      });
+      if (stopped.status !== 0) {
+        console.warn(`停止端口 ${stopPort} 上的实例失败，继续安装；若安装报文件占用，请手动停掉后重跑。`);
+      }
+    } else {
+      console.log('未找到 openchamber 命令，跳过停止步骤。');
+    }
+  }
   // 与 install.ps1 / install.sh 同样的顺序。web tarball 自带 SDK，npm 会用包内
   // 那份；先装 SDK 只是让内部 registry 缺 @openchamber/sdk 时也有兜底，
   // --prefer-offline 对缓存里旧 packument 缺新版本（ETARGET）时回退常规安装。
