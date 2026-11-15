@@ -27,11 +27,14 @@ type Options = {
 };
 
 const stripExtension = (file: string) => file.replace(/\.(tsx?|jsx?)$/, '');
+// Vite module ids use forward slashes on every platform; path.join on Windows
+// returns backslashes, so the map has to be normalized or no shim matches.
+const vitePath = (file: string) => file.replace(/\\/g, '/');
 
 function shimPlugin(uiSource: string): Plugin {
   const shims = new Map(Object.entries(SHARE_DOCUMENT_SHIMS).map(([target, shim]) => [
-    path.join(uiSource, target),
-    path.join(uiSource, shim),
+    vitePath(path.join(uiSource, target)),
+    vitePath(path.join(uiSource, shim)),
   ]));
   return {
     name: 'openchamber-share-document-shims',
@@ -39,7 +42,7 @@ function shimPlugin(uiSource: string): Plugin {
     async resolveId(source, importer, options) {
       const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
       if (!resolved) return null;
-      return shims.get(stripExtension(resolved.id.split('?')[0])) ?? null;
+      return shims.get(stripExtension(vitePath(resolved.id.split('?')[0]))) ?? null;
     },
   };
 }
