@@ -176,27 +176,68 @@ afterEach(() => {
 // own spawns, which inherit process.env — reads an empty global config
 // instead. Fixture repos set their identity locally, so nothing else changes.
 // Registered outside tempDirs on purpose: afterEach would delete a registered
-// dir after the first test.
-const emptyGlobalGitConfig = path.join(
-  fs.mkdtempSync(path.join(os.tmpdir(), 'openchamber-git-service-config-')),
-  'git-config',
-);
-fs.writeFileSync(emptyGlobalGitConfig, '');
-
+// dir after the first test. Created in beforeAll rather than at import time so
+// it picks up the long-form temp directory below like every other fixture.
+let emptyGlobalGitConfig;
 let savedGitConfigGlobal;
+let savedGitConfigNoSystem;
+let savedTempEnv = null;
+
+// Two more pieces of Windows developer-machine state reach the fixtures, and
+// both are corrected here rather than in the assertions:
+//
+// - os.tmpdir() answers with the 8.3 short name when the profile name exceeds
+//   eight characters (`C:\Users\G00024~1\...`), while Git answers with the long
+//   one, so a fixture path compared against Git's own output failed on that
+//   machine and nowhere else. The environment is rewritten to the long form
+//   before any fixture exists, so every os.tmpdir() here — including the
+//   mkdtemp calls that do not go through createTempDir — agrees with Git.
+// - The Git for Windows installer sets core.autocrlf=true system-wide, which
+//   rewrote fixture line endings and failed the assertions that hardcode '\n'.
+//   The global config is already emptied below; the system one is ignored for
+//   the same reason.
+const useLongFormTempDirectory = () => {
+  if (process.platform !== 'win32') return;
+  savedTempEnv = { TEMP: process.env.TEMP, TMP: process.env.TMP };
+  // Only the native call expands a short name; the JS one returns it unchanged.
+  const longTemp = fs.realpathSync.native(os.tmpdir());
+  process.env.TEMP = longTemp;
+  process.env.TMP = longTemp;
+};
+
+const restoreTempDirectory = () => {
+  if (!savedTempEnv) return;
+  for (const [key, value] of Object.entries(savedTempEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  savedTempEnv = null;
+};
 
 beforeAll(() => {
+  useLongFormTempDirectory();
+  const globalConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openchamber-git-global-'));
+  emptyGlobalGitConfig = path.join(globalConfigDir, 'gitconfig');
+  fs.writeFileSync(emptyGlobalGitConfig, '');
+  savedGitConfigNoSystem = process.env.GIT_CONFIG_NOSYSTEM;
+  process.env.GIT_CONFIG_NOSYSTEM = '1';
   savedGitConfigGlobal = process.env.GIT_CONFIG_GLOBAL;
   process.env.GIT_CONFIG_GLOBAL = emptyGlobalGitConfig;
 });
 
 afterAll(() => {
+  if (savedGitConfigNoSystem === undefined) {
+    delete process.env.GIT_CONFIG_NOSYSTEM;
+  } else {
+    process.env.GIT_CONFIG_NOSYSTEM = savedGitConfigNoSystem;
+  }
   if (savedGitConfigGlobal === undefined) {
     delete process.env.GIT_CONFIG_GLOBAL;
   } else {
     process.env.GIT_CONFIG_GLOBAL = savedGitConfigGlobal;
   }
-  fs.rmSync(path.dirname(emptyGlobalGitConfig), { recursive: true, force: true });
+  restoreTempDirectory();
+  if (emptyGlobalGitConfig) fs.rmSync(path.dirname(emptyGlobalGitConfig), { recursive: true, force: true });
 });
 
 /**
@@ -2358,6 +2399,12 @@ describe('createWorktree', () => {
       }
     };
 
+    // The command text runs in the platform shell, cmd on Windows and bash
+    // elsewhere, so the same step is spelled in both grammars.
+    const worktreeAddCommand = process.platform === 'win32'
+      ? 'git worktree add "%WORKTREE_PATH%" "%WORKTREE_BRANCH%"'
+      : 'git worktree add "$WORKTREE_PATH" "$WORKTREE_BRANCH"';
+
     it('adopts a locked worktree a copy-on-write tool keeps in its store behind a symlink, and removes it', async () => {
       if (!canRunGit() || process.platform === 'win32') return;
       const repo = createRepo();
@@ -2403,7 +2450,7 @@ describe('createWorktree', () => {
         mode: 'existing',
         existingBranch: 'feature/kept',
         worktreeName: 'kept',
-        createCommand: 'git worktree add "$WORKTREE_PATH" "$WORKTREE_BRANCH"',
+        createCommand: worktreeAddCommand,
       });
 
       expect(created.branch).toBe('feature/kept');
@@ -2421,7 +2468,9 @@ describe('createWorktree', () => {
         branchName: 'feature/failed-cow',
         worktreeName: 'failed-cow',
         returnAfterDirectoryCreated: true,
-        createCommand: 'echo "source checkout is dirty" >&2; exit 3',
+        createCommand: process.platform === 'win32'
+          ? 'echo source checkout is dirty 1>&2 & exit /b 3'
+          : 'echo "source checkout is dirty" >&2; exit 3',
       }).catch((error) => error);
 
       expect(failure).toBeInstanceOf(Error);
@@ -2451,7 +2500,7 @@ describe('createWorktree', () => {
         mode: 'existing',
         existingBranch: 'origin/topic',
         worktreeName: 'topic',
-        createCommand: 'git worktree add "$WORKTREE_PATH" "$WORKTREE_BRANCH"',
+        createCommand: worktreeAddCommand,
       }).catch((error) => error);
 
       expect(failure).toBeInstanceOf(Error);
@@ -2466,7 +2515,9 @@ describe('createWorktree', () => {
         mode: 'new',
         branchName: 'feature/half',
         worktreeName: 'half',
-        createCommand: 'git worktree add "$WORKTREE_PATH" "$WORKTREE_BRANCH" && git worktree lock "$WORKTREE_PATH" && exit 3',
+        createCommand: process.platform === 'win32'
+          ? `${worktreeAddCommand} && git worktree lock "%WORKTREE_PATH%" && exit /b 3`
+          : `${worktreeAddCommand} && git worktree lock "$WORKTREE_PATH" && exit 3`,
       }).catch((error) => error);
       expect(failure.code).toBe('WORKTREE_CREATE_COMMAND_FAILED');
 
@@ -2485,7 +2536,9 @@ describe('createWorktree', () => {
         mode: 'new',
         branchName: 'feature/nothing',
         worktreeName: 'nothing',
-        createCommand: 'true',
+        // Succeeds and builds nothing: `true` has no cmd builtin equivalent
+        // but `rem` reads as a comment and exits 0.
+        createCommand: process.platform === 'win32' ? 'rem' : 'true',
       }).catch((error) => error);
 
       expect(failure.code).toBe('WORKTREE_CREATE_COMMAND_FAILED');

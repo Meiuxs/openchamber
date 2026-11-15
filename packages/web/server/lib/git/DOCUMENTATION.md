@@ -161,6 +161,31 @@ the app. A lock anyone else set means "do not remove", and removal keeps
 refusing it; the mark tells the two apart without reading the lock reason,
 which every tool words differently.
 
+### Worktree setup commands
+
+The bootstrap runs two commands after git is ready: the project's own start
+command (`../opencode/project-start-command.js`), then the caller's
+`startCommand` — the setup the creation was asked to run (the project's worktree
+setup commands, joined with `&&` by `../projects/worktree-setup.js`).
+
+- A failing project start command is a warning: the checkout is usable and a person opens it either way.
+- A failing `startCommand` is the creation's own setup, so the bootstrap record ends `failed` at phase `git-ready` with the command's output as its error. It is not `ready` with a warning: a caller that waited for setup (the GitLab issue automation, `../gitlab-issues/dispatcher.js`) would otherwise start an agent session in a checkout whose first build fails.
+- `serverOptions.reuseNodeModules` (server callers only, never a request body) replaces that `startCommand` with a link: `<checkout>/node_modules` is linked into the worktree when the checkout has one. The command stays the fallback when no link can be made.
+
+#### Why a shared dependency link replaces the install
+
+A worktree's path is longer than the checkout's, and a second install writes its
+package store underneath it: on Windows the deepest store entries then pass the
+path limit and the install fails after minutes, having produced neither
+dependencies nor a failing record. One directory link keeps the packages where
+they were installed and keeps that path out of the worktree. The cost is a
+shared tree: an install run inside such a worktree changes the checkout's
+packages too, which is why removal drops the link (`unlinkCheckoutDependencies`)
+before anything recursive touches the directory — a delete that follows a
+junction would take the checkout's installed packages with it. A worktree whose
+project has no installed dependencies gets no link, and its setup command runs
+as before.
+
 ### Worktree location
 - New worktrees go under OpenCode's `worktree.directory` when it is set: relative paths resolve against the project's canonical checkout, absolute paths are used as-is, and a leading `~` means the user's home directory. OpenCode appends the worktree name to that folder, so only the name is added.
 - The setting is read from the merged OpenCode configuration on the canonical checkout (`packages/web/server/lib/opencode/worktree-directory.js`, shared with the VS Code extension host through `packages/vscode/src/worktree-directory.ts`) so a linked worktree sees the project's saved value.

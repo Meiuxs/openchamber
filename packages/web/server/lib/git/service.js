@@ -2239,13 +2239,26 @@ const runWorktreeStartCommand = async (directory, command, { timeoutMs = 0, sign
 
   const windows = process.platform === 'win32';
   return new Promise((resolve) => {
-    const child = spawn(windows ? 'cmd' : 'bash', windows ? ['/c', text] : ['-lc', text], {
-      cwd: directory,
-      env,
-      windowsHide: true,
-      detached: !windows,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    // The same command line `spawn(text, { shell: true })` builds: `/s` makes
+    // cmd strip only the outer wrap quotes, so a quoted executable inside the
+    // text (`"C:\Program Files\nodejs\node.exe" run.cjs`) keeps its own
+    // quotes. The default spawn quoting instead escapes them per the MSVCRT
+    // rules, which cmd reads as part of the path and the command then fails.
+    const child = windows
+      ? spawn('cmd', ['/d', '/s', '/c', `"${text}"`], {
+        cwd: directory,
+        env,
+        windowsHide: true,
+        windowsVerbatimArguments: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      : spawn('bash', ['-lc', text], {
+        cwd: directory,
+        env,
+        windowsHide: true,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
     const output = { stdout: '', stderr: '' };
     let stopReason = null;
     const stop = (reason) => {
@@ -2459,23 +2472,76 @@ const removeCreateCommandLink = async (link, worktreeDirectory) => {
 
 // `projectDirectory` is the directory the worktree was requested from: the user
 // already works there, so OpenCode answers without starting another location.
+//
+// The caller's own `startCommand` is the creation's setup, and a caller that
+// waits for it answers for its failure, so the outcome is returned instead of
+// logged. The project's start command stays a convenience of the checkout: a
+// person opens the worktree either way.
 const runWorktreeStartScripts = async (directory, projectDirectory, startCommand, signal) => {
   const projectStart = await readProjectStartCommand(projectDirectory);
   if (projectStart) {
     const projectResult = await runWorktreeStartCommand(directory, projectStart, { signal });
     if (!projectResult.success) {
       console.warn('Worktree project start command failed:', projectResult.message || projectResult.stderr || projectResult.stdout);
-      return;
+      return { failure: null };
     }
   }
 
   const extraCommand = String(startCommand || '').trim();
   if (!extraCommand) {
-    return;
+    return { failure: null };
   }
   const extraResult = await runWorktreeStartCommand(directory, extraCommand, { signal });
   if (!extraResult.success) {
-    console.warn('Worktree start command failed:', extraResult.message || extraResult.stderr || extraResult.stdout);
+    const shown = String(extraResult.message || extraResult.stderr || extraResult.stdout || '').trim();
+    console.warn('Worktree start command failed:', shown);
+    return { failure: shown || `Worktree start command failed: ${extraCommand}` };
+  }
+  return { failure: null };
+};
+
+const WORKTREE_SHARED_DEPENDENCIES = 'node_modules';
+
+/**
+ * Dependencies a worktree shares with the checkout they were installed in.
+ *
+ * A second install writes a package store underneath the worktree's own path,
+ * which is longer than the checkout's: on Windows the deepest entries exceed
+ * the path limit and the install fails after minutes of work. One directory
+ * link keeps the packages where they are and keeps that path out of it.
+ *
+ * Answers whether the link is what supplies the worktree's dependencies; no
+ * link is a plain creation, and the caller's setup command still runs.
+ */
+const linkCheckoutDependencies = async ({ directory, projectDirectory }) => {
+  if (!projectDirectory) return false;
+  const source = path.join(projectDirectory, WORKTREE_SHARED_DEPENDENCIES);
+  const target = path.join(directory, WORKTREE_SHARED_DEPENDENCIES);
+  const exists = (candidate) => fsp.lstat(candidate).then(() => true, () => false);
+  if (!await exists(source) || await exists(target)) return false;
+  try {
+    await fsp.symlink(source, target, process.platform === 'win32' ? 'junction' : 'dir');
+    return true;
+  } catch (error) {
+    console.warn('Worktree dependency link failed:', error instanceof Error ? error.message : String(error));
+    return false;
+  }
+};
+
+/**
+ * Drops that link before anything removes the worktree, because a recursive
+ * delete that follows it would take the checkout's installed packages with it.
+ * A real directory is left alone: only a link this module made is removed.
+ */
+const unlinkCheckoutDependencies = async (directory) => {
+  const target = path.join(directory, WORKTREE_SHARED_DEPENDENCIES);
+  const stats = await fsp.lstat(target).catch(() => null);
+  if (!stats?.isSymbolicLink()) return;
+  try {
+    // A Windows junction is a directory: `rmdir` removes the link, never the target.
+    await (process.platform === 'win32' ? fsp.rmdir(target) : fsp.unlink(target));
+  } catch (error) {
+    console.warn('Worktree dependency link removal failed:', error instanceof Error ? error.message : String(error));
   }
 };
 
@@ -2491,6 +2557,7 @@ const queueWorktreeBootstrap = (args) => {
     ensureRemoteName,
     ensureRemoteUrl,
     startCommand,
+    reuseNodeModules,
     contributorFork,
     hydrateCheckout,
     checkoutRemoteName,
@@ -2542,9 +2609,33 @@ const queueWorktreeBootstrap = (args) => {
         bootstrapStore,
       );
       if (!contributorFork) {
-        await runWorktreeStartScripts(directory, projectDirectory, startCommand, setupCancellation.signal).catch((error) => {
-          console.warn('Worktree start script task failed:', error instanceof Error ? error.message : String(error));
-        });
+        // A caller that asked for the checkout's dependencies gets them by
+        // link, which is what its setup command exists to install; the command
+        // stays the fallback when no checkout has them to share.
+        const linked = reuseNodeModules === true
+          && await linkCheckoutDependencies({ directory, projectDirectory });
+        if (!linked) {
+          const setup = await runWorktreeStartScripts(directory, projectDirectory, startCommand, setupCancellation.signal)
+            .catch((error) => {
+              console.warn('Worktree start script task failed:', error instanceof Error ? error.message : String(error));
+              return { failure: null };
+            });
+          if (setup?.failure) {
+            // Git state is usable, dependencies are not. The record says so and
+            // whoever waits on it decides; finishing "ready" would hand a
+            // caller a checkout whose first build fails.
+            await setWorktreeBootstrapState(
+              directory,
+              WORKTREE_BOOTSTRAP_FAILED,
+              WORKTREE_BOOTSTRAP_PHASE_GIT_READY,
+              setup.failure,
+              undefined,
+              undefined,
+              bootstrapStore,
+            );
+            return;
+          }
+        }
       }
       await setWorktreeBootstrapState(
         directory,
@@ -6445,6 +6536,7 @@ async function attachGitWorktreeToCandidateWithoutRemoteRollback(context, candid
       ensureRemoteName,
       ensureRemoteUrl,
       startCommand: input?.startCommand,
+      reuseNodeModules: serverOptions.reuseNodeModules === true,
       contributorFork,
       hydrateCheckout: serverOptions.hydrateCheckout,
       checkoutRemoteName,
@@ -7304,6 +7396,7 @@ export async function removeWorktree(directory, input = {}, { bootstrapStore } =
     await clearWorktreeBootstrapState(targetDirectory, bootstrapStore);
     const targetExists = await checkPathExists(targetDirectory);
     if (targetExists && isManagedOrphan) {
+      await unlinkCheckoutDependencies(targetDirectory);
       await removeBusyDirectory(targetDirectory);
     }
     // A removal git abandoned halfway leaves `.git/worktrees/<name>` without
@@ -7329,6 +7422,7 @@ export async function removeWorktree(directory, input = {}, { bootstrapStore } =
     await releaseInstance();
 
     const restoreGitDirectoryLink = await replaceWorktreeGitDirectoryLink(context.primaryWorktree, matchedEntry.worktree);
+    await unlinkCheckoutDependencies(matchedEntry.worktree);
     try {
       const overrideLock = matchedEntry.locked === true && createdByCommand !== null;
       const removedByGit = await removeGitWorktreeWhenFree(context.primaryWorktree, matchedEntry.worktree, targetCanonical, releaseInstance, overrideLock);
