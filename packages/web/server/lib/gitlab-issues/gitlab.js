@@ -75,15 +75,47 @@ export const resolveProjectConfig = (project) => {
   const timeoutMinutes = timeoutValid && Number.isInteger(rawTimeout) ? rawTimeout : DEFAULT_TIMEOUT_MINUTES;
   const rawBotAccountId = project?.gitlabIssueBotAccountId;
   const botAccountId = isString(rawBotAccountId) ? rawBotAccountId.trim() : '';
+  // `provider/model`, the same shape `defaultModel` uses. An unusable value is
+  // dropped rather than blocking dispatch: the review falls back to the default.
+  const rawReviewModel = project?.gitlabIssueReviewModel;
+  const reviewModel = isString(rawReviewModel) && /^\S+\/\S+$/.test(rawReviewModel.trim())
+    ? rawReviewModel.trim()
+    : '';
+  const rawReviewVariant = project?.gitlabIssueReviewVariant;
+  const reviewVariant = isString(rawReviewVariant) ? rawReviewVariant.trim() : '';
   const enabled = project?.autoDispatchGitlabIssues === true
     && Boolean(botAccountId) && prefixValid && timeoutValid;
-  return { enabled, botAccountId, prefix, timeoutMinutes };
+  return {
+    enabled, botAccountId, prefix, timeoutMinutes, reviewModel, reviewVariant,
+  };
 };
 
 export const resolveAccount = async (authStore, origin, accountId) => {
   if (!origin || !accountId) return null;
   const account = await authStore.readAccount(origin, accountId);
   return account?.status === 'valid' ? account : null;
+};
+
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// The comment that sends a run back to fix things: first line
+// `@<bot username> 修复` or `@<bot username> fix`, case-insensitive, with the
+// rest of the line after a colon joining the feedback body. A bare mention
+// without the command word is not a trigger; the caller replies with usage.
+export const parseFeedbackCommand = (body, botUsername) => {
+  const username = escapeRegExp(String(botUsername ?? '').trim());
+  if (!username) return null;
+  const first = String(body ?? '').trim().split(/\r?\n/, 1)[0].trim();
+  const match = new RegExp(`^@${username}\\s*(?:修复|fix)(?:\\s*[:：]\\s*(.*))?$`, 'i').exec(first);
+  if (!match) return null;
+  return { text: (match[1] ?? '').trim() || null };
+};
+
+/** A plain mention of the bot with no trigger word, so a usage reply helps. */
+export const isBareBotMention = (body, botUsername) => {
+  const username = escapeRegExp(String(botUsername ?? '').trim());
+  if (!username) return false;
+  return new RegExp(`@${username}\\b`, 'i').test(String(body ?? ''));
 };
 
 export const findAccountForUser = async (authStore, origin, userId) => {
@@ -116,12 +148,33 @@ const readAll = async (fetchPage, limit = null) => {
     if (!response?.paginationInfo?.next) return collected;
     if (limit && page >= limit) return collected;
   }
-  throw new Error('GitLab returned more pages than the automation reads');
+  // A named error so callers can tell "the list is beyond what the automation
+  // parses" from any other fetch failure: the feedback scan turns it into a
+  // block instead of stalling on the same exception every tick.
+  throw Object.assign(
+    new Error('GitLab returned more pages than the automation reads'),
+    { name: 'GitlabListOverflowError' },
+  );
 };
 
 const ISSUE_SCAN_PAGES = 3;
 
+// Issue labels come back as strings or `{ name }` objects depending on the
+// endpoint and the `withLabelsDetails` flag; every reader uses this one.
+export const labelNamesOf = (issue) => (Array.isArray(issue?.labels) ? issue.labels : [])
+  .map((label) => (isString(label) ? label : isString(label?.name) ? label.name : ''))
+  .filter(Boolean);
+const labelList = (labels) => [].concat(labels).map((label) => String(label)).filter(Boolean);
+
 export function createGitlabIssueApi({ client }) {
+  // GitLab before 12.10 has no `add_labels`/`remove_labels` on the issue update
+  // and answers 400 when the body carries only those, so the bot reads the
+  // issue and sends the computed set. Older versions accept `labels`.
+  const editLabels = async (projectId, iid, change) => {
+    const current = labelNamesOf(await client.Issues.show(iid, { projectId }));
+    return client.Issues.edit(projectId, iid, { labels: change(current).join(',') });
+  };
+
   const api = {
     currentUser: () => client.Users.showCurrentUser(),
     getProject: (projectId) => client.Projects.show(projectId),
@@ -148,6 +201,17 @@ export function createGitlabIssueApi({ client }) {
       if (!Number.isInteger(note?.id)) throw new Error('GitLab did not return a note id');
       return note.id;
     },
+    listMergeRequestNotes: (projectId, iid) => readAll((page) => client.MergeRequestNotes.all(projectId, iid, {
+      perPage: page.perPage,
+      page: page.page,
+      showExpanded: true,
+      sort: 'asc',
+    })),
+    postMergeRequestNote: async (projectId, iid, body) => {
+      const note = await client.MergeRequestNotes.create(projectId, iid, body);
+      if (!Number.isInteger(note?.id)) throw new Error('GitLab did not return a note id');
+      return note.id;
+    },
     listLabelEvents: (projectId, iid) => readAll((page) => client.IssueLabelEvents.all(projectId, iid, {
       perPage: page.perPage,
       page: page.page,
@@ -159,11 +223,12 @@ export function createGitlabIssueApi({ client }) {
       page: page.page,
       showExpanded: true,
     })),
-    addLabels: (projectId, iid, labels) => client.Issues.edit(projectId, iid, {
-      addLabels: [].concat(labels).join(','),
-    }),
-    removeLabels: (projectId, iid, labels) => client.Issues.edit(projectId, iid, {
-      removeLabels: [].concat(labels).join(','),
+    addLabels: (projectId, iid, labels) => editLabels(projectId, iid, (current) => (
+      [...new Set([...current, ...labelList(labels)])]
+    )),
+    removeLabels: (projectId, iid, labels) => editLabels(projectId, iid, (current) => {
+      const removing = new Set(labelList(labels));
+      return current.filter((label) => !removing.has(label));
     }),
     closeIssue: (projectId, iid) => client.Issues.edit(projectId, iid, { stateEvent: 'close' }),
     listBranches: (projectId, search) => readAll((page) => client.Branches.all(projectId, {

@@ -545,10 +545,11 @@ other.
   (`link:<origin>/<owner>/<repo>/discussions/<N>`), and newer UIs read it as a
   discussion by its address.
   A change request or issue address that a source-control provider's
-  `urls.thread` names (GitLab's `/-/merge_requests/N` shape on any host) is
-  keyed by the thread, so linking it again from a tab like `/diffs` or with a
-  query refreshes the one entry. A missing field or a non-http(s) URL is a 400
-  and nothing is written.
+  `urls.thread` names (GitLab's `merge_requests/N` shape on 12.7 and its
+  `/-/merge_requests/N` shape on newer releases, both on any host) is keyed by
+  the thread, so linking it again from a tab like `/diffs` or with a query
+  refreshes the one entry. A missing field or a non-http(s) URL is a 400 and
+  nothing is written.
 - `session.unlink` removes a link from a session, defaulting to the calling
   session, whoever made the link. The agent names it the way it linked it: the
   control tool's `url` or `identifier` input (also read beside the action), or

@@ -147,7 +147,7 @@
           "scopes": [
             "api"
           ],
-          "createPath": "/-/user_settings/personal_access_tokens"
+          "createPath": "/profile/personal_access_tokens"
         }
       },
       "settings": {
@@ -166,13 +166,16 @@
       },
       "urls": {
         "changeRequest": [
+          "/{namespace+}/{repo}/merge_requests/{number}",
           "/{namespace+}/{repo}/-/merge_requests/{number}"
         ],
         "issue": [
+          "/{namespace+}/{repo}/issues/{number}",
           "/{namespace+}/{repo}/-/issues/{number}",
           "/{namespace+}/{repo}/-/work_items/{number}"
         ],
         "commit": [
+          "/{namespace+}/{repo}/commit/{sha}",
           "/{namespace+}/{repo}/-/commit/{sha}"
         ],
         "user": [

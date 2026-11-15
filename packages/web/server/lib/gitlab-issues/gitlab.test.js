@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_BRANCH_PREFIX, TemplateError, buildIssueBranch, createGitlabIssueApi,
-  findAccountForUser, isValidBranchPrefix, isValidGitRefName, matchReusableBranch,
-  parseIssueTemplate, resolveAccount, resolveProjectConfig, slugifyIssueTitle,
+  findAccountForUser, isBareBotMention, isValidBranchPrefix, isValidGitRefName, matchReusableBranch,
+  parseFeedbackCommand, parseIssueTemplate, resolveAccount, resolveProjectConfig, slugifyIssueTitle,
 } from './gitlab.js';
 
 const issue = (description) => ({ description });
@@ -22,6 +22,33 @@ describe('GitLab issue template parsing', () => {
   it('treats a missing target line as the default branch and an empty backtick value as default', () => {
     expect(parseIssueTemplate(issue('类型: bug')).targetBranch).toBe('');
     expect(parseIssueTemplate(issue('类型: bug\n目标分支:')).targetBranch).toBe('');
+  });
+});
+
+describe('GitLab feedback command parsing', () => {
+  it('accepts the mention command in both words, any case, with an optional colon body', () => {
+    expect(parseFeedbackCommand('@bot 修复', 'bot')).toEqual({ text: null });
+    expect(parseFeedbackCommand('@bot 修复: 样式塌了', 'bot')).toEqual({ text: '样式塌了' });
+    expect(parseFeedbackCommand('@bot 修复：样式塌了', 'bot')).toEqual({ text: '样式塌了' });
+    expect(parseFeedbackCommand('@bot FIX', 'bot')).toEqual({ text: null });
+    expect(parseFeedbackCommand('@bot fix: crash on save', 'bot')).toEqual({ text: 'crash on save' });
+    expect(parseFeedbackCommand('  @bot 修复  \nlater lines are body', 'bot')).toEqual({ text: null });
+  });
+
+  it('refuses everything that is not the trigger', () => {
+    expect(parseFeedbackCommand('@bot 进度如何', 'bot')).toBeNull();
+    expect(parseFeedbackCommand('@otherbot 修复', 'bot')).toBeNull();
+    expect(parseFeedbackCommand('修复', 'bot')).toBeNull();
+    expect(parseFeedbackCommand('@BotFix 修复', 'bot')).toBeNull();
+    expect(parseFeedbackCommand('@bot 修复一下', 'bot')).toBeNull();
+    expect(parseFeedbackCommand('@bot 修复', '')).toBeNull();
+  });
+
+  it('recognises a bare mention for the usage reply', () => {
+    expect(isBareBotMention('@bot 进度如何', 'bot')).toBe(true);
+    expect(isBareBotMention('/cc @bot', 'bot')).toBe(true);
+    expect(isBareBotMention('@otherbot', 'bot')).toBe(false);
+    expect(isBareBotMention('no mention', 'bot')).toBe(false);
   });
 });
 
@@ -70,6 +97,7 @@ describe('GitLab issue branch names', () => {
       autoDispatchGitlabIssues: true, gitlabIssueBotAccountId: 'acc-1',
     })).toEqual({
       enabled: true, botAccountId: 'acc-1', prefix: 'openchamber/', timeoutMinutes: 30,
+      reviewModel: '', reviewVariant: '',
     });
     expect(resolveProjectConfig({
       autoDispatchGitlabIssues: true, gitlabIssueBotAccountId: 'acc-1',
@@ -127,9 +155,11 @@ describe('GitLab issue API service', () => {
     await api.removeLabels(42, 17, ['ai-ready']);
 
     expect(created).toEqual([[42, 17, 'claimed']]);
+    // Labels are written as the computed full set, never as add/remove deltas:
+    // one argument shape for every GitLab version the automation serves.
     expect(edited).toEqual([
-      [42, 17, { addLabels: 'ai-working' }],
-      [42, 17, { removeLabels: 'ai-ready' }],
+      [42, 17, { labels: 'ai-ready,ai-working' }],
+      [42, 17, { labels: '' }],
     ]);
   });
 
@@ -216,5 +246,41 @@ describe('GitLab account resolution', () => {
       .resolves.toMatchObject({ credentialId: 'acc-1' });
     await expect(findAccountForUser(authStore, 'https://gitlab.example.com', 8)).resolves.toBeNull();
     await expect(findAccountForUser(authStore, 'https://other.example.com', 7)).resolves.toBeNull();
+  });
+});
+
+describe('GitLab issue label edits', () => {
+  // GitLab 12.7 refuses add_labels/remove_labels with a 400, so the bot has to
+  // send the whole set. The fake records the body the update would carry.
+  const fakeClient = (labels) => {
+    const edits = [];
+    return {
+      edits,
+      Issues: {
+        show: async () => ({ labels }),
+        edit: async (projectId, iid, body) => {
+          edits.push({ projectId, iid, body });
+          return body;
+        },
+      },
+    };
+  };
+
+  it('sends the union because an older instance rejects add_labels', async () => {
+    const client = fakeClient([{ name: 'ai-ready' }, 'triage']);
+    const api = createGitlabIssueApi({ client });
+
+    await api.addLabels(2, 1, ['ai-working']);
+
+    expect(client.edits).toEqual([{ projectId: 2, iid: 1, body: { labels: 'ai-ready,triage,ai-working' } }]);
+  });
+
+  it('keeps the other labels when one is removed', async () => {
+    const client = fakeClient([{ name: 'ai-ready' }, { name: 'ai-working' }]);
+    const api = createGitlabIssueApi({ client });
+
+    await api.removeLabels(2, 1, ['ai-working', 'ai-review']);
+
+    expect(client.edits).toEqual([{ projectId: 2, iid: 1, body: { labels: 'ai-ready' } }]);
   });
 });

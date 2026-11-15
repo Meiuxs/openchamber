@@ -114,6 +114,25 @@ describe('createIssueDispatcher', () => {
     expect(onSessionCreated).toHaveBeenCalledWith(expect.objectContaining({ directory: '/repo', promptDispatched: true }));
   });
 
+  it('asks for a model whose id keeps its own slashes', async () => {
+    const item = { ...summary('LOCAL-1'), detail: null };
+    item.detail = detail(item);
+    const { openCode } = await dispatcherWith({
+      projects: [{
+        id: 'proj-1',
+        path: '/repo',
+        autoDispatchIssues: true,
+        defaultModel: 'magpie/workbuddy-ai/glm-5.3-flash',
+        defaultVariant: 'high',
+      }],
+      issuesByProject: { 'proj-1': [item] },
+    });
+
+    expect(openCode.created[0].model).toEqual({
+      providerID: 'magpie', id: 'workbuddy-ai/glm-5.3-flash', variant: 'high',
+    });
+  });
+
   it('skips issues without the dispatch signal: unassigned, not root-caused, no Mechanism section', async () => {
     const make = (identifier, item, itemDetail) => ({ ...item, detail: itemDetail });
     const base = summary('LOCAL-1');

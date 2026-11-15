@@ -112,7 +112,8 @@ import { openCodeCredentialSource } from './auth.js';
 import { createContributorProvenanceStore } from '../git/contributor-provenance-storage.js';
 import { createGitNetworkOperationStore } from '../git/network-operation-storage.js';
 import { readEffectiveGitTransportRevision } from '../git/transport-config.js';
-import { completeWorktreeCheckoutHydration, configureRepositoryTransport, deleteBranch as deleteBranchService, isGitRepository as isGitRepositoryService, removeWorktree as removeWorktreeService, resolvePrimaryWorktreeRoot, resolveWorktreeTopLevel } from '../git/service.js';
+import { completeWorktreeCheckoutHydration, configureRepositoryTransport, deleteBranch as deleteBranchService, getWorktreeBootstrapStatus, isGitRepository as isGitRepositoryService, removeWorktree as removeWorktreeService, resolvePrimaryWorktreeRoot, resolveWorktreeTopLevel } from '../git/service.js';
+import { worktreeSetupOf } from '../projects/worktree-setup.js';
 import { createPrivateRepositoryIdentityResolver, resolveRepositoryId } from '../source-control/repository-identity.js';
 import { createSourceControlAuditStore } from '../source-control/audit-storage.js';
 
@@ -788,6 +789,19 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       credentialResolver: gitCredentialResolver,
       createHttpsCredentialReference,
       worktreeBootstrapStore,
+      // The project's own worktree setup commands (a dependency install, say)
+      // belong to the automation's worktrees exactly as they do to the ones a
+      // person makes, and its sessions wait for them instead of racing them.
+      resolveWorktreeSetup: async (project) => worktreeSetupOf(
+        await projectConfigRuntime.readProjectSetup(project.id),
+        project.path,
+      ),
+      worktreeSetupState: async ({ directory, bootstrapStore }) => {
+        if (!directory || !bootstrapStore) return 'ready';
+        const status = await getWorktreeBootstrapStatus(directory, { bootstrapStore });
+        if (!status || status.status === 'ready') return 'ready';
+        return status.status === 'failed' ? 'failed' : 'pending';
+      },
       apiFactory: ({ origin, account }) => createGitlabIssueApi({
         client: createClientForAccount(origin, account),
       }),
@@ -812,6 +826,9 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       bindingService: walkthroughBindingService,
       authStore: sourceControlAuthStore,
       normalizeDirectoryPath,
+      // The panel reads the same in-memory ledger the dispatcher writes, so a
+      // tick and a poll never disagree about an entry.
+      dispatcher: gitlabIssueDispatcher,
       logger: console,
     });
     await registerBuiltInGuests({ persistPath: extensionsPersistPath(openchamberDataDir), root: routeDependencies.builtInExtensionsDir });

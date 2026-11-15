@@ -1,4 +1,4 @@
-import { asNonEmptyString, isString } from '../shared/guards.js';
+import { asNonEmptyString, isRecord, isString } from '../shared/guards.js';
 
 export const createSettingsNormalizationRuntime = (dependencies) => {
   const {
@@ -327,6 +327,36 @@ export const createSettingsNormalizationRuntime = (dependencies) => {
       const gitlabTimeout = candidate.gitlabIssueTimeoutMinutes;
       if (Number.isFinite(gitlabTimeout)) {
         project.gitlabIssueTimeoutMinutes = gitlabTimeout;
+      }
+      if (isString(candidate.gitlabIssueReviewModel)) {
+        // `provider/model`, the same shape `defaultModel` uses. An unusable
+        // value is dropped: the review then falls back to the default model.
+        const reviewModel = candidate.gitlabIssueReviewModel.trim();
+        if (/^\S+\/\S+$/.test(reviewModel)) project.gitlabIssueReviewModel = reviewModel;
+      }
+      if (isString(candidate.gitlabIssueReviewVariant)) {
+        const reviewVariant = candidate.gitlabIssueReviewVariant.trim();
+        if (reviewVariant) project.gitlabIssueReviewVariant = reviewVariant;
+      }
+      // Issue templates stay on the project entry. An entry without an id or a
+      // name is unusable, so it is dropped instead of repaired; the body may be
+      // empty, which is how a person clears a built-in template.
+      if (Array.isArray(candidate.gitlabIssueTemplates)) {
+        const templates = candidate.gitlabIssueTemplates.slice(0, 50).flatMap((entry) => {
+          if (!isRecord(entry)) return [];
+          const id = asNonEmptyString(entry.id);
+          const name = asNonEmptyString(entry.name);
+          if (!id || !name) return [];
+          const kind = entry.kind === 'bug' || entry.kind === 'feature' ? entry.kind : null;
+          return [{ id, name, kind, body: isString(entry.body) ? entry.body : '' }];
+        });
+        const seen = new Set();
+        const unique = templates.filter((template) => {
+          if (seen.has(template.id)) return false;
+          seen.add(template.id);
+          return true;
+        });
+        if (unique.length) project.gitlabIssueTemplates = unique;
       }
 
       result.push(project);

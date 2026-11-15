@@ -101,12 +101,23 @@ export function createGitlabIssueWorkspace({
         .catch(() => ({ code: 1 }));
       return result.code === 0;
     },
-    async createWorktreeFor({ repoPath, branch, worktreeName, startRef, mode = 'new', bootstrapStore }) {
+    async createWorktreeFor({
+      repoPath, branch, worktreeName, startRef, mode = 'new', bootstrapStore, startCommand = '',
+    }) {
+      // The project's setup commands (a dependency install, say) travel with the
+      // creation, which runs them once git is ready; an empty command is left
+      // out so the creation keeps its default. The worktree links the checkout's
+      // installed dependencies instead of installing a second copy, which is
+      // what those commands exist for and what a store under the worktree's
+      // longer path cannot always build; they stay the fallback when no
+      // checkout has dependencies to share.
+      const setup = String(startCommand ?? '').trim();
       const input = mode === 'existing'
         ? { mode: 'existing', branchName: branch, existingBranch: branch, worktreeName }
         : { mode: 'new', branchName: branch, worktreeName, startRef };
+      if (setup) input.startCommand = setup;
       try {
-        return await createWorktree(repoPath, input, { bootstrapStore });
+        return await createWorktree(repoPath, input, { bootstrapStore, reuseNodeModules: true });
       } catch (error) {
         throw new WorkspaceError('worktree-failed', error instanceof Error ? error.message : String(error));
       }

@@ -49,7 +49,11 @@ export const gitlabDescriptor = Object.freeze({
   urls: Object.freeze({
     thread: Object.freeze({
       hosts: 'any',
-      pattern: /^(\/.+\/-\/(?:merge_requests|issues|work_items)\/\d+)(?:\/|$)/,
+      // Both shapes, because both are in the wild: GitLab 12.7 links a merge
+      // request as `/group/repo/merge_requests/2`, while 13.x and later emit
+      // `/group/repo/-/merge_requests/2`. Recognising only one of them leaves
+      // the other unthreaded in agent text.
+      pattern: /^(\/.+\/(?:-\/)?(?:merge_requests|issues|work_items)\/\d+)(?:\/|$)/,
     }),
   }),
   trackedItems: Object.freeze({ nestedOwners: true, defaultInstance: null, batchLimit: 50 }),
@@ -78,11 +82,27 @@ export const gitlabDescriptor = Object.freeze({
     }),
     // A glab login serves API reads only; Git transport needs a stored account.
     cliTransport: false,
-    token: Object.freeze({ scopes: Object.freeze(['api']), createPath: '/-/user_settings/personal_access_tokens' }),
+    // `/-/user_settings/...` is the page a newer GitLab redirects to; older ones
+    // (12.7, the intranet deployment) serve it at `/profile/...` only.
+    token: Object.freeze({ scopes: Object.freeze(['api']), createPath: '/profile/personal_access_tokens' }),
     urls: Object.freeze({
-      changeRequest: Object.freeze(['/{namespace+}/{repo}/-/merge_requests/{number}']),
-      issue: Object.freeze(['/{namespace+}/{repo}/-/issues/{number}', '/{namespace+}/{repo}/-/work_items/{number}']),
-      commit: Object.freeze(['/{namespace+}/{repo}/-/commit/{sha}']),
+      // Every list leads with the path without the `/-/` scope separator: that
+      // is the form GitLab 12.7 serves, and a newer instance redirects it to the
+      // `/-/` one, so the first pattern is what links are built from everywhere.
+      // The `/-/` shapes stay behind for parsing links GitLab itself emits.
+      changeRequest: Object.freeze([
+        '/{namespace+}/{repo}/merge_requests/{number}',
+        '/{namespace+}/{repo}/-/merge_requests/{number}',
+      ]),
+      issue: Object.freeze([
+        '/{namespace+}/{repo}/issues/{number}',
+        '/{namespace+}/{repo}/-/issues/{number}',
+        '/{namespace+}/{repo}/-/work_items/{number}',
+      ]),
+      commit: Object.freeze([
+        '/{namespace+}/{repo}/commit/{sha}',
+        '/{namespace+}/{repo}/-/commit/{sha}',
+      ]),
       user: Object.freeze(['/{user}']),
     }),
     features: Object.freeze({

@@ -14,6 +14,7 @@
  */
 
 import { asNonEmptyString } from '../shared/guards.js';
+import { parseModelRef } from '../shared/model-ref.js';
 
 const PRIORITY_ORDER = ['urgent', 'high', 'medium', 'low'];
 const ROOT_CAUSE_LABEL = 'root-cause:found';
@@ -49,6 +50,19 @@ const latestMarkerShortId = (item) => {
 
 /** A single-line session title: the issue identifier, then the issue title. */
 const sessionTitle = (identifier, title) => `${identifier}: ${(asNonEmptyString(title) ?? '').replace(/\s+/g, ' ').trim()}`.trim();
+
+/**
+ * `provider/model`, where the model id may itself hold slashes: the magpie
+ * provider's `magpie/workbuddy-ai/glm-5.3-flash` is the model
+ * `workbuddy-ai/glm-5.3-flash`, and splitting on the last slash asked the
+ * provider for a model it does not have. The variant is a separate setting,
+ * never part of the string.
+ */
+const splitModel = (value) => {
+  const text = asNonEmptyString(value);
+  if (!text) return null;
+  return parseModelRef(text);
+};
 
 export const buildAutoDispatchPrompt = ({ identifier, title, projectPath }) => {
   const name = sessionTitle(identifier, title).replace(/^[^:]+:\s*/, '') || identifier;
@@ -160,13 +174,13 @@ export function createIssueDispatcher({
     const client = createClient({ directory: project.path });
     // Agent and model are session properties in v2, set at create time like
     // scheduled tasks do; a project without defaults leaves OpenCode's own.
-    const modelRef = asNonEmptyString(project.defaultModel)?.split('/', 2) ?? null;
+    const model = splitModel(project.defaultModel);
     const payload = {
       title: sessionTitle(summary.identifier, summary.title),
       location: { directory: project.path },
     };
-    if (modelRef && modelRef.length === 2 && modelRef[0] && modelRef[1]) {
-      payload.model = { providerID: modelRef[0], id: modelRef[1] };
+    if (model) {
+      payload.model = { providerID: model.providerID, id: model.id };
       const variant = asNonEmptyString(project.defaultVariant);
       if (variant) payload.model.variant = variant;
     }

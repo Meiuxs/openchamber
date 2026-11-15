@@ -79,7 +79,7 @@ export const BUILT_IN_SOURCE_CONTROL_PROVIDERS: readonly PublishedSourceControlP
     },
     auth: {
       methods: ['device', 'pat', 'cli'], cliName: 'glab', cliTransport: false,
-      token: { scopes: ['api'], createPath: '/-/user_settings/personal_access_tokens' },
+      token: { scopes: ['api'], createPath: '/profile/personal_access_tokens' },
     },
     settings: {
       fields: [
@@ -88,9 +88,17 @@ export const BUILT_IN_SOURCE_CONTROL_PROVIDERS: readonly PublishedSourceControlP
       ],
     },
     urls: {
-      changeRequest: ['/{namespace+}/{repo}/-/merge_requests/{number}'],
-      issue: ['/{namespace+}/{repo}/-/issues/{number}', '/{namespace+}/{repo}/-/work_items/{number}'],
-      commit: ['/{namespace+}/{repo}/-/commit/{sha}'], user: ['/{user}'],
+      // Short paths first, exactly as the server publishes them for GitLab 12.7:
+      // links are built from the first pattern, and that instance answers 404 on
+      // the `/-/` ones (a newer GitLab redirects the short form onto them).
+      changeRequest: ['/{namespace+}/{repo}/merge_requests/{number}', '/{namespace+}/{repo}/-/merge_requests/{number}'],
+      issue: [
+        '/{namespace+}/{repo}/issues/{number}',
+        '/{namespace+}/{repo}/-/issues/{number}',
+        '/{namespace+}/{repo}/-/work_items/{number}',
+      ],
+      commit: ['/{namespace+}/{repo}/commit/{sha}', '/{namespace+}/{repo}/-/commit/{sha}'],
+      user: ['/{user}'],
     },
     features: {
       ...BUILT_IN_FEATURES_OFF,

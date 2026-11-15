@@ -7,9 +7,13 @@ const createRouteRegistry = () => {
   return {
     app: {
       post(routePath, handler) { routes.set(`POST ${routePath}`, handler); },
+      get(routePath, handler) { routes.set(`GET ${routePath}`, handler); },
     },
     post(routePath) {
       return routes.get(`POST ${routePath}`);
+    },
+    get(routePath) {
+      return routes.get(`GET ${routePath}`);
     },
   };
 };
@@ -47,18 +51,82 @@ const createHarness = (options = {}) => {
     ? null
     : { status: 'valid', token: 'secret-token', credentialId: 'acc-1', source: 'pat' }));
   const get = vi.fn(async () => bindingFor(options.binding));
+  const addLabels = vi.fn(async () => {});
+  const removeLabels = vi.fn(async () => {});
+  const postNote = vi.fn(async () => 1);
+  const accessLevelOf = vi.fn(async () => options.accessLevel ?? 30);
+  const listRuns = vi.fn(async () => {
+    if (options.ledgerFails) throw new Error('ledger unreadable');
+    return options.runs ?? [];
+  });
+  const getRun = vi.fn(async () => options.run ?? null);
+  const listAccounts = vi.fn(async () => options.accounts ?? [{
+    credentialId: 'acc-2',
+    credentialRevision: 1,
+    status: 'valid',
+    source: 'pat',
+    providerUserId: 'https://gitlab.example.com#7',
+    user: { id: 7, login: 'sam' },
+    role: 'actor',
+  }]);
   registerGitlabIssueRoutes(registry.app, {
     readProjects: async () => options.projects ?? [{
       id: 'p1', path: '/repo', gitlabIssueBotAccountId: options.botAccountId ?? 'acc-1',
     }],
     bindingService: { get },
-    authStore: { readAccount },
+    authStore: { readAccount, listAccounts },
     normalizeDirectoryPath,
-    apiFactory: () => ({ createIssue }),
+    apiFactory: () => ({
+      createIssue, addLabels, removeLabels, postNote, accessLevelOf,
+    }),
+    dispatcher: {
+      ledger: { list: listRuns, get: getRun },
+      sessionStatus: async () => 'busy',
+    },
     logger: { warn },
   });
-  return { handler: registry.post('/api/gitlab-issues'), createIssue, readAccount, get, warn };
+  return {
+    handler: registry.post('/api/gitlab-issues'),
+    runsHandler: registry.get('/api/gitlab-issues/runs'),
+    actionHandler: registry.post('/api/gitlab-issues/runs/action'),
+    createIssue,
+    readAccount,
+    get,
+    warn,
+    addLabels,
+    removeLabels,
+    postNote,
+    accessLevelOf,
+    listRuns,
+    getRun,
+  };
 };
+
+const runRecord = (overrides = {}) => ({
+  origin: 'https://gitlab.example.com',
+  projectEntryId: 'p1',
+  projectId: 42,
+  projectPath: 'group/repo',
+  title: 'Fix login',
+  iid: 17,
+  kind: 'bug',
+  phase: 'implementing',
+  blockedReason: null,
+  blockedFrom: null,
+  branch: 'openchamber/issue-17-fix-login',
+  targetBranch: 'main',
+  mrIid: null,
+  attempts: 1,
+  reviewRounds: 0,
+  reviewVerdict: null,
+  triageVerdict: null,
+  outcome: null,
+  sessionId: 'ses_1',
+  worktreePath: 'D:/wt/17',
+  since: '2026-11-12T10:00:00.000Z',
+  updatedAt: '2026-11-12T10:00:00.000Z',
+  ...overrides,
+});
 
 const validBody = {
   directory: '/repo',
@@ -205,5 +273,170 @@ describe('GitLab issue create route', () => {
 
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({ error: 'lookup-failed' });
+  });
+});
+
+describe('GitLab run panel routes', () => {
+  it('lists a project ledger with derived links and the bot status', async () => {
+    const { runsHandler } = createHarness({ runs: [runRecord()] });
+    const res = createResponse();
+
+    await runsHandler({ query: { directory: '/repo' } }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.bot).toEqual({ status: 'valid', accountId: 'acc-1' });
+    expect(res.body.runs[0]).toMatchObject({
+      key: 'https://gitlab.example.com|42|17',
+      issueUrl: 'https://gitlab.example.com/group/repo/issues/17',
+      sessionStatus: 'busy',
+    });
+    // A ledger written before runs kept their sessions still lists.
+    expect(res.body.runs[0].sessions).toEqual([]);
+  });
+
+  // GitLab 12.7, which the intranet deployment runs, serves the short form and
+  // 404s on the `/-/` one, so a link the panel renders must not carry it.
+  it('builds links in the form older GitLab serves', async () => {
+    const { runsHandler } = createHarness({ runs: [runRecord({ mrIid: 5 })] });
+    const res = createResponse();
+
+    await runsHandler({ query: { directory: '/repo' } }, res);
+
+    expect(res.body.runs[0].issueUrl).toBe('https://gitlab.example.com/group/repo/issues/17');
+    expect(res.body.runs[0].mrUrl).toBe('https://gitlab.example.com/group/repo/merge_requests/5');
+  });
+
+  // A run that ended without a merge request says otherwise nothing but
+  // "done", so the verdict and the outcome reach the panel.
+  it('carries the triage verdict and the outcome of a finished run', async () => {
+    const { runsHandler } = createHarness({
+      runs: [runRecord({
+        phase: 'done', triageVerdict: 'not-an-issue', outcome: 'not-an-issue', sessionId: null,
+      })],
+    });
+    const res = createResponse();
+
+    await runsHandler({ query: { directory: '/repo' } }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.runs[0]).toMatchObject({
+      phase: 'done', triageVerdict: 'not-an-issue', outcome: 'not-an-issue',
+    });
+  });
+
+  it('reports a run recorded before triage as having no verdict', async () => {
+    const { runsHandler } = createHarness({ runs: [runRecord()] });
+    const res = createResponse();
+
+    await runsHandler({ query: { directory: '/repo' } }, res);
+
+    expect(res.body.runs[0]).toMatchObject({ triageVerdict: null, outcome: null });
+  });
+
+  it('lists the sessions behind the stops and drops unusable entries', async () => {
+    const { runsHandler } = createHarness({
+      runs: [runRecord({
+        sessions: [
+          { sessionId: 'ses_fix', stage: 'implementing', at: '2026-11-12T10:00:00.000Z' },
+          { sessionId: 'ses_review', stage: 'reviewing', at: '2026-11-12T10:05:00.000Z' },
+          { stage: 'reviewing', at: '2026-11-12T10:09:00.000Z' },
+        ],
+      })],
+    });
+    const res = createResponse();
+
+    await runsHandler({ query: { directory: '/repo' } }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.runs[0].sessions).toEqual([
+      { sessionId: 'ses_fix', stage: 'implementing', at: '2026-11-12T10:00:00.000Z' },
+      { sessionId: 'ses_review', stage: 'reviewing', at: '2026-11-12T10:05:00.000Z' },
+    ]);
+  });
+
+  it('reports an unreadable ledger as an error, never as an empty list', async () => {
+    const { runsHandler } = createHarness({ ledgerFails: true });
+    const res = createResponse();
+
+    await runsHandler({ query: { directory: '/repo' } }, res);
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toEqual({ error: 'ledger-unreadable' });
+  });
+
+  it('refuses to act as the bot account', async () => {
+    const { actionHandler, addLabels } = createHarness({ run: runRecord() });
+    const res = createResponse();
+
+    await actionHandler({
+      body: {
+        directory: '/repo',
+        key: 'https://gitlab.example.com|42|17',
+        action: 'cancel',
+        accountId: 'acc-1',
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({ error: 'account-is-bot' });
+    expect(addLabels).not.toHaveBeenCalled();
+  });
+
+  it('refuses an action the phase does not accept', async () => {
+    const { actionHandler } = createHarness({ run: runRecord({ phase: 'implementing' }) });
+    const res = createResponse();
+
+    await actionHandler({
+      body: {
+        directory: '/repo',
+        key: 'https://gitlab.example.com|42|17',
+        action: 'approve',
+        accountId: 'acc-2',
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toEqual({ error: 'phase-mismatch', phase: 'implementing' });
+  });
+
+  it('refuses an acting account below Developer', async () => {
+    const { actionHandler, removeLabels } = createHarness({
+      run: runRecord({ phase: 'blocked', blockedReason: 'review-rejected' }),
+      accessLevel: 20,
+    });
+    const res = createResponse();
+
+    await actionHandler({
+      body: {
+        directory: '/repo',
+        key: 'https://gitlab.example.com|42|17',
+        action: 'reset',
+        accountId: 'acc-2',
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({ error: 'insufficient-access' });
+    expect(removeLabels).not.toHaveBeenCalled();
+  });
+
+  it('resets a blocked run with the acting account', async () => {
+    const { actionHandler, removeLabels, addLabels } = createHarness({
+      run: runRecord({ phase: 'blocked', blockedReason: 'review-rejected' }),
+    });
+    const res = createResponse();
+
+    await actionHandler({
+      body: {
+        directory: '/repo',
+        key: 'https://gitlab.example.com|42|17',
+        action: 'reset',
+        accountId: 'acc-2',
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(removeLabels).toHaveBeenCalledWith(42, 17, ['ai-blocked']);
+    expect(addLabels).toHaveBeenCalledWith(42, 17, ['ai-ready']);
   });
 });

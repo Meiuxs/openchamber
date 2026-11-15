@@ -18,6 +18,9 @@ const dirs = [];
 const paged = (data) => async () => ({ data, paginationInfo: { next: null } });
 
 const evidenceJson = '```json\n{"rootCause":"missing timeout","changes":"added timeout","verification":[{"command":"bun test","result":"pass"}],"risks":"none"}\n```';
+const triageValidJson = '```json\n{"verdict":"valid","summary":"the timeout is unbounded"}\n```';
+const triageNotAnIssueJson = '```json\n{"verdict":"not-an-issue","summary":"by design","evidence":"src/login.js:40 returns early"}\n```';
+const reviewApproveJson = '```json\n{"verdict":"approve","summary":"fix matches the report","findings":[]}\n```';
 const planJson = '```json\n{"files":["src/login.js"],"dataFlow":"add timeout","verification":"bun test","risks":"none","outOfScope":"no ui"}\n```';
 
 async function createFixture() {
@@ -54,14 +57,9 @@ async function createFixture() {
       },
       show: async () => issueView(),
       edit: async (_projectId, _iid, options) => {
-        if (options.addLabels) {
-          for (const label of options.addLabels.split(',')) {
-            if (!state.issue.labels.includes(label)) state.issue.labels.push(label);
-          }
-        }
-        if (options.removeLabels) {
-          const removed = options.removeLabels.split(',');
-          state.issue.labels = state.issue.labels.filter((label) => !removed.includes(label));
+        // The adapter writes the computed full label set, never deltas.
+        if (options.labels !== undefined) {
+          state.issue.labels = options.labels.split(',').map((name) => name.trim()).filter(Boolean);
         }
         if (options.stateEvent === 'close') state.issue.state = 'closed';
       },
@@ -125,7 +123,7 @@ async function createFixture() {
         return { data: { id: state.sessionId } };
       },
       prompt: async () => {},
-      abort: async () => {},
+      interrupt: async () => {},
       get: async ({ sessionID }) => ({ id: sessionID }),
     },
     message: { list: async () => ({ data: state.messages }) },
@@ -217,12 +215,41 @@ describe('GitLab issue automation integration', () => {
       cwd: 'D:/wt/17', name: 'Sam', email: 'sam@example.com',
     });
 
+    // The triage session decides the report is real before any fix is written.
+    state.messages = [{
+      type: 'assistant',
+      content: [{ type: 'text', text: triageValidJson }],
+      time: { completed: NOW + 500 },
+    }];
+    await dispatcher.tick();
+    expect((await ledger.list())[0].phase).toBe('implementing');
+    expect(state.notes.some((note) => note.body.includes('### 判定：问题成立'))).toBe(true);
+
+    // The verdict opens the fix session on the tick after it is read.
+    await dispatcher.tick();
+    expect(state.calls.sessionCreates).toBe(2);
+
     state.messages = [{
       type: 'assistant',
       content: [{ type: 'text', text: evidenceJson }],
       time: { completed: NOW + 1000 },
     }];
+    // The implementation ends into the review gate: a review session opens on
+    // its own tick, and the push only happens after its verdict.
     await dispatcher.tick();
+    expect((await ledger.list())[0].phase).toBe('reviewing');
+
+    await dispatcher.tick();
+    expect(state.calls.sessionCreates).toBe(3);
+
+    state.messages = [{
+      type: 'assistant',
+      content: [{ type: 'text', text: reviewApproveJson }],
+      time: { completed: NOW + 2000 },
+    }];
+    await dispatcher.tick();
+    expect((await ledger.list())[0].phase).toBe('verifying');
+
     await dispatcher.tick();
 
     const run = (await ledger.list())[0];
@@ -245,8 +272,18 @@ describe('GitLab issue automation integration', () => {
     await dispatcher.tick();
     await dispatcher.tick();
     await dispatcher.tick();
+    expect((await ledger.list())[0].phase).toBe('triaging');
+
+    state.messages = [{
+      type: 'assistant',
+      content: [{ type: 'text', text: triageValidJson }],
+      time: { completed: NOW + 500 },
+    }];
+    await dispatcher.tick();
     expect((await ledger.list())[0].phase).toBe('planning');
 
+    await dispatcher.tick();
+    expect(state.calls.sessionCreates).toBe(2);
     state.messages = [{
       type: 'assistant',
       content: [{ type: 'text', text: planJson }],
@@ -260,23 +297,67 @@ describe('GitLab issue automation integration', () => {
       id: 500, body: '/ai-approve', created_at: new Date(NOW + 2000).toISOString(), author: { id: 7 },
     });
     await dispatcher.tick();
-    expect((await ledger.list())[0].phase).toBe('preparing');
+    // Approval settles the scope, so the run goes straight to the fix session.
+    expect((await ledger.list())[0].phase).toBe('implementing');
 
     state.messages = [];
     await dispatcher.tick();
     expect((await ledger.list())[0].phase).toBe('implementing');
+    expect(state.calls.sessionCreates).toBe(3);
 
     state.messages = [{
       type: 'assistant',
       content: [{ type: 'text', text: evidenceJson }],
       time: { completed: NOW + 3000 },
     }];
+    // Same gate as the bug path: implement ends into a review session, whose
+    // approve verdict is what lets the push happen.
     await dispatcher.tick();
+    expect((await ledger.list())[0].phase).toBe('reviewing');
+
+    await dispatcher.tick();
+    state.messages = [{
+      type: 'assistant',
+      content: [{ type: 'text', text: reviewApproveJson }],
+      time: { completed: NOW + 4000 },
+    }];
+    await dispatcher.tick();
+    expect((await ledger.list())[0].phase).toBe('verifying');
+
     await dispatcher.tick();
 
     const run = (await ledger.list())[0];
     expect(run.phase).toBe('mr-open');
     expect(state.calls.pushes).toEqual(['openchamber/issue-17-fix-login']);
     expect(state.calls.createMr).not.toBeNull();
+  });
+
+  it('closes an issue the code contradicts, through the real adapter', async () => {
+    const { dispatcher, ledger, state } = await createFixture();
+
+    await dispatcher.tick();
+    await dispatcher.tick();
+    await dispatcher.tick();
+    expect((await ledger.list())[0].phase).toBe('triaging');
+
+    state.messages = [{
+      type: 'assistant',
+      content: [{ type: 'text', text: triageNotAnIssueJson }],
+      time: { completed: NOW + 500 },
+    }];
+    await dispatcher.tick();
+
+    const run = (await ledger.list())[0];
+    expect(run).toMatchObject({
+      phase: 'done', outcome: 'not-an-issue', triageVerdict: 'not-an-issue',
+    });
+    // The adapter closes through `Issues.edit`, and the label set it writes
+    // drops the working labels while adding ai-done.
+    expect(state.issue.state).toBe('closed');
+    expect(state.issue.labels).toContain('ai-done');
+    expect(state.issue.labels).not.toContain('ai-working');
+    expect(state.calls.pushes).toEqual([]);
+    expect(state.calls.createMr).toBeNull();
+    expect(state.notes.some((note) => note.body.includes('src/login.js:40'))).toBe(true);
   });
 });
