@@ -127,14 +127,23 @@ and needs no provider, so a Markdown block rendered for export is unchanged.
 
 ### Why a collapsed user message shares two lines between text and context
 
-Each context item (a quote, a code comment, terminal output) collapses to one
-row, so a message with ten comments stayed ten rows tall, and with the sticky
-user header on those rows stayed over the chat. A collapsed message now gets
-two lines: the text takes one or two, and context rows get what is left
+Each context item (a quote, a code comment, terminal output) collapses to its
+quote line plus a line for the user's comment, so a message with ten comments
+stayed twenty lines tall, and with the sticky user header on those lines stayed
+over the chat. A collapsed message now gets two lines: the text takes one or
+two, and context items get what is left, each shown whole or not at all
 (`contextPartsPastCollapse`). The rest waits behind the message's one show more
 link. The text wins because it is what the user typed. Lines follow the chat's
 width, so `UserTextPart` measures them before paint, and clamping the block by
-height would cut a row in half.
+height would cut an item in half.
+
+### Why a chat quote has no caption
+
+A quote's accent bar already says "this is quoted", and a quote from this chat
+has no source worth naming, so its caption ("Quoted from an earlier message")
+is read to screen readers only and the collapsed line shows the quote itself.
+Code comments, terminal output, pages and PR items keep their caption, since
+the file, terminal or page is information the bar does not carry.
 
 ### Why backslash doubling stops at `.` and `?`
 
@@ -219,6 +228,21 @@ labels without loaded URLs. This does not modify the live React subtree or
 run a second Markdown parser. Ordinary code selections copy raw code;
 prose follows the Markdown/plain setting and retains safe rich HTML. The
 desktop `openchamber:copy` event follows the same selection policy.
+
+### How a saved image reaches the user
+
+`saveMessageImageExport` (`message/imageExport.ts`) draws a source on the chat
+background and hands the PNG to the runtime: the VS Code save dialog, the
+native share sheet in the Capacitor app, or a download everywhere else. One
+answer's "Save as image" and a selection of several messages
+(`messageSelection/`) both go through it. The exporter chunk loads before the
+temporary clone is attached, so a slow chunk cannot leave export-only content
+in the page. The download goes through a blob URL, because the desktop app
+titles its save dialog with the download URL and a data URL would put the
+whole image there. A dismissed save dialog or share sheet resolves as
+`canceled`: the caller shows nothing and keeps its state, where it used to
+report a failed image. The VS Code bridge waits on its file dialogs without a
+timeout, since the user can take longer than a request normally may.
 
 ### Why image exports keep prose at the visible column width
 
@@ -849,9 +873,11 @@ Why: only navigation tools use the compact static path; all other tools need obs
   message opens: one resolver (`lib/messages/attachmentPreview.ts`) decides for
   both, and `message/useOpenAttachment.ts` carries it out per runtime. An image
   opens the viewer, text sent inline (a pasted text, a picked text file) the
-  text dialog, a file attached by path (`file://`) the file itself, in the
-  editor in VS Code and a Files tab elsewhere. A citation whose file opens
-  nothing (a PDF sent inline, a folder) stays a label. Only `UserTextPart`
+  text dialog, a PDF sent inline the document dialog (the Files view's PDF
+  preview, `ToolOutputDialog`; not in VS Code, whose webview policy blocks
+  both its frame and pdf.js), a file attached by path (`file://`) the file
+  itself, in the editor in VS Code and a Files tab elsewhere. A citation whose
+  file opens nothing (another binary sent inline, a folder) stays a label. Only `UserTextPart`
   makes chips clickable: `withAttachmentChips` draws labels unless the caller
   passes `isOpenable`, so the composer, the queue and context blocks get no
   dead tab stops. A click that ends a text selection over a chip leaves it

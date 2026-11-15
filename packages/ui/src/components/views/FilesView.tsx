@@ -122,6 +122,7 @@ import { useRawAssetUrl } from './files/useRawAssetUrl';
 import { useHtmlPreviewAnnotation } from './files/useHtmlPreviewAnnotation';
 import { useConfigStore } from '@/stores/useConfigStore';
 import { useEnterpriseMode } from '@/stores/useEnterprisePolicyStore';
+import { textLineSource } from '@/lib/commentAnchor';
 import { buildCodeMirrorCommentWidgets, FilePreviewCommentMenu, isWholeFileComment, normalizeLineRange, useInlineCommentController, useLineNumberDragSelection, useWholeFileComment } from '@/components/comments';
 import { opencodeClient } from '@/lib/opencode/client';
 import { useDirectoryShowHidden } from '@/lib/directoryShowHidden';
@@ -1205,6 +1206,13 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
 
   const markdownPreviewRef = React.useRef<HTMLDivElement | null>(null);
 
+  // Comments follow their code when the file changes on disk. Only a loaded
+  // text counts: an empty or half-loaded file would read as every commented
+  // line being gone.
+  const commentLineSource = React.useMemo(
+    () => (fileContent && !fileLoading && loadedFilePath === selectedFile?.path ? textLineSource(fileContent) : null),
+    [fileContent, fileLoading, loadedFilePath, selectedFile?.path],
+  );
   const fileCommentController = useInlineCommentController<SelectedLineRange>({
     source: 'file',
     fileLabel: selectedFile?.path ?? null,
@@ -1212,6 +1220,9 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
     getCodeForRange: (range) => extractSelectedCode(fileContent, normalizeLineRange(range)),
     toStoreRange: (range) => ({ startLine: range.start, endLine: range.end }),
     fromDraftRange: (draft) => ({ start: draft.startLine, end: draft.endLine }),
+    lineSource: () => commentLineSource,
+    contentVersion: commentLineSource,
+    onSelectionMoved: setLineSelection,
   });
 
   const {

@@ -769,6 +769,7 @@ export const LOCAL_DEVICE_KEYS = [
   'showTerminalQuickKeysOnDesktop',
   'dockBadgeEnabled',
   'alwaysShowScrollbars',
+  'mobileKeepScreenAwake',
   'questionsInChat',
   'agentMemoryViewedAt',
 ] as const;

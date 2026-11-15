@@ -30,6 +30,7 @@ const GitView = lazyWithChunkRecovery(() => import('@/components/views/GitView')
 import { areTitleMapsEqual, buildSessionTitleMap, EMPTY_SESSION_TITLE_MAP, getSessionIDFromDedupeKey } from './contextPanelSessionTitles';
 import { ProjectContextPanel } from './RightSidebarTabs';
 import { WorkflowsPanel } from '@/components/chat/workflows/WorkflowsPanel';
+import { SubagentsPanel } from '@/components/chat/subagents/SubagentsPanel';
 import { useEffectiveDirectory } from '@/hooks/useEffectiveDirectory';
 import { useRepositoryReferenceProvider } from '@/components/references/referenceSources';
 import { useGuestSurfaces } from '@/hooks/useGuestSurfaces';
@@ -55,6 +56,7 @@ import { GuestIcon } from './GuestRailIcon';
 import { useGuestsStore } from '@/lib/guests/store';
 import { FALLBACK_GUEST_ICON } from '@/lib/guests/icon';
 import { isPluginContextPanelMode, pluginIdFromMode } from '@/lib/surfaces/modes';
+import { CONTEXT_SURFACES } from '@/lib/surfaces/registry';
 import { beginLayoutAnimation, cancelWhenLayoutSettled, holdLayoutAnimation, LAYOUT_ANIMATION_EASING, runWhenLayoutSettled } from '@/lib/layoutAnimation';
 import { useLayoutAnimationMs } from '@/hooks/useLayoutAnimationMs';
 import { WORK_STATUS_COLUMN_WIDTH } from '@/components/chat/work-status/useWorkStatusVisibility';
@@ -69,7 +71,7 @@ import { useClosingZoneTab } from './useClosingZoneTab';
 import { ZoneMoveMenuItems } from './ZoneMoveMenuItems';
 import { beginZoneDrag, cancelZoneDrag, finishZoneDrag, startZoneDragGesture, updateZoneDrag } from './zoneDrag';
 import { setZoneBody, setZoneHeaderSlot } from './zoneHosts';
-import { useOpenWhenSettled } from './useOpenUntilSettled';
+import { useOpenUntilSettled, useOpenWhenSettled } from './useOpenUntilSettled';
 import { isZoneExposed } from './zoneInteractiveContext';
 import { DockedPanelSurfaceContext } from '@/hooks/usePageColors';
 import { REPOSITORY_KIND_ICONS } from '@/components/references/referencePickerItems';
@@ -121,22 +123,11 @@ const getModeLabel = (
   mode: ContextPanelMode,
   t: TranslateFn
 ): string => {
-  if (mode === 'chat') return t('contextPanel.mode.chat');
-  if (mode === 'file') return t('contextPanel.mode.files');
-  if (mode === 'diff') return t('contextPanel.mode.diff');
-  if (mode === 'walkthrough') return t('contextPanel.mode.walkthrough');
-  if (mode === 'browser') return t('contextPanel.mode.browser');
-  if (mode === 'git') return t('layout.rightSidebar.git');
-  if (mode === 'pr') return t('contextPanel.mode.pr');
-  if (mode === 'notes') return t('contextRail.surface.notes');
-  if (mode === 'terminal') return t('layout.mainTab.terminal');
-  if (mode === 'workflows') return t('contextPanel.mode.workflows');
-  if (mode === 'pages') return t('contextPanel.mode.pages');
   if (isPluginContextPanelMode(mode)) {
     const guest = useGuestsStore.getState().guests.find((entry) => entry.id === pluginIdFromMode(mode));
     return guest?.name ?? t('contextRail.surface.plugin');
   }
-  return t('contextPanel.mode.context');
+  return t(CONTEXT_SURFACES.find((surface) => surface.mode === mode)?.labelKey ?? 'contextPanel.mode.context');
 };
 
 const getFileNameFromPath = (path: string | null): string | null => {
@@ -281,36 +272,12 @@ const getTabIcon = (
     return <DiffViewIcon className="h-3.5 w-3.5" />;
   }
 
-  if (tab.mode === 'walkthrough') {
-    return <Icon name="route" className="h-3.5 w-3.5" />;
-  }
-
-  if (tab.mode === 'git') {
-    return <Icon name="git-branch" className="h-3.5 w-3.5" />;
-  }
-
   if (tab.mode === 'pr') {
     return <TrackerTabIcon url={tab.targetPath} active={active} visible={visible} />;
   }
 
   if (tab.mode === 'notes') {
     return <Icon name="sticky-note" className="h-3.5 w-3.5" />;
-  }
-
-  if (tab.mode === 'terminal') {
-    return <Icon name="terminal-box" className="h-3.5 w-3.5" />;
-  }
-
-  if (tab.mode === 'context') {
-    return <Icon name="pie-chart" className="h-3.5 w-3.5" />;
-  }
-
-  if (tab.mode === 'workflows') {
-    return <Icon name="flow-chart" className="h-3.5 w-3.5" />;
-  }
-
-  if (tab.mode === 'pages') {
-    return <Icon name="pages" className="h-3.5 w-3.5" />;
   }
 
   if (tab.mode === 'chat') {
@@ -333,7 +300,8 @@ const getTabIcon = (
       : <Icon name="global" className="h-3.5 w-3.5" />;
   }
 
-  return undefined;
+  const surface = CONTEXT_SURFACES.find((entry) => entry.mode === tab.mode);
+  return surface ? <Icon name={surface.icon} className="h-3.5 w-3.5" /> : undefined;
 };
 
 
@@ -1294,6 +1262,7 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
   // common on macOS); removing it costs a few ms. After the layout effect
   // above, which begins the animation.
   const contentHidden = !isZoneExposed(isOpen, useOpenWhenSettled(isOpen), activeTab?.mode);
+  const contentShown = useOpenUntilSettled(isOpen);
   const panelStyle: React.CSSProperties = {
     [geometry.sizeVariable]: `${size}px`,
     ...(isVertical
@@ -1412,7 +1381,8 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
       {/* Keep-alive surfaces (ContextSurfacePanes) are portalled in here and
           take the docked surface from their own pane (ZonePane). */}
       <div ref={registerBody} className="relative min-h-0 flex-1 overflow-hidden">
-        {activeTab && (isRemountedSurface(activeTab.mode) || (activeTab.mode === 'pages' && !activeTab.targetPath)) ? activeNonChatContent : null}
+        {activeTab?.mode === 'subagents' ? (contentShown ? <SubagentsPanel directory={effectiveDirectory || null} /> : null)
+          : activeTab && (isRemountedSurface(activeTab.mode) || (activeTab.mode === 'pages' && !activeTab.targetPath)) ? activeNonChatContent : null}
       </div>
       </DockedPanelSurfaceContext.Provider>
       </div>

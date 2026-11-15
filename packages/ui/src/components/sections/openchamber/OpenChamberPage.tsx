@@ -19,6 +19,7 @@ import { DesktopNetworkSettings } from './DesktopNetworkSettings';
 import { DesktopAppSettings, DesktopQuickAccessSettings } from './DesktopAppSettings';
 import { ChatSettings } from './ChatSettings';
 import { GeneralConnectionAndPrivacySettings, GeneralFilesAndTerminalSettings, GeneralInterfaceSettings } from './GeneralWorkspaceSettings';
+import { MobileAppSettings } from './MobileAppSettings';
 import { KeyboardShortcutsSettings } from './KeyboardShortcutsSettings';
 import { SettingsPageLayout } from '@/components/sections/shared/SettingsPageLayout';
 import { isDesktopLocalOriginActive, isDesktopShell, isVSCodeRuntime, isWebRuntime } from '@/lib/desktop';
@@ -104,7 +105,7 @@ const ShortcutsSectionContent: React.FC = () => {
     return <KeyboardShortcutsSettings />;
 };
 
-// General, by what people come here for: the desktop app itself, the agent's
+// General, by what people come here for: the desktop or phone app itself, the agent's
 // tools, how other devices reach this app, the window, global shortcuts, the
 // OpenCode CLI and its environment, files and the terminal, then trusted
 // links, message transport and privacy. The layout drops the divider above
@@ -120,6 +121,7 @@ const GeneralSectionContent: React.FC = () => {
         <>
             {/* Remote hosts too: the Dock badge works there. */}
             {isDesktopShell() && <DesktopAppSettings />}
+            <MobileAppSettings />
             {!isVSCode && <OpenChamberToolsSettings />}
             {isLocalDesktop && <DesktopNetworkSettings />}
             {showPasskeySettings && <PasskeySettings />}

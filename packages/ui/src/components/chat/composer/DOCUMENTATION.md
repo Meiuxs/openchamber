@@ -38,8 +38,7 @@ dock and the strip returns once it is answered (`btwHoldsDock`).
 The frame also owns the header row through its `header` and `compact` props;
 callers supply controls and content, not their own header padding.
 
-`GlassPopupMotion` gives the frame, the autocomplete pickers and the
-context-chip preview one enter and exit motion, mostly a fade with a short
+`GlassPopupMotion` gives the frame and the autocomplete pickers one enter and exit motion, mostly a fade with a short
 rise from below and no scale (from the wrapper's corner, scaling read as a
 diagonal slide): the wrapper moves, the glass surface fades. Autocomplete
 lists take the `brief` pace (90ms in, 60ms out), since they come and go with
@@ -471,29 +470,34 @@ after a render, then the app restores the text of that render).
 A glass surface never carries its own shadow: the shadow sits on a wrapper
 (or the glass moves to an inner layer). Chromium grows a backdrop-filter
 layer by the shadow's blur, and that band painted a flat grey strip over
-whatever was stacked above. This holds for the floating panels and the
-context-chip preview. The box, the mobile pill and the dictation overlay are
-opaque and keep their shadow on a wrapper all the same.
+whatever was stacked above. This holds for the floating panels. The box, the
+mobile pill and the dictation overlay are opaque and keep their shadow on a
+wrapper all the same.
 
-Context chips (review comments, quotes, annotations, terminal selections, PR
-context) sit in the attachment row inside the box, shaped like file and linked
-reference chips. Their preview cannot open inside the box, which clips its
-contents, so `ComposerContextChips` portals it into a
-positioned host outside the box: the autocomplete wrapper on desktop, the
-dictation host on mobile. The preview opens above that host, at the menu level
-(`z-50`), above the docks that share the band above the composer (`z-30`), and
-its scrollable content is capped by the space between the host and the chat
-column's top edge, so a long preview does not hide its entry actions behind the
-chat header.
+Context waiting for the next message (review comments, quotes, annotations,
+terminal selections, PR context) lists as rows inside the box, right above
+the input (`ComposerContextRows`), one row per item in the
+order it was added. A row reads like the sent message will: the quote's first
+line, or where it came from, behind the accent bar, then the comment. A click
+opens the row in place with the whole quote and, on desktop, the comment field;
+Enter or a click elsewhere saves, Escape drops the edit. On mobile the click
+opens the comment shell (see "Mobile comment mode"). Four rows show; the rest
+fold behind "+N more", and the unfolded list scrolls inside the box past 40%
+of the window, so the input never leaves the screen.
 
-A mouse opens the preview on hover and a click toggles it; a tap only toggles
-it. The hover handlers are pointer events that act only for
-`pointerType === 'mouse'`: a tap, by finger or by a pen without hover, fires
-its enter right before its `click`, so a
-mouse-hover handler opened the preview and the click closed it again in the
-same tap, and phones could not open it at all. On desktop the preview's pencil
-edits the comment in place; on mobile it opens the comment shell (see "Mobile
-comment mode").
+### Why rows in the box and not chips with a preview
+
+Chips grouped items by kind and opened a stacked preview above the composer on
+hover. Reading what was attached meant hovering each chip, and editing meant
+aiming at a pencil in a panel that closed when the pointer drifted. Rows show
+every item's quote and comment at once, edit with one click, and need no
+portal, hover grace or height cap above the composer.
+
+An annotation's comment is the draft's own text, like every other comment, and
+the prompt the model reads carries no `Comment:` line. The row and the sent
+card read the page and element text out of the prompt
+(`lib/browser/annotationPrompt.ts`); an annotation saved before keeps its
+comment in the prompt and shows it all the same, and editing it moves it out.
 
 ## Layers
 
@@ -517,6 +521,46 @@ share `attachFilesWithCitation`: every file attaches and is cited in the draft
 as `[name]`; images get a generated unique name first, other files keep their
 own name and are cited only after they attached. A copied file's filename text
 is suppressed so only the citation lands in the draft.
+
+### Attachments are chips in the text
+
+Every file the composer holds is a chip in the text, however
+it came: paste, drop, the attach menu and VS Code's picker
+(`attachFilesWithCitation`), VS Code's open-file suggestion and its editor and
+explorer commands (an effect writes the chip of each new VS Code file at the
+caret). There are no thumbnails above the input.
+
+- The draft's files are a pool; a send, a queued message and a parallel
+  launch take the ones their text cites (`attachmentsCitedIn`, `[name]` or the
+  `[name](path)` link of an image saved as a file), plus the screenshots of
+  the browser annotations going with it. Deleting a chip drops its file, and
+  undo, which only rewrites the text, brings it back. A send waits for files
+  still being read.
+- Each chip names one file: a name another file holds gets `-2`
+  (`assignFileAttachmentFilenames`), and square brackets become parentheses.
+- A draft put back into the composer (a revert, a queued message taken out to
+  edit, a recalled prompt, a fork or a sidebar draft) gets a chip for each of
+  its files the text does not cite (`withMissingCitations`): messages sent
+  before every file had a chip never named theirs.
+- Files live in memory, the text survives a reload. The names a draft had
+  attached are kept apart (`lib/draftAttachmentNames.ts`), so after a reload a
+  chip whose file is gone draws dashed with a tooltip saying so, instead of
+  turning into bracketed text.
+- A click on a chip opens what it stands for (`onChipOpen` in the language
+  context): an image, a text file or a PDF in its dialog, as in a sent message,
+  a file by path in the file viewer, an item in the Tracker. Where the Tracker
+  cannot show the item (VS Code, a repository no open project reads, a tracker
+  nobody signed in to) the chip opens its link in the browser
+  (`useOpenTrackerItem`). The caret goes
+  beside a chip by a click next to it or the arrow keys. A chip is at most 18rem wide and leaves room for a
+  space and the caret beside it, so a long name truncates instead of filling
+  the line.
+- The collapsed mobile pill draws the chips in its one line.
+- The sent message keeps a quick look at its images and files: one strip
+  (`MessageFilesDisplay`, compact) of tiles of one height, images as
+  thumbnails and files as small pages: the name on up to two lines, then the
+  type and the size when the part carries it, scrolled sideways when they
+  do not fit. Everything else the message carries is its chip in the text.
 An Android image paste arrives from the input method rather than from a paste event, because
 a WebView declares no content types on its `EditorInfo` and the IME refuses the paste before
 the page can hear about it. The Capacitor Android shell declares image content on the editor
@@ -1224,10 +1268,9 @@ is read the way the picker reads a chosen item (`resolveReferenceLink` in
 picker uses, and then draws as a chip where it stands: its number and title.
 
 - The text decides what is sent, as with session links: each linked item once,
-  after the chips above the composer, as the same context part the picker
-  sends, and the session records it as a linked issue. An item a picker chip
-  already carries keeps the chip's version, so its diff choice stands. A link
-  deleted from the text is not sent. The model reads the link where the user
+  as the same context part the picker sends, and the session records it as a
+  linked issue. An item the picker chose keeps the picker's version, so its
+  diff choice stands. A link deleted from the text is not sent. The model reads the link where the user
   put it. A send waits for a paste still being read, so a quick Enter never
   sends the link bare; a second Enter meanwhile does nothing.
 - Only a paste that lands in the text reads a link, afresh each time, as the
@@ -1236,28 +1279,70 @@ picker uses, and then draws as a chip where it stands: its number and title.
   `/issues/12`, and a read per keystroke would attach the wrong item. A link
   this composer has read before draws as its chip again wherever it reappears
   (typed or restored), with that read.
-- Editing a queued message puts each item its text links back as that link's
-  chip, the rest above the text.
+- An item attached any other way (the issue, PR and tracker pickers, an
+  extension's `attach`, a handed-over or restored item, a shared page) is its
+  link in the text too: the draft keeps the item (`linkedReferenceDrafts.ts`),
+  and its link goes in at the caret when it arrives, or into the saved text of
+  a draft no longer on screen (a picker that finished reading after a session
+  switch). Picking an item again with its link already there writes nothing.
+  A click on the chip opens the item in the Tracker; an extension's item goes
+  back to its extension, a shared page opens its card.
 - The sent message draws the same chips where the links stand
   (`message/parts/referenceLinkChips.tsx`, from the message's context parts;
   in Markdown mode through `MarkdownLink`, by the link's `href`). A link names
   an item whatever page of it opens (`isSameRepositoryItemLink`, the tracker's
   identifier), so a picker item whose link the user also typed draws there too.
-  An item drawn inline leaves the attachment row; one the text does not link,
-  or links only inside code, stays there. Both chips open the item in the
-  Tracker (`useOpenTrackerItem`), Cmd or Ctrl its page.
+  An item drawn inline leaves the message's preview strip; one the text does
+  not link (messages sent before items were links in the text), or links only
+  inside code, stays there. Both chips open the item in the Tracker
+  (`useOpenTrackerItem`), Cmd or Ctrl its page.
 - A link on another host than the project's, or one no account can read, stays
   text with the picker's attach-failed toast. A link past the project's fork
   network is read again as a linked item, as the Tracker does. Discussions stay
   text. A change request goes without its diff, the picker's default.
 - `/btw` and VS Code read no links, as they take no picker chips.
 
-### Why inline chips and not picker chips
+### Why every item is a chip in the text
 
-The picker's chips sit above the text, apart from the sentence. A pasted link
-is part of the sentence ("compare this with that"); turning it into a chip
-above the composer would cut the sentence apart. The maintainer chose the chip
-in place.
+Picker chips used to sit above the text, apart from the sentence, while a
+pasted link drew in place: two looks and two ways to remove the same item. A
+pasted link is part of the sentence ("compare this with that"), and the
+maintainer chose that one form for everything attached from outside: an item
+is its link's chip where the caret was, and the text decides what goes. A
+shared page is a chip like the rest; its PIN and status live in the card the
+chip opens, so it needs no row of its own above the input.
+
+### Why the files are a pool the text cites
+
+Detaching a file the moment its chip leaves the text was the alternative.
+Undo, a draft restore, history recall and the clear after a send all rewrite
+the text, and each would read as "every chip deleted". Keeping the pool and
+sending only what the text cites makes undo bring the chip and its file back
+with no extra state. Keeping the file after its chip is gone was rejected
+too: it would ride along with nothing on screen showing it.
+
+### Why a plain click opens a chip
+
+Cmd or Ctrl and a click would hide the preview behind a modifier the phone
+does not have. The chip is atomic, so a click beside it or the arrow keys put
+the caret next to it, and Backspace deletes it.
+
+### Why a chip whose file is gone stays a chip
+
+After a reload a file that lived only in memory is gone. Drawing its citation
+as plain `[name]` text would make the chip vanish with no explanation; the
+dashed chip says why it will not be sent and can be deleted.
+
+### Why a browser annotation's screenshot is not a chip in the text
+
+The screenshot belongs to its annotation: a chip in the prompt would separate
+the two, and removing it left the prompt claiming the screenshot was
+attached. It is a chip in the annotation's own row and leaves with it.
+
+### Why a sent message keeps its image and file previews
+
+Every other attachment shows in a sent message only as its chip, but images
+and files keep their strip: people rely on the quick look at what they sent.
 
 ## Paste routing
 
@@ -1649,12 +1734,13 @@ context part's metadata. `message/ChatQuoteHighlightLayer.tsx` (one per
 to paint with the CSS Custom Highlight API. The store lives outside React state
 and the layer holds all hover and popover state, so none of it re-renders the
 chat column. The
-markdown DOM is never modified. While quotes wait as context chips they stay
-marked in their messages; the one hovered in the chip preview is drawn
+markdown DOM is never modified. While quotes wait as composer rows they stay
+marked in their messages; the one under the pointer in the composer is drawn
 stronger. Resting the mouse on a mark, or tapping it on touch, opens
 `message/ChatQuoteMarkPopover.tsx` with the comment, edit (the selection
 menu's input) and remove; the publisher's callbacks write the draft. Clicking
-a quote in the preview, or the arrow on a sent quote card, scrolls to it
+a quote in an open composer row, the arrow on a folded row, or the quote on a
+sent card (the quote itself is the link, since the original shows it whole) scrolls to it
 through the timeline controller and flashes it. Ranges are
 re-resolved by text and context whenever the marked message re-renders or
 remounts. Offsets only break ties. Quotes sent before anchors existed are
@@ -1707,8 +1793,8 @@ A stale runtime closes the comment without writing to the new runtime.
 Desktop's floating comment input also remains open when the store rejects
 an attachment, using the same localized error.
 
-Editing an attached comment on mobile reuses the same shell. The pencil in the
-context-chip preview calls `openEdit` with the draft's id, quoted text and
+Editing an attached comment on mobile reuses the same shell. A tap on its
+composer row calls `openEdit` with the draft's id, quoted text and
 comment, inside the tap (`flushSync`, for the soft keyboard), and the shell
 opens with the caret after the text, a Save (check) action and Cancel editing
 on its close button. Save goes through the same attach path, but the plan

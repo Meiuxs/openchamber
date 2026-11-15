@@ -45,6 +45,8 @@ const acrossRequestSchema = z.strictObject({
   kind: z.enum(['issue', 'pull', 'discussion']),
   state: z.enum(['open', 'closed', 'merged', 'all', 'unanswered']).optional(),
   people: z.enum(['any', 'assigned', 'created', 'reviewRequested']).optional(),
+  // A page is narrowed to the items carrying every one of these, in the order asked.
+  labels: z.array(z.string()).optional(),
   query: z.string().optional(),
   // The first page sends no cursor as null, like the single-repository list.
   cursor: z.string().max(100_000).nullable().optional(),
@@ -60,7 +62,8 @@ export function readReferencesAcrossRequest(body) {
   for (const context of parsed.data.contexts) {
     if (!folders.has(context.directory)) folders.set(context.directory, context);
   }
-  return folders.size > 100 ? null : { ...parsed.data, contexts: [...folders.values()], directories: parsed.data.contexts.map((context) => context.directory) };
+  const labels = [...new Set((parsed.data.labels ?? []).map((label) => label.trim()).filter((label) => label.length > 0 && label.length <= 256))].slice(0, 20);
+  return folders.size > 100 ? null : { ...parsed.data, labels, contexts: [...folders.values()], directories: parsed.data.contexts.map((context) => context.directory) };
 }
 
 /** Bounded fan-out for folder resolution and provider search. */
@@ -208,7 +211,7 @@ query ReferenceDetail($owner: String!, $repo: String!, $number: Int!) {
     }
   }
 }
-fragment DetailComment on IssueComment { author { login avatarUrl } body createdAt url }
+fragment DetailComment on IssueComment { databaseId author { login avatarUrl } body createdAt url viewerCanUpdate viewerCanDelete }
 `;
 
 // A discussion's comments each open a thread of replies; a comment in a
@@ -235,7 +238,11 @@ query DiscussionDetail($owner: String!, $repo: String!, $number: Int!) {
           isAnswer
           viewerCanMarkAsAnswer
           viewerCanUnmarkAsAnswer
-          replies(first: ${DETAIL_THREAD_COMMENT_LIMIT}) { nodes { author { login avatarUrl } body createdAt url } }
+          viewerCanUpdate
+          viewerCanDelete
+          replies(first: ${DETAIL_THREAD_COMMENT_LIMIT}) {
+            nodes { id author { login avatarUrl } body createdAt url viewerCanUpdate viewerCanDelete }
+          }
         }
       }
     }
@@ -323,10 +330,15 @@ const discussionNodeSchema = z.object({
 });
 
 const detailCommentSchema = z.object({
+  // An issue comment's REST id; a discussion comment and a review comment are named by their node id.
+  databaseId: z.number().int().nullable().optional(),
   author: userSchema,
   body: z.string(),
   createdAt: z.string().nullable(),
   url: z.string(),
+  // What this account may do with the comment; older hosts may not answer.
+  viewerCanUpdate: z.boolean().optional(),
+  viewerCanDelete: z.boolean().optional(),
 });
 
 const discussionDetailSchema = z.object({
@@ -346,7 +358,7 @@ const discussionDetailSchema = z.object({
           isAnswer: z.boolean(),
           viewerCanMarkAsAnswer: z.boolean(),
           viewerCanUnmarkAsAnswer: z.boolean(),
-          replies: z.object({ nodes: z.array(detailCommentSchema) }),
+          replies: z.object({ nodes: z.array(detailCommentSchema.extend({ id: z.string().min(1) })) }),
         })),
       }),
     }).nullable(),
@@ -619,6 +631,15 @@ const REVIEW_STATES = { APPROVED: 'approved', CHANGES_REQUESTED: 'changes_reques
 
 const toAuthor = (author) => (author ? { login: author.login, avatarUrl: author.avatarUrl ?? undefined } : null);
 
+// What this account may do with one comment, only when the host answered. A
+// review thread comment carries none: these routes do not change it.
+const commentPermissions = (comment) => {
+  const permissions = {};
+  if (comment.viewerCanUpdate !== undefined) permissions.canUpdate = comment.viewerCanUpdate;
+  if (comment.viewerCanDelete !== undefined) permissions.canDelete = comment.viewerCanDelete;
+  return permissions;
+};
+
 const byCreatedAt = (left, right) => (Date.parse(left.createdAt ?? '') || 0) - (Date.parse(right.createdAt ?? '') || 0);
 
 // A detail's whole description and the permission to replace it, only when the host answered them.
@@ -647,15 +668,21 @@ export async function fetchReferenceDetail({ octokit, owner, repo, number }) {
   const parsed = detailSchema.parse(response);
   const item = parsed.repository?.issueOrPullRequest;
   if (!item) return null;
-  const comments = item.comments.nodes.map((comment) => ({
-    author: toAuthor(comment.author),
-    body: comment.body,
-    createdAt: comment.createdAt,
-    url: comment.url,
-    path: null,
-    line: null,
-    review: null,
-  }));
+  const comments = item.comments.nodes.map((comment) => {
+    const entry = {
+      author: toAuthor(comment.author),
+      body: comment.body,
+      createdAt: comment.createdAt,
+      url: comment.url,
+      path: null,
+      line: null,
+      review: null,
+      ...commentPermissions(comment),
+    };
+    // The REST id an edit or delete names, which is not the node id.
+    if (Number.isSafeInteger(comment.databaseId)) entry.id = String(comment.databaseId);
+    return entry;
+  });
   if (item.__typename === 'Issue') {
     return { number: item.number, ...editableText(item), comments, commentTotal: item.comments.totalCount, pull: null };
   }
@@ -747,15 +774,20 @@ export async function fetchDiscussionDetail({ octokit, owner, repo, number }) {
   if (!discussion) return null;
   const answerable = discussion.category.isAnswerable;
   const canReply = !discussion.locked || discussion.viewerCanUpdate;
-  const plain = (comment) => ({
-    author: toAuthor(comment.author),
-    body: comment.body,
-    createdAt: comment.createdAt,
-    url: comment.url,
-    path: null,
-    line: null,
-    review: null,
-  });
+  const plain = (comment) => {
+    const entry = {
+      author: toAuthor(comment.author),
+      body: comment.body,
+      createdAt: comment.createdAt,
+      url: comment.url,
+      path: null,
+      line: null,
+      review: null,
+      ...commentPermissions(comment),
+    };
+    if (comment.id !== undefined) entry.id = comment.id;
+    return entry;
+  };
   const commentOf = (comment) => {
     const entry = {
       ...plain(comment),
@@ -857,12 +889,34 @@ export function parseReferenceLink(text, host) {
   return { owner: url[2], repo: url[3], number: Number(url[4]) };
 }
 
+const USER_LABEL_QUALIFIERS = /(?:^|\s)labels?:("(?:[^"\\]|\\.)*"|\S+)/gi;
+// A qualifier that names whose items a search shows; the control's own
+// people qualifier is added only when the user's text names none of them.
+const USER_PEOPLE_QUALIFIERS = /(?:^|\s)(?:assignee|author|mentions|review-requested|reviewed-by):\S+/i;
+
+/**
+ * One quoted `label:"<name>"` qualifier per name the page is narrowed to, in
+ * the order asked, minus any name the user's own text already sets. A quoted
+ * name keeps spaces and colons one term, and an embedded double quote or
+ * backslash is escaped. An empty set adds nothing.
+ */
+export function labelSearchQualifiers(labels = [], text = '') {
+  const named = new Set([...String(text).matchAll(USER_LABEL_QUALIFIERS)]
+    .map((match) => match[1].replace(/^"|"$/g, '').replace(/\\(.)/g, '$1').toLowerCase()));
+  const names = [];
+  for (const label of labels) {
+    const name = String(label).trim();
+    if (name && !named.has(name.toLowerCase()) && !names.some((seen) => seen.toLowerCase() === name.toLowerCase())) names.push(name);
+  }
+  return names.map((name) => `label:"${name.replace(/["\\]/g, '\\$&')}"`);
+}
+
 /**
  * The GitHub search string for one picker page. The user's text may carry
- * its own qualifiers; state and sort are added only when it does not. A
- * discussion search is its own search type, so it names no kind.
+ * its own qualifiers; state, sort, people and labels are added only when it
+ * does not. A discussion search is its own search type, so it names no kind.
  */
-export function buildReferenceSearchQuery({ repos, kind, state, people, text }) {
+export function buildReferenceSearchQuery({ repos, kind, state, people, text, labels = [] }) {
   const userText = text.trim();
   const parts = repos.map((entry) => `repo:${entry.owner}/${entry.repo}`);
   if (kind !== 'discussion') parts.push(kind === 'pull' ? 'is:pr' : 'is:issue');
@@ -876,10 +930,14 @@ export function buildReferenceSearchQuery({ repos, kind, state, people, text }) 
     parts.push('sort:updated-desc');
   }
   // Review requests exist for pull requests only, and a discussion has no assignee.
-  const peopleQualifier = (kind !== 'pull' && people === 'reviewRequested') || (kind === 'discussion' && people === 'assigned')
-    ? ''
-    : SEARCH_PEOPLE[people];
-  if (peopleQualifier) parts.push(peopleQualifier);
+  if (!USER_PEOPLE_QUALIFIERS.test(userText)) {
+    const peopleQualifier = (kind !== 'pull' && people === 'reviewRequested') || (kind === 'discussion' && people === 'assigned')
+      ? ''
+      : SEARCH_PEOPLE[people];
+    if (peopleQualifier) parts.push(peopleQualifier);
+  }
+  // A discussion has categories, not labels, so a label filter never narrows one.
+  if (kind !== 'discussion') parts.push(...labelSearchQualifiers(labels, userText));
   if (userText) parts.push(userText);
   return parts.join(' ');
 }
@@ -922,7 +980,7 @@ async function runPartialQuery(octokit, query, variables) {
  * from those lists, a discussion from the discussions list. A search answers
  * one kind, newest activity first.
  */
-export async function searchGitHubReferences({ octokit, repos, kind, state, people, text, cursor }) {
+export async function searchGitHubReferences({ octokit, repos, kind, state, people, text, labels = [], cursor }) {
   const lookup = parseReferenceLookup(text, repos, kind);
   if (lookup) {
     if (lookup.repos.length === 0) {
@@ -938,7 +996,7 @@ export async function searchGitHubReferences({ octokit, repos, kind, state, peop
   }
 
   const variables = {
-    q: buildReferenceSearchQuery({ repos, kind, state, people, text }),
+    q: buildReferenceSearchQuery({ repos, kind, state, people, text, labels }),
     first: REFERENCE_PAGE_SIZE,
     after: cursor || null,
   };
@@ -997,7 +1055,7 @@ function readAcrossCursor(cursor, scope, searchCount) {
  * cursor, even for one search, pins the query and the ordered
  * account/repository authority, so a page is never read against another set.
  */
-export async function searchGitHubReferencesAcross({ groups, kind, state, people, text, cursor, onGroupError }) {
+export async function searchGitHubReferencesAcross({ groups, kind, state, people, text, labels = [], cursor, onGroupError }) {
   const searches = groups.flatMap((group, groupIndex) => {
     const chunks = [];
     for (let offset = 0; offset < group.repos.length; offset += ACROSS_REPO_CHUNK_SIZE) {
@@ -1008,7 +1066,7 @@ export async function searchGitHubReferencesAcross({ groups, kind, state, people
   const lookup = parseReferenceLookup(text, [], kind);
   if (lookup && cursor) throw invalidAcrossCursor();
   const scope = createHash('sha256').update(JSON.stringify({
-    kind, state, people, text,
+    kind, state, people, labels, text,
     searches: searches.map(({ group, repos }) => ({ accountId: group.accountId, authority: group.authority,
       repos: repos.map((repo) => ({ key: repoKey(repo.owner, repo.repo), directory: repo.directory })) })),
   })).digest('hex');
@@ -1019,7 +1077,7 @@ export async function searchGitHubReferencesAcross({ groups, kind, state, people
     const position = positions[index];
     if (position.done) return { done: true, items: [], total: position.total };
     try {
-      const page = await searchGitHubReferences({ octokit: group.octokit, repos, kind, state, people, text, cursor: position.cursor });
+      const page = await searchGitHubReferences({ octokit: group.octokit, repos, kind, state, people, text, labels, cursor: position.cursor });
       if (page.hasMore && !page.cursor) throw new Error('GitHub returned an invalid search cursor');
       const items = page.items.slice(position.offset).map((item) => ({ ...item,
         directory: repos.find((repo) => repoKey(repo.owner, repo.repo) === repoKey(item.sourceRepo.owner, item.sourceRepo.repo)).directory,
