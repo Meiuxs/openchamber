@@ -1,4 +1,4 @@
-import type { Plugin } from 'vite';
+import type { OutputChunk, Plugin } from 'vite';
 
 /**
  * Starts fetching the desktop application's code while the document is still
@@ -37,7 +37,7 @@ export const staticImportClosure = (bundle: Bundle, fileName: string): string[] 
  * slashes on every platform, while `path.resolve` gives backslashes on
  * Windows, so both sides are compared with forward slashes.
  */
-export const chunkHasModule = (modules: object, moduleId: string): boolean => {
+export const chunkHasModule = (modules: OutputChunk['modules'], moduleId: string): boolean => {
   const target = moduleId.replace(/\\/g, '/');
   return Object.keys(modules).some((id) => id.replace(/\\/g, '/') === target);
 };

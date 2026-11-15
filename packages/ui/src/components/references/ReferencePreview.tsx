@@ -20,7 +20,6 @@ import { cn } from '@/lib/utils';
 import { referenceLinkHref } from '@/lib/router';
 import { parseCodeReferences } from '@/lib/trackers/codeReferences';
 import { commentTrackerItem } from '@/lib/trackers/mutations';
-import { isIMECompositionEvent } from '@/lib/ime';
 import { Textarea } from '@/components/ui/textarea';
 
 import { ButtonTooltip } from '@/components/ui/action-toolbar';
