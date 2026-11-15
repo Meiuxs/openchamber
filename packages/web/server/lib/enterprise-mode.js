@@ -258,7 +258,7 @@ const policyFileSchema = z.object({
  * commas from JSON text, allowing human-friendly annotated policy files while
  * preserving string literals (such as URLs containing `//`).
  */
-export const stripJsonComments = (text) => {
+const stripJsonComments = (text) => {
   const withoutComments = String(text).replace(/("(?:\\.|[^"\\])*")|\/\/[^\r\n]*|\/\*[\s\S]*?\*\//g, (match, stringLiteral) =>
     stringLiteral ?? ''
   );
