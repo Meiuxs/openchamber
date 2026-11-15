@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitLab Runs Panel — mockup</title>
+<style>
+  /* Mockup-only token mirrors. Real values live in design-system.css;
+     the classes below emulate oc-tile / oc-tile-inset / oc-raised-button
+     so the same mockup reads in both themes. */
+  :root, [data-theme="dark"] {
+    --surface-background: oklch(0.17 0.01 255);
+    --surface-elevated: oklch(0.215 0.012 255);
+    --surface-muted: oklch(0.145 0.01 255);
+    --surface-foreground: oklch(0.93 0.005 255);
+    --surface-muted-foreground: oklch(0.70 0.01 255);
+    --surface-faint: oklch(0.56 0.01 255);
+    --status-error: oklch(0.68 0.16 25);
+    --status-error-background: oklch(0.68 0.16 25 / 0.12);
+    --status-error-text: oklch(0.75 0.14 25);
+    --status-warning: oklch(0.78 0.13 80);
+    --status-warning-text: oklch(0.82 0.12 80);
+    --status-success: oklch(0.75 0.13 155);
+    --status-info: oklch(0.72 0.11 240);
+    --primary-base: oklch(0.93 0.005 255);
+    --primary-foreground: oklch(0.17 0.01 255);
+    --ring: color-mix(in oklch, var(--surface-foreground) 16%, transparent);
+    --top-light: color-mix(in oklch, var(--surface-foreground) 7%, transparent);
+    --shadow: 0 1px 2px oklch(0 0 0 / 0.35), 0 2px 6px oklch(0 0 0 / 0.18);
+    --canvas: var(--surface-background);
+  }
+  [data-theme="light"] {
+    --surface-background: oklch(0.965 0.004 255);
+    --surface-elevated: oklch(0.925 0.006 255);
+    --surface-muted: oklch(0.945 0.005 255);
+    --surface-foreground: oklch(0.22 0.012 255);
+    --surface-muted-foreground: oklch(0.45 0.012 255);
+    --surface-faint: oklch(0.60 0.012 255);
+    --status-error: oklch(0.55 0.19 25);
+    --status-error-background: oklch(0.55 0.19 25 / 0.09);
+    --status-error-text: oklch(0.50 0.19 25);
+    --status-warning: oklch(0.68 0.13 80);
+    --status-warning-text: oklch(0.55 0.12 80);
+    --status-success: oklch(0.58 0.13 155);
+    --status-info: oklch(0.55 0.12 240);
+    --primary-base: oklch(0.24 0.012 255);
+    --primary-foreground: oklch(0.96 0.004 255);
+    --ring: color-mix(in oklch, oklch(0 0 0) 14%, transparent);
+    --top-light: transparent;
+    --shadow: 0 1px 2px oklch(0 0 0 / 0.08), 0 2px 5px oklch(0 0 0 / 0.06);
+    --canvas: var(--surface-background);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--surface-foreground);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 900px; margin: 0 auto; padding: 26px 24px 90px; }
+
+  /* one header row: title, meta, poll, switch, theme */
+  .head { display: flex; align-items: center; gap: 14px; margin-bottom: 30px; min-width: 0; }
+  .head .title { font-weight: 600; font-size: 0.95rem; white-space: nowrap; }
+  .head .meta { color: var(--surface-muted-foreground); font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .head .meta .sep, .faint { color: var(--surface-faint); }
+  .head .spacer { flex: 1; }
+  .poll { display: inline-flex; align-items: center; gap: 6px; color: var(--surface-faint); font-size: 0.72rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .poll .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--status-success); }
+  .poll .dot.busy { background: var(--status-info); animation: blink 1s steps(1) infinite; }
+
+  /* buttons: raised hugging, 28px toolbar size */
+  .btn {
+    font: inherit; font-size: 0.76rem; font-weight: 500;
+    border: 0; border-radius: 8px;
+    padding: 4px 11px; min-height: 28px;
+    cursor: pointer; white-space: nowrap;
+    background: transparent; color: var(--surface-foreground);
+    box-shadow: inset 0 0 0 0.5px var(--ring), inset 0 1px 0 var(--top-light), var(--shadow);
+  }
+  .btn:hover { background: color-mix(in oklch, var(--surface-foreground) 7%, transparent); }
+  .btn.primary { background: var(--primary-base); color: var(--primary-foreground); }
+  .btn.primary:hover { background: color-mix(in oklch, var(--primary-base) 88%, var(--surface-foreground)); }
+  .btn.destructive {
+    background: color-mix(in oklch, var(--status-error) 12%, transparent);
+    color: var(--status-error-text);
+    box-shadow: inset 0 0 0 0.5px color-mix(in oklch, var(--status-error) 45%, transparent), inset 0 1px 0 var(--top-light), var(--shadow);
+  }
+  .btn.destructive:hover { background: color-mix(in oklch, var(--status-error) 20%, transparent); }
+  .btn.ghost { box-shadow: none; color: var(--surface-muted-foreground); }
+  .btn.ghost:hover { background: color-mix(in oklch, var(--surface-foreground) 7%, transparent); color: var(--surface-foreground); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* view switch: recessed track, raised chosen option */
+  .switch { display: inline-flex; border-radius: 8px; padding: 2px; gap: 2px; background: color-mix(in oklch, var(--surface-foreground) 7%, transparent); }
+  .switch button {
+    font: inherit; font-size: 0.74rem; border: 0; background: transparent; color: var(--surface-muted-foreground);
+    padding: 3px 11px; min-height: 24px; border-radius: 6px; cursor: pointer; box-shadow: none;
+  }
+  .switch button[aria-pressed="true"] {
+    background: var(--surface-elevated); color: var(--surface-foreground);
+    box-shadow: inset 0 0 0 0.5px var(--ring), var(--shadow);
+  }
+
+  /* captions: bare words with room above */
+  .caption { color: var(--surface-muted-foreground); font-size: 0.78rem; margin: 34px 0 10px; }
+  .caption:first-of-type { margin-top: 0; }
+  .caption .count { color: var(--surface-faint); margin-left: 8px; font-variant-numeric: tabular-nums; }
+
+  /* tiles: no border, one tone step */
+  .tile {
+    border-radius: 10px;
+    background: color-mix(in oklch, var(--surface-foreground) 4.5%, var(--canvas));
+    padding: 13px 16px 12px;
+  }
+  .tile + .tile { margin-top: 8px; }
+  .tile.inset { background: color-mix(in oklch, var(--surface-foreground) 8%, var(--canvas)); }
+
+  .run-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .iid { color: var(--surface-faint); font-size: 0.78rem; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .run-title { font-weight: 600; font-size: 0.88rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kind { color: var(--surface-muted-foreground); font-size: 0.74rem; flex-shrink: 0; }
+  .run-top .spacer { flex: 1; }
+
+  /* phase rail */
+  .rail { display: flex; align-items: center; margin: 13px 0 26px; }
+  .rail .dot { width: 8px; height: 8px; border-radius: 50%; background: color-mix(in oklch, var(--surface-foreground) 22%, transparent); flex-shrink: 0; }
+  .rail .dot.done { background: var(--surface-muted-foreground); }
+  .rail .dot.current { background: var(--rail, var(--status-info)); animation: blink 1s steps(1) infinite; }
+  .rail .dot.current.stop::after {
+    content: attr(data-label);
+    position: absolute; top: 13px; left: 50%; transform: translateX(-50%);
+    font-size: 0.68rem; font-weight: 600; color: var(--rail, var(--status-info));
+    white-space: nowrap; animation: none;
+  }
+  .rail .stop { position: relative; display: flex; }
+  .rail .bar { height: 2px; width: clamp(16px, 4vw, 40px); background: color-mix(in oklch, var(--surface-foreground) 14%, transparent); }
+  .rail .bar.done { background: var(--surface-muted-foreground); }
+  @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.35; } }
+
+  /* meta: one line, bright value, muted label */
+  .meta { display: flex; flex-wrap: wrap; gap: 2px 0; font-size: 0.76rem; color: var(--surface-muted-foreground); font-variant-numeric: tabular-nums; align-items: baseline; }
+  .meta > span { white-space: nowrap; }
+  .meta .sep { margin: 0 7px; color: var(--surface-faint); }
+  .meta a { color: var(--surface-foreground); text-decoration: none; }
+  .meta a:hover { color: var(--surface-muted-foreground); }
+  .meta code { font-family: ui-monospace, "Cascadia Code", monospace; font-size: 0.73rem; color: var(--surface-foreground); }
+  .session { display: inline-flex; align-items: center; gap: 5px; }
+  .session .live { width: 6px; height: 6px; border-radius: 50%; }
+  .session .live.busy { background: var(--status-info); animation: blink 1s steps(1) infinite; }
+  .session .live.idle { background: var(--status-success); }
+
+  .run-actions { display: flex; gap: 7px; margin-top: 12px; align-items: center; }
+  .run-actions .hint { font-size: 0.72rem; color: var(--surface-faint); margin-left: auto; }
+
+  /* blocked: tinted fill, no border */
+  .guide {
+    margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+    background: var(--status-error-background);
+    font-size: 0.79rem; color: var(--surface-foreground);
+    display: flex; gap: 9px; align-items: flex-start;
+  }
+  .guide svg { flex-shrink: 0; margin-top: 3px; }
+  .guide .reason { color: var(--status-error-text); font-weight: 600; }
+
+  /* history */
+  details.history summary {
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 10px;
+    font-size: 0.78rem; color: var(--surface-muted-foreground); user-select: none;
+  }
+  details.history summary::-webkit-details-marker { display: none; }
+  details.history summary::before { content: "▸"; color: var(--surface-faint); transition: transform 150ms ease-out; }
+  details.history[open] summary::before { transform: rotate(90deg); }
+  details.history summary .count { color: var(--surface-faint); font-variant-numeric: tabular-nums; }
+  .hist-row { display: flex; gap: 10px; align-items: baseline; padding: 7px 10px 0; margin: 0 -10px; font-size: 0.77rem; color: var(--surface-muted-foreground); font-variant-numeric: tabular-nums; min-width: 0; }
+  .hist-row:first-of-type { margin-top: 10px; }
+  .hist-row .t { color: var(--surface-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .hist-row .sep { color: var(--surface-faint); }
+  .verdict-done { color: var(--status-success); }
+  .verdict-blocked { color: var(--status-error-text); }
+
+  /* global view */
+  .view { display: none; }
+  .view.on { display: block; }
+  .gproj .caption { margin-top: 28px; }
+  .gproj .caption:first-child { margin-top: 0; }
+
+  /* theme toggle */
+  .theme-btn { min-height: 28px; }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body data-theme="dark">
+<div class="page">
+
+  <div class="head">
+    <span class="title">Automation runs</span>
+    <span class="meta">intranet-uos / openchamber <span class="sep">·</span> gitlab.example.com <span class="sep">·</span> bot @oc-bot</span>
+    <span class="spacer"></span>
+    <span class="poll" id="poll"><span class="dot" id="polldot"></span><span id="polltext">updated 4s ago</span></span>
+    <div class="switch" role="group" aria-label="View">
+      <button aria-pressed="true" onclick="view('project', this)">This project</button>
+      <button aria-pressed="false" onclick="view('global', this)">All projects</button>
+    </div>
+    <button class="btn ghost theme-btn" onclick="toggleTheme()" id="themebtn">Light</button>
+  </div>
+
+  <!-- ============ PROJECT VIEW ============ -->
+  <div class="view on" id="view-project">
+
+    <div class="caption">Active <span class="count">2 runs · 1 slot free</span></div>
+
+    <!-- implementing -->
+    <article class="tile">
+      <div class="run-top">
+        <span class="iid">#412</span>
+        <span class="run-title">Sessions list loses filter after worktree switch</span>
+        <span class="kind">bug</span>
+        <span class="spacer"></span>
+        <button class="btn ghost" style="min-height:24px">Issue ↗</button>
+        <button class="btn ghost" style="min-height:24px" title="More actions">···</button>
+      </div>
+      <div class="rail">
+        <span class="stop"><span class="dot done"></span></span><span class="bar done"></span>
+        <span class="stop"><span class="dot done"></span></span><span class="bar done"></span>
+        <span class="stop"><span class="dot current" data-label="implementing"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span>
+      </div>
+      <div class="meta">
+        <span><code>openchamber/issue-412-session-filter</code></span>
+        <span class="sep">·</span>
+        <span>target <code>release/2.8</code></span>
+        <span class="sep">·</span>
+        <span class="session"><span class="live busy"></span><a href="#" onclick="return false">working 12 min</a></span>
+        <span class="sep">·</span>
+        <span>@meiuxs</span>
+      </div>
+    </article>
+
+    <!-- reviewing, round 2 -->
+    <article class="tile">
+      <div class="run-top">
+        <span class="iid">#398</span>
+        <span class="run-title">Add retry to tunnel reconnect on 502</span>
+        <span class="kind">bug</span>
+        <span class="spacer"></span>
+        <button class="btn ghost" style="min-height:24px">Issue ↗</button>
+        <button class="btn ghost" style="min-height:24px">···</button>
+      </div>
+      <div class="rail">
+        <span class="stop"><span class="dot done"></span></span><span class="bar done"></span>
+        <span class="stop"><span class="dot done"></span></span><span class="bar done"></span>
+        <span class="stop"><span class="dot done"></span></span><span class="bar done"></span>
+        <span class="stop"><span class="dot current" data-label="reviewing"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span>
+      </div>
+      <div class="meta">
+        <span><code>openchamber/issue-398-tunnel-retry</code></span>
+        <span class="sep">·</span>
+        <span>review round 2 of 3</span>
+        <span class="sep">·</span>
+        <span class="session"><span class="live busy"></span><a href="#" onclick="return false">reviewing diff</a></span>
+        <span class="sep">·</span>
+        <span>last verdict <span class="faint">request-changes, 2 findings</span></span>
+      </div>
+    </article>
+
+    <div class="caption">Waiting for approval <span class="count">1 plan · holds a slot</span></div>
+
+    <article class="tile">
+      <div class="run-top">
+        <span class="iid">#377</span>
+        <span class="run-title">Keyboard shortcut for relay status page</span>
+        <span class="kind">feature</span>
+        <span class="spacer"></span>
+        <button class="btn ghost" style="min-height:24px">Issue ↗</button>
+        <button class="btn ghost" style="min-height:24px">Plan ↗</button>
+      </div>
+      <div class="rail">
+        <span class="stop"><span class="dot done"></span></span><span class="bar done"></span>
+        <span class="stop"><span class="dot current" data-label="waiting approval" style="--rail: var(--status-warning)"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span>
+      </div>
+      <div class="meta">
+        <span>plan posted 2 h ago</span>
+        <span class="sep">·</span>
+        <span>a Developer replies <code>/ai-approve</code> or <code>/ai-reject</code></span>
+      </div>
+      <div class="run-actions">
+        <button class="btn primary">Approve</button>
+        <button class="btn destructive">Reject</button>
+        <span class="hint">posts as @meiuxs</span>
+      </div>
+    </article>
+
+    <div class="caption">Blocked <span class="count">1 run</span></div>
+
+    <article class="tile">
+      <div class="run-top">
+        <span class="iid">#405</span>
+        <span class="run-title">Dark theme contrast on quota badge</span>
+        <span class="kind">bug</span>
+        <span class="spacer"></span>
+        <button class="btn ghost" style="min-height:24px">Issue ↗</button>
+      </div>
+      <div class="rail">
+        <span class="stop"><span class="dot done"></span></span><span class="bar done"></span>
+        <span class="stop"><span class="dot" style="background: var(--status-error-text)"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span><span class="bar"></span>
+        <span class="stop"><span class="dot"></span></span>
+      </div>
+      <div class="guide">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--status-error-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        <div>
+          <span class="reason">missing-credential</span> — whoever added <code>ai-ready</code> has no bound account on this instance or is below Developer. A Developer replies <code>/ai-take</code> to hand the run over.
+        </div>
+      </div>
+      <div class="meta" style="margin-top:11px">
+        <span>triggerer @qa-bot-user</span>
+        <span class="sep">·</span>
+        <span>blocked 14 min ago</span>
+      </div>
+      <div class="run-actions">
+        <button class="btn primary">Take over</button>
+        <button class="btn">Reset</button>
+      </div>
+    </article>
+
+    <div class="caption">History</div>
+
+    <details class="history tile" open>
+      <summary>Recent runs <span class="count">7</span></summary>
+      <div class="hist-row"><span class="t">Relay reconnect flaps under proxy chain</span><span class="sep">·</span><span>#389</span><span class="sep">·</span><span class="verdict-done">merged</span><span class="sep">·</span><span>2 d ago</span><span class="sep">·</span><a href="#" onclick="return false">MR !216</a></div>
+      <div class="hist-row"><span class="t">Quota export omits weekend rows</span><span class="sep">·</span><span>#381</span><span class="sep">·</span><span class="verdict-done">merged</span><span class="sep">·</span><span>3 d ago</span><span class="sep">·</span><a href="#" onclick="return false">MR !212</a></div>
+      <div class="hist-row"><span class="t">Add webhook for space archive</span><span class="sep">·</span><span>#372</span><span class="sep">·</span><span class="verdict-blocked">repeated-error</span><span class="sep">·</span><span>4 d ago</span></div>
+      <div class="hist-row"><span class="t">Sticky header jumps on RTL locales</span><span class="sep">·</span><span>#366</span><span class="sep">·</span><span class="verdict-done">merged</span><span class="sep">·</span><span>6 d ago</span><span class="sep">·</span><a href="#" onclick="return false">MR !207</a></div>
+      <div class="hist-row"><span class="t">Review gate rejects empty-diff fix</span><span class="sep">·</span><span>#351</span><span class="sep">·</span><span class="verdict-blocked">review-rejected</span><span class="sep">·</span><span>7 d ago</span></div>
+    </details>
+  </div>
+
+  <!-- ============ GLOBAL VIEW ============ -->
+  <div class="view" id="view-global">
+    <div class="gproj">
+      <div class="caption">intranet-uos / openchamber <span class="count">gitlab.example.com</span></div>
+      <article class="tile">
+        <div class="run-top">
+          <span class="iid">#412</span>
+          <span class="run-title">Sessions list loses filter after worktree switch</span>
+          <span class="kind">bug</span>
+          <span class="spacer"></span>
+          <span class="session"><span class="live busy"></span><span style="font-size:0.76rem">implementing 12 min</span></span>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="run-top">
+          <span class="iid">#405</span>
+          <span class="run-title">Dark theme contrast on quota badge</span>
+          <span class="kind">bug</span>
+          <span class="spacer"></span>
+          <span style="font-size:0.76rem; color: var(--status-error-text)">blocked · missing-credential</span>
+        </div>
+      </article>
+    </div>
+    <div class="gproj">
+      <div class="caption">intranet-uos / relay-agent <span class="count">gitlab.example.com</span></div>
+      <article class="tile">
+        <div class="run-top">
+          <span class="iid">#88</span>
+          <span class="run-title">Backpressure drops frames above 8 Mbps</span>
+          <span class="kind">bug</span>
+          <span class="spacer"></span>
+          <span class="session"><span class="live busy"></span><span style="font-size:0.76rem">reviewing · round 1</span></span>
+        </div>
+      </article>
+    </div>
+    <div class="gproj">
+      <div class="caption">Done runs stay in each project's history; this view never gates a project: a stuck run here still leaves the other two slots working.</div>
+    </div>
+  </div>
+
+</div>
+<script>
+  function view(name, btn) {
+    document.querySelectorAll('.switch button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+    btn.setAttribute('aria-pressed', 'true');
+    document.querySelectorAll('.view').forEach((v) => v.classList.remove('on'));
+    document.getElementById('view-' + name).classList.add('on');
+  }
+  function toggleTheme() {
+    const body = document.body;
+    const next = body.dataset.theme === 'dark' ? 'light' : 'dark';
+    body.dataset.theme = next;
+    document.getElementById('themebtn').textContent = next === 'dark' ? 'Light' : 'Dark';
+  }
+  // Mockup-only poll ticker.
+  let age = 4;
+  setInterval(() => {
+    age = (age + 1) % 11;
+    document.getElementById('polltext').textContent = age === 0 ? 'updating…' : 'updated ' + age + 's ago';
+    document.getElementById('polldot').classList.toggle('busy', age === 0);
+  }, 1000);
+</script>
+</body>
+</html>

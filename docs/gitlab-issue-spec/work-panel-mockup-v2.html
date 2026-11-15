@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitLab 自动化运行 - 面板稿 v2</title>
+<style>
+  /* Token values are copied from the app, not invented:
+     surface / status / primary from
+     packages/ui/src/lib/theme/themes/openchamber-{light,dark}.json
+     radii and type scale from
+     packages/ui/src/styles/design-system.css (--radius-md 7px, --radius-xl 12px,
+     --text-ui-label .84375rem, --text-meta .78125rem, --text-micro .75rem)
+     tile tone from .oc-tile (4% light, 3% dark), buttons from
+     packages/ui/src/components/ui/button-variants.ts
+     (tinted fill + tinted border + oc-raised-button light),
+     the rail marks from components/chat/uiBlocks/UiBlock.tsx (StepMark). */
+  :root {
+    --surface-background: #fdfcfa;
+    --surface-foreground: #262521;
+    --surface-muted: #f7f6f4;
+    --surface-muted-foreground: #696960;
+    --surface-elevated: #f3f2f0;
+    --primary-base: #b35017;
+    --primary-text: #b35017;
+    --status-info: #2c6ebd;
+    --status-warning: #886914;
+    --status-error: #b7493f;
+    --status-success: #517734;
+    --oc-tile-tone: 4%;
+    --oc-tile-inset-tone: 6%;
+    --canvas: var(--surface-background);
+    --edge: color-mix(in srgb, var(--surface-foreground) 16%, transparent);
+    --faint: color-mix(in srgb, var(--surface-foreground) 42%, transparent);
+  }
+  :root[data-theme="dark"] {
+    --surface-background: #120f0e;
+    --surface-foreground: #dbd7cc;
+    --surface-muted: #0e0c0b;
+    --surface-muted-foreground: #9a978d;
+    --surface-elevated: #1b1918;
+    --primary-base: #da7c47;
+    --primary-text: #da7c47;
+    --status-info: #479fe6;
+    --status-warning: #c67f13;
+    --status-error: #da5b4a;
+    --status-success: #76ad4f;
+    --oc-tile-tone: 3%;
+    --oc-tile-inset-tone: 4.5%;
+    --edge: color-mix(in srgb, var(--surface-foreground) 14%, transparent);
+    --faint: color-mix(in srgb, var(--surface-foreground) 40%, transparent);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--surface-foreground);
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 0.84375rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 880px; margin: 0 auto; padding: 24px 24px 120px; }
+
+  /* One header row: title, instance and bot, poll, scope switch. */
+  .head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .head-title { font-size: 0.875rem; font-weight: 600; white-space: nowrap; }
+  .head-meta, .poll {
+    color: var(--surface-muted-foreground); font-size: 0.78125rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .poll { font-variant-numeric: tabular-nums; }
+  .poll.failed { color: var(--status-error); }
+  .spacer { flex: 1; }
+
+  /* Segmented choice of two: recessed track, raised chosen option. */
+  .segmented { display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px;
+    background: color-mix(in srgb, var(--surface-foreground) 6%, transparent); }
+  .segmented button {
+    font: inherit; font-size: 0.78125rem; border: 0; cursor: pointer;
+    padding: 3px 10px; min-height: 24px; border-radius: 7px;
+    background: transparent; color: var(--surface-muted-foreground);
+  }
+  .segmented button[aria-pressed="true"] {
+    background: var(--surface-elevated); color: var(--surface-foreground);
+    box-shadow: inset 0 0 0 0.5px var(--edge), 0 1px 1.5px rgb(0 0 0 / 0.08);
+  }
+  :root[data-theme="dark"] .segmented button[aria-pressed="true"] {
+    box-shadow: inset 0 0 0 0.5px var(--edge), 0 1px 2px rgb(0 0 0 / 0.4);
+  }
+
+  /* Captions: a bare muted word with room above. */
+  .caption {
+    color: var(--surface-muted-foreground); font-size: 0.78125rem;
+    margin: 26px 0 8px; display: flex; align-items: baseline; gap: 8px;
+  }
+  .caption:first-child { margin-top: 18px; }
+  .caption .count { color: var(--faint); font-variant-numeric: tabular-nums; }
+  .caption .spacer { flex: 1; }
+
+  /* Tile: one tone step, no border. */
+  .tile {
+    border-radius: 12px; padding: 12px 14px;
+    background: color-mix(in srgb, var(--surface-foreground) var(--oc-tile-tone), transparent);
+  }
+  .tile + .tile { margin-top: 8px; }
+
+  /* Run row: iid, kind, title, then the row's actions. */
+  .run-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .iid { color: var(--surface-muted-foreground); font-size: 0.78125rem;
+    font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .kind { color: var(--surface-muted-foreground); font-size: 0.75rem; flex-shrink: 0; }
+  .run-title { font-weight: 500; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .run-top .spacer { flex: 1; }
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px;
+    background: transparent; color: var(--surface-muted-foreground); cursor: pointer;
+  }
+  .icon-btn:hover { background: color-mix(in srgb, var(--surface-foreground) 7%, transparent);
+    color: var(--surface-foreground); }
+  .icon-btn svg { width: 15px; height: 15px; }
+
+  /* Phase rail: marks on one line joined by rules, like the app's Steps block.
+     The spine is the same for both kinds, so a position means the same stage. */
+  .rail { display: flex; align-items: center; margin: 11px 0 1px; }
+  .rail .mark {
+    width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.5625rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .rail .mark svg { width: 9px; height: 9px; }
+  .rail .mark.done { background: var(--status-success); color: var(--surface-background); }
+  .rail .mark.current {
+    background: var(--mark-color, var(--status-info)); color: var(--surface-background);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mark-color, var(--status-info)) 22%, transparent);
+  }
+  .rail .mark.current::after {
+    content: ""; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--surface-background);
+  }
+  .rail .mark.blocked { background: var(--status-error); color: var(--surface-background); }
+  .rail .mark.todo {
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--surface-foreground) 22%, transparent);
+    color: var(--surface-muted-foreground);
+  }
+  .rail .line { height: 2px; flex: 1; margin: 0 4px;
+    background: color-mix(in srgb, var(--surface-foreground) 12%, transparent); }
+  .rail .line.done { background: var(--status-success); }
+
+  /* State line: the mark carries the colour, the word names the phase. */
+  .state { display: flex; align-items: baseline; gap: 7px; margin-top: 5px; font-size: 0.78125rem; }
+  .state .mark { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+    transform: translateY(-1px); }
+  .state .mark.running { background: var(--status-info); }
+  .state .mark.waiting { background: var(--status-warning); }
+  .state .mark.blocked { background: var(--status-error); }
+  .state .phase { color: var(--surface-foreground); }
+  .state .age { color: var(--surface-muted-foreground); font-variant-numeric: tabular-nums; }
+  .state .sep { color: var(--faint); }
+
+  /* Meta line: what the run is working on. */
+  .meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 7px;
+    margin-top: 3px; font-size: 0.78125rem; color: var(--surface-muted-foreground); }
+  .meta .sep { color: var(--faint); }
+  .meta code { font-family: ui-monospace, "Cascadia Code", monospace; font-size: 0.75rem; }
+  .meta a { color: var(--surface-foreground); text-decoration: none; }
+  .meta a:hover { color: var(--surface-muted-foreground); }
+
+  /* A copyable value: the copy mark arrives on hover, over reserved space. */
+  .copyable { display: inline-flex; align-items: center; gap: 4px; }
+  .copyable .copy { opacity: 0; transition: opacity 120ms ease-out; }
+  .copyable:hover .copy { opacity: 1; }
+  .copyable .copy svg { width: 12px; height: 12px; }
+
+  /* The session's own state: busy blinks, idle sits still. */
+  .session { display: inline-flex; align-items: center; gap: 5px; }
+  .session .live { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .session .live.busy { background: var(--status-info); animation: blink 1s steps(1) infinite; }
+  .session .live.idle { background: var(--status-success); }
+  @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.35; } }
+
+  /* Guidance: a tinted fill, no border. */
+  .guide {
+    margin-top: 10px; padding: 9px 11px; border-radius: 9px;
+    font-size: 0.78125rem; line-height: 1.6;
+    background: color-mix(in srgb, var(--status-warning) 12%, transparent);
+  }
+  .guide.blocked { background: color-mix(in srgb, var(--status-error) 12%, transparent); }
+  .guide .reason { font-weight: 600; }
+  .guide.blocked .reason { color: var(--status-error); }
+  .guide.waiting .reason { color: var(--status-warning); }
+  .guide .detail { color: var(--surface-foreground); }
+  .guide code {
+    font-family: ui-monospace, "Cascadia Code", monospace; font-size: 0.75rem;
+    padding: 1px 4px; border-radius: 5px;
+    background: color-mix(in srgb, var(--surface-foreground) 8%, transparent);
+  }
+
+  /* Actions: the row under the guidance, attribution on the far side. */
+  .actions { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
+  .actions .spacer { flex: 1; }
+  .attribution { color: var(--surface-muted-foreground); font-size: 0.75rem; }
+
+  /* Buttons: the app's variants. */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    font: inherit; font-size: 0.84375rem; font-weight: 500; white-space: nowrap;
+    border-radius: 7px; border: 1px solid transparent; cursor: pointer;
+    padding: 4px 12px; min-height: 32px;
+    transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
+  }
+  .btn.sm { font-size: 0.78125rem; padding: 3px 10px; min-height: 28px; }
+  .btn svg { width: 14px; height: 14px; }
+  .btn-default {
+    background: color-mix(in srgb, var(--primary-base) 10%, var(--surface-background));
+    color: var(--primary-text);
+    border-color: color-mix(in srgb, var(--primary-base) 12%, transparent);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2), 0 1px 1.5px rgb(0 0 0 / 0.1);
+  }
+  :root[data-theme="dark"] .btn-default {
+    background: color-mix(in srgb, var(--primary-base) 16%, transparent);
+    border-color: color-mix(in srgb, var(--primary-base) 20%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-foreground) 1.5%, transparent),
+      0 1px 1px rgb(0 0 0 / 0.28), 0 2px 3px -2px rgb(0 0 0 / 0.2);
+  }
+  .btn-outline {
+    background: var(--surface-background); color: var(--surface-foreground);
+    box-shadow: inset 0 0 0 0.5px var(--edge), 0 1px 1.5px rgb(0 0 0 / 0.08);
+  }
+  :root[data-theme="dark"] .btn-outline {
+    background: var(--surface-elevated);
+    box-shadow: inset 0 0 0 0.5px var(--edge), 0 1px 2px rgb(0 0 0 / 0.4);
+  }
+  .btn-destructive {
+    background: color-mix(in srgb, var(--status-error) 7%, var(--surface-background));
+    color: var(--status-error);
+    border-color: color-mix(in srgb, var(--status-error) 9%, transparent);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2), 0 1px 1.5px rgb(0 0 0 / 0.1);
+  }
+  :root[data-theme="dark"] .btn-destructive {
+    background: color-mix(in srgb, var(--status-error) 9%, transparent);
+    border-color: color-mix(in srgb, var(--status-error) 14%, transparent);
+  }
+  .btn-ghost { background: transparent; color: var(--surface-foreground); }
+  .btn-ghost:hover { background: color-mix(in srgb, var(--surface-foreground) 7%, transparent); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .link { color: var(--primary-text); text-decoration: none; font-size: 0.78125rem; }
+  .link:hover { text-decoration: underline; }
+
+  /* History: a collapsed group with one line per finished run. */
+  details.history { border-radius: 12px; }
+  details.history summary {
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+    font-size: 0.78125rem; color: var(--surface-muted-foreground); user-select: none;
+  }
+  details.history summary::-webkit-details-marker { display: none; }
+  details.history summary::before {
+    content: ""; width: 0; height: 0; flex-shrink: 0;
+    border-left: 5px solid currentColor; border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent; transition: transform 150ms ease-out;
+  }
+  details.history[open] summary::before { transform: rotate(90deg); }
+  .hist-row { display: flex; gap: 8px; align-items: baseline; padding: 6px 0 0 13px;
+    font-size: 0.78125rem; color: var(--surface-muted-foreground); min-width: 0; }
+  .hist-row .t { color: var(--surface-foreground); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .hist-row .sep { color: var(--faint); }
+  .hist-row a { color: var(--surface-foreground); text-decoration: none; }
+  .verdict-done { color: var(--status-success); }
+  .verdict-blocked { color: var(--status-error); }
+
+  /* Views. */
+  .view { display: none; }
+  .view.on { display: block; }
+  body[data-state="loading"] .view,
+  body[data-state="empty"] .view { display: none; }
+
+  /* Banners: a tinted fill, no border. */
+  .banner {
+    display: flex; align-items: flex-start; gap: 9px; margin-top: 16px;
+    padding: 10px 12px; border-radius: 9px; font-size: 0.78125rem;
+    background: color-mix(in srgb, var(--status-error) 12%, transparent);
+  }
+  .banner.info { background: color-mix(in srgb, var(--status-info) 12%, transparent); }
+  .banner.warn { background: color-mix(in srgb, var(--status-warning) 12%, transparent); }
+  .banner svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 2px; }
+  .banner .spacer { flex: 1; }
+  .banner strong { font-weight: 600; }
+
+  /* Empty and loading states keep the slot they would fill. */
+  .state-box {
+    margin-top: 18px; padding: 28px 14px; border-radius: 12px; text-align: center;
+    background: color-mix(in srgb, var(--surface-foreground) var(--oc-tile-tone), transparent);
+    color: var(--surface-muted-foreground); font-size: 0.78125rem;
+  }
+  .state-box .headline { color: var(--surface-foreground); font-size: 0.84375rem;
+    font-weight: 500; margin-bottom: 4px; }
+  .state-box code {
+    font-family: ui-monospace, "Cascadia Code", monospace; font-size: 0.75rem;
+    padding: 1px 4px; border-radius: 5px;
+    background: color-mix(in srgb, var(--surface-foreground) 8%, transparent);
+  }
+  .skeleton { display: flex; align-items: baseline; gap: 8px; padding: 9px 0; }
+  .skeleton .bar { height: 9px; border-radius: 5px;
+    background: color-mix(in srgb, var(--surface-foreground) 9%, transparent); }
+  .skeleton .bar.short { width: 44px; }
+  .skeleton .bar.long { width: 62%; }
+  .skeleton .bar.mid { width: 28%; }
+
+  /* Mockup-only controls, kept out of the app chrome. */
+  .mockup {
+    position: fixed; inset-inline-end: 20px; inset-block-end: 20px; z-index: 10;
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px;
+    background: var(--surface-elevated); color: var(--surface-muted-foreground);
+    font-size: 0.75rem; box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  }
+  .mockup label { color: var(--faint); }
+  .mockup select {
+    font: inherit; font-size: 0.75rem; color: var(--surface-foreground);
+    background: var(--surface-background); border: 0; border-radius: 7px;
+    padding: 3px 8px; min-height: 26px;
+  }
+  .mockup .btn { min-height: 26px; font-size: 0.75rem; padding: 2px 9px; }
+
+  /* Modal: the confirmation a write action asks for. */
+  .scrim {
+    position: fixed; inset: 0; z-index: 20; display: none;
+    background: rgb(0 0 0 / 0.45); align-items: center; justify-content: center;
+  }
+  .scrim.on { display: flex; }
+  .modal {
+    width: 460px; max-width: calc(100vw - 48px); border-radius: 12px; padding: 18px;
+    background: var(--surface-background); color: var(--surface-foreground);
+    box-shadow: 0 24px 60px rgb(0 0 0 / 0.45);
+  }
+  .modal h2 { margin: 0 0 6px; font-size: 0.875rem; font-weight: 600; }
+  .modal p { margin: 0 0 12px; font-size: 0.78125rem; color: var(--surface-muted-foreground); }
+  .modal .comment {
+    padding: 10px 11px; border-radius: 9px; font-family: ui-monospace, "Cascadia Code", monospace;
+    font-size: 0.75rem; line-height: 1.6; white-space: pre-wrap;
+    background: color-mix(in srgb, var(--surface-foreground) 6%, transparent);
+  }
+  .modal .row { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .session .live.busy { animation: none; }
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body data-state="normal">
+<div class="page">
+
+  <header class="head">
+    <span class="head-title">自动化运行</span>
+    <span class="head-meta" id="head-meta">intranet-uos/openchamber · gitlab.example.com · bot @oc-bot</span>
+    <span class="spacer"></span>
+    <span class="poll" id="poll">4 秒前更新</span>
+    <div class="segmented" role="group" aria-label="范围">
+      <button aria-pressed="true" onclick="scope('project', this)">本项目</button>
+      <button aria-pressed="false" onclick="scope('global', this)">全部项目</button>
+    </div>
+  </header>
+
+  <!-- Banners sit under the header row: state, never controls. -->
+  <div id="banner-slot"></div>
+
+  <!-- A loading or empty page fills this slot instead of the views below. -->
+  <div id="filler"></div>
+
+  <!-- ============ PROJECT VIEW ============ -->
+  <div class="view on" id="view-project">
+
+    <!-- The thing that needs a person comes first. -->
+    <div class="caption">等待你 <span class="count">1 份方案</span></div>
+
+    <article class="tile">
+      <div class="run-top">
+        <span class="iid">#377</span>
+        <span class="kind">需求</span>
+        <span class="run-title">中继状态页加快捷键</span>
+        <span class="spacer"></span>
+        <a class="icon-btn" href="#" onclick="return false" title="Issue #377">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 6V8H5V19H16V14H18V20C18 20.5523 17 21 17 21H4C3.44772 21 3 20.5523 3 20V7C3 6.44772 3.55228 6 4 6H10ZM21 3V11H19L18.9999 6.413L11.2071 14.2071L9.79289 12.7929L17.5849 5H13V3H21Z"/></svg>
+        </a>
+        <a class="icon-btn" href="#" onclick="return false" title="方案评论">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3H21C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 3 20.5523 3 20V4C3 3.44772 3.55228 3 3 3ZM21 11H10V13H21V11ZM21 7H10V9H21V7ZM10 15H21V17H10V15ZM3 7H8V17H3V7Z"/></svg>
+        </a>
+      </div>
+      <div class="rail" data-kind="feature" data-phase="waiting-approval"></div>
+      <div class="state">
+        <span class="mark waiting"></span>
+        <span class="phase">等待审批</span>
+        <span class="sep">·</span>
+        <span class="age">方案发布于 2 小时前</span>
+      </div>
+      <div class="guide waiting">
+        <span class="reason">下一步：</span>
+        Developer 以上回复 <code>/ai-approve</code> 开始实现，回复 <code>/ai-reject</code> 停止本次运行。
+      </div>
+      <div class="actions">
+        <button class="btn btn-default" onclick="confirmAction('批准', 'comment', '/ai-approve', 'issue #377', '让本次运行继续')">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.3944 12.0001L10 7.7371V16.263L16.3944 12.0001Z"/></svg>
+          批准
+        </button>
+        <button class="btn btn-destructive" onclick="confirmAction('驳回', 'comment', '/ai-reject', 'issue #377', '停止本次运行')">驳回</button>
+        <span class="spacer"></span>
+        <span class="attribution">以 @meiuxs 的身份发布</span>
+      </div>
+    </article>
+
+    <div class="caption">已阻塞 <span class="count">3 次运行</span></div>
+
+    <article class="tile">
+      <div class="run-top">
+        <span class="iid">#405</span>
+        <span class="kind">缺陷</span>
+        <span class="run-title">深色主题下配额徽章对比度不足</span>
+        <span class="spacer"></span>
+        <a class="icon-btn" href="#" onclick="return false" title="Issue #405">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 6V8H5V19H16V14H18V20C18 20.5523 17 21 17 21H4C3.44772 21 3 20.5523 3 20V7C3 6.44772 3.55228 6 4 6H10ZM21 3V11H19L18.9999 6.413L11.2071 14.2071L9.79289 12.7929L17.5849 5H13V3H21Z"/></svg>
+        </a>
+        <button class="icon-btn" title="更多操作">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 10.5C3.675 10.5 3 11.175 3 12C3 12.825 3.675 13.5 4.5 13.5C5.325 13.5 6 12.825 6 12C6 11.175 5.325 10.5 4.5 10.5ZM19.5 10.5C18.675 10.5 18 11.175 18 12C18 12.825 18.675 13.5 19.5 13.5C20.325 13.5 21 12.825 21 12C21 11.175 20.325 10.5 19.5 10.5ZM12 10.5C11.175 10.5 10.5 11.175 10.5 12C10.5 12.825 11.175 13.5 12 13.5C12.825 13.5 13.5 12.825 13.5 12C13.5 11.175 12.825 10.5 12 10.5Z"/></svg>
+        </button>
+      </div>
+      <div class="rail" data-kind="bug" data-phase="blocked" data-stop="claimed"></div>
+      <div class="state">
+        <span class="mark blocked"></span>
+        <span class="phase">已阻塞</span>
+        <span class="sep">·</span>
+        <span class="age">缺少凭据</span>
+        <span class="sep">·</span>
+        <span class="age">14 分钟前</span>
+      </div>
+      <div class="guide blocked">
+        <span class="reason">缺少凭据：</span>
+        <span class="detail">触发者账号不可用。</span>
+        <br>下一步：给触发者绑定本实例的 GitLab 账号并保证权限在 Developer 以上，再重置本次运行；Developer 以上也可以回复 <code>/ai-take</code> 接管。
+      </div>
+      <div class="actions">
+        <button class="btn btn-default" onclick="confirmAction('接管', 'comment', '/ai-take', 'issue #405', '把本次运行转给你')">接管</button>
+        <span class="spacer"></span>
+        <span class="attribution">以 @meiuxs 的身份发布</span>
+      </div>
+    </article>
+
+    <article class="tile">
+      <div class="run-top">
+        <span class="iid">#372</span>
+        <span class="kind">需求</span>
+        <span class="run-title">空间归档加 webhook</span>
+        <span class="spacer"></span>
+        <a class="icon-btn" href="#" onclick="return false" title="Issue #372">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 6V8H5V19H16V14H18V20C18 20.5523 17 21 17 21H4C3.44772 21 3 20.5523 3 20V7C3 6.44772 3.55228 6 4 6H10ZM21 3V11H19L18.9999 6.413L11.2071 14.2071L9.79289 12.7929L17.5849 5H13V3H21Z"/></svg>
+        </a>
+        <button class="icon-btn" title="更多操作">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 10.5C3.675 10.5 3 11.175 3 12C3 12.825 3.675 13.5 4.5 13.5C5.325 13.5 6 12.825 6 12C6 11.175 5.325 10.5 4.5 10.5ZM19.5 10.5C18.675 10.5 18 11.175 18 12C18 12.825 18.675 13.5 19.5 13.5C20.325 13.5 21 12.825 21 12C21 11.175 20.325 10.5 19.5 10.5ZM12 10.5C11.175 10.5 10.5 11.175 10.5 12C10.5 12.825 11.175 13.5 12 13.5C12.825 13.5 13.5 12.825 13.5 12C13.5 11.175 12.825 10.5 12 10.5Z"/></svg>
+        </button>
+      </div>
+      <div class="rail" data-kind="feature" data-phase="blocked" data-stop="waiting-approval"></div>
+      <div class="state">
+        <span class="mark blocked"></span>
+        <span class="phase">已阻塞</span>
+        <span class="sep">·</span>
+        <span class="age">方案被驳回</span>
+        <span class="sep">·</span>
+        <span class="age">4 天前</span>
+      </div>
+      <div class="guide blocked">
+        <span class="reason">方案被驳回：</span>
+        <span class="detail">方案已被拒绝。</span>
+        <br>下一步：改完 issue 或方案后重置本次运行，重置会清掉尝试次数，并占用三个调度槽位里的一个。
+      </div>
+      <div class="actions">
+        <button class="btn btn-outline" onclick="confirmAction('重置', 'labels', '移除 ai-blocked\n添加 ai-ready', 'issue #372', '重新排队本次运行')">重置</button>
+        <span class="spacer"></span>
+        <span class="attribution">以 @meiuxs 的身份修改</span>
+      </div>
+    </article>
+
+    <article class="tile">
+      <div class="run-top">
+        <span class="iid">#351</span>
+        <span class="kind">缺陷</span>
+        <span class="run-title">审核门拒了空 diff 的修复</span>
+        <span class="spacer"></span>
+        <a class="icon-btn" href="#" onclick="return false" title="Issue #351">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 6V8H5V19H16V14H18V20C18 20.5523 17 21 17 21H4C3.44772 21 3 20.5523 3 20V7C3 6.44772 3.55228 6 4 6H10ZM21 3V11H19L18.9999 6.413L11.2071 14.2071L9.79289 12.7929L17.5849 5H13V3H21Z"/></svg>
+        </a>
+        <button class="icon-btn" title="更多操作">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 10.5C3.675 10.5 3 11.175 3 12C3 12.825 3.675 13.5 4.5 13.5C5.325 13.5 6 12.825 6 12C6 11.175 5.325 10.5 4.5 10.5ZM19.5 10.5C18.675 10.5 18 11.175 18 12C18 12.825 18.675 13.5 19.5 13.5C20.325 13.5 21 12.825 21 12C21 11.175 20.325 10.5 19.5 10.5ZM12 10.5C11.175 10.5 10.5 11.175 10.5 12C10.5 12.825 11.175 13.5 12 13.5C12.825 13.5 13.5 12.825 13.5 12C13.5 11.175 12.825 10.5 12 10.5Z"/></svg>
+        </button>
+      </div>
+      <div class="rail" data-kind="bug" data-phase="blocked" data-stop="reviewing"></div>
+      <div class="state">
+        <span class="mark blocked"></span>
+        <span class="phase">已阻塞</span>
+        <span class="sep">·</span>
+        <span class="age">审核未通过</span>
+        <span class="sep">·</span>
+        <span class="age">7 天前</span>
+      </div>
+      <div class="guide blocked">
+        <span class="reason">审核未通过：</span>
+        <span class="detail">审核连续三轮要求修改，仍未通过。</span>
+        <br>下一步：审核发现都在评审评论里，改完问题后重置本次运行。
+      </div>
+      <div class="actions">
+        <button class="btn btn-outline" onclick="confirmAction('重置', 'labels', '移除 ai-blocked\n添加 ai-ready', 'issue #351', '重新排队本次运行')">重置</button>
+        <span class="spacer"></span>
+        <span class="attribution">以 @meiuxs 的身份修改</span>
+      </div>
+    </article>
+
+    <div class="caption">进行中 <span class="count">1 次运行 · 3 个槽位用了 1 个</span></div>
+
+    <article class="tile">
+      <div class="run-top">
+        <span class="iid">#412</span>
+        <span class="kind">缺陷</span>
+        <span class="run-title">切换工作区后会话列表丢失筛选条件</span>
+        <span class="spacer"></span>
+        <a class="icon-btn" href="#" onclick="return false" title="Issue #412">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 6V8H5V19H16V14H18V20C18 20.5523 17 21 17 21H4C3.44772 21 3 20.5523 3 20V7C3 6.44772 3.55228 6 4 6H10ZM21 3V11H19L18.9999 6.413L11.2071 14.2071L9.79289 12.7929L17.5849 5H13V3H21Z"/></svg>
+        </a>
+        <button class="icon-btn" title="更多操作">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 10.5C3.675 10.5 3 11.175 3 12C3 12.825 3.675 13.5 4.5 13.5C5.325 13.5 6 12.825 6 12C6 11.175 5.325 10.5 4.5 10.5ZM19.5 10.5C18.675 10.5 18 11.175 18 12C18 12.825 18.675 13.5 19.5 13.5C20.325 13.5 21 12.825 21 12C21 11.175 20.325 10.5 19.5 10.5ZM12 10.5C11.175 10.5 10.5 11.175 10.5 12C10.5 12.825 11.175 13.5 12 13.5C12.825 13.5 13.5 12.825 13.5 12C13.5 11.175 12.825 10.5 12 10.5Z"/></svg>
+        </button>
+      </div>
+      <div class="rail" data-kind="bug" data-phase="implementing"></div>
+      <div class="state">
+        <span class="mark running"></span>
+        <span class="phase">实现中</span>
+        <span class="sep">·</span>
+        <span class="age">12 分钟</span>
+      </div>
+      <div class="meta">
+        <span class="copyable">
+          <code>openchamber/issue-412-session-filter</code>
+          <span class="copy" title="复制分支名">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
+          </span>
+        </span>
+        <span class="sep">→</span>
+        <span><code>release/2.8</code></span>
+        <span class="sep">·</span>
+        <span>@meiuxs</span>
+        <span class="sep">·</span>
+        <span class="session"><span class="live busy"></span><a href="#" onclick="return false">打开会话</a></span>
+      </div>
+    </article>
+
+    <div class="caption">历史</div>
+    <details class="history">
+      <summary>已结束的运行 <span class="count">7</span></summary>
+      <div class="hist-row"><span class="t">代理链下中继重连抖动</span><span class="sep">·</span><span>#389</span><span class="sep">·</span><span class="verdict-done">已合并</span><span class="sep">·</span><span>2 天前</span><span class="sep">·</span><a href="#" onclick="return false">MR !216</a></div>
+      <div class="hist-row"><span class="t">配额导出漏掉周末数据</span><span class="sep">·</span><span>#381</span><span class="sep">·</span><span class="verdict-done">已合并</span><span class="sep">·</span><span>3 天前</span><span class="sep">·</span><a href="#" onclick="return false">MR !212</a></div>
+      <div class="hist-row"><span class="t">RTL 语言下顶部栏跳动</span><span class="sep">·</span><span>#366</span><span class="sep">·</span><span class="verdict-done">已合并</span><span class="sep">·</span><span>6 天前</span><span class="sep">·</span><a href="#" onclick="return false">MR !207</a></div>
+    </details>
+  </div>
+
+  <!-- ============ GLOBAL VIEW ============ -->
+  <div class="view" id="view-global">
+    <div class="caption">intranet-uos/openchamber <span class="count">gitlab.example.com</span><span class="spacer"></span><span class="count">2 次运行</span></div>
+
+    <article class="tile">
+      <div class="run-top">
+        <span class="iid">#412</span>
+        <span class="kind">缺陷</span>
+        <span class="run-title">切换工作区后会话列表丢失筛选条件</span>
+        <span class="spacer"></span>
+        <a class="icon-btn" href="#" onclick="return false" title="Issue #412">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 6V8H5V19H16V14H18V20C18 20.5523 17 21 17 21H4C3.44772 21 3 20.5523 3 20V7C3 6.44772 3.55228 6 4 6H10ZM21 3V11H19L18.9999 6.413L11.2071 14.2071L9.79289 12.7929L17.5849 5H13V3H21Z"/></svg>
+        </a>
+      </div>
+      <div class="rail" data-kind="bug" data-phase="implementing"></div>
+      <div class="state">
+        <span class="mark running"></span>
+        <span class="phase">实现中</span>
+        <span class="sep">·</span>
+        <span class="age">12 分钟</span>
+      </div>
+    </article>
+
+    <article class="tile">
+      <div class="run-top">
+        <span class="iid">#405</span>
+        <span class="kind">缺陷</span>
+        <span class="run-title">深色主题下配额徽章对比度不足</span>
+        <span class="spacer"></span>
+        <a class="icon-btn" href="#" onclick="return false" title="Issue #405">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 6V8H5V19H16V14H18V20C18 20.5523 17 21 17 21H4C3.44772 21 3 20.5523 3 20V7C3 6.44772 3.55228 6 4 6H10ZM21 3V11H19L18.9999 6.413L11.2071 14.2071L9.79289 12.7929L17.5849 5H13V3H21Z"/></svg>
+        </a>
+      </div>
+      <div class="rail" data-kind="bug" data-phase="blocked" data-stop="claimed"></div>
+      <div class="state">
+        <span class="mark blocked"></span>
+        <span class="phase">已阻塞</span>
+        <span class="sep">·</span>
+        <span class="age">缺少凭据</span>
+      </div>
+      <div class="actions">
+        <button class="btn btn-default btn-sm" disabled>接管</button>
+        <a class="link" href="#" onclick="return false">先在设置里绑定账号</a>
+        <span class="spacer"></span>
+      </div>
+    </article>
+
+    <div class="caption">intranet-uos/relay-agent <span class="count">gitlab.example.com</span><span class="spacer"></span><span class="count">1 次运行</span></div>
+
+    <article class="tile">
+      <div class="run-top">
+        <span class="iid">#88</span>
+        <span class="kind">缺陷</span>
+        <span class="run-title">超过 8 Mbps 时背压丢帧</span>
+        <span class="spacer"></span>
+        <a class="icon-btn" href="#" onclick="return false" title="Issue #88">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 6V8H5V19H16V14H18V20C18 20.5523 17 21 17 21H4C3.44772 21 3 20.5523 3 20V7C3 6.44772 3.55228 6 4 6H10ZM21 3V11H19L18.9999 6.413L11.2071 14.2071L9.79289 12.7929L17.5849 5H13V3H21Z"/></svg>
+        </a>
+      </div>
+      <div class="rail" data-kind="bug" data-phase="reviewing"></div>
+      <div class="state">
+        <span class="mark running"></span>
+        <span class="phase">审核中</span>
+        <span class="sep">·</span>
+        <span class="age">第 1 轮 / 共 3 轮</span>
+      </div>
+    </article>
+  </div>
+
+</div>
+
+<!-- Mockup-only controls. Not part of the screen. -->
+<div class="mockup">
+  <label for="state-picker">状态</label>
+  <select id="state-picker" onchange="setState(this.value)">
+    <option value="normal">正常</option>
+    <option value="loading">加载中</option>
+    <option value="empty">空态</option>
+    <option value="error">台账读取失败</option>
+    <option value="bot-invalid">bot 凭据失效</option>
+  </select>
+  <button class="btn btn-outline" onclick="toggleTheme()" id="themebtn">浅色</button>
+</div>
+
+<div class="scrim" id="scrim" onclick="if (event.target === this) closeConfirm()">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2 id="confirm-title">批准</h2>
+    <p id="confirm-note">将以 @meiuxs 的身份在 issue #377 上发表评论，让本次运行继续。</p>
+    <div class="comment" id="confirm-comment"></div>
+    <div class="row">
+      <button class="btn btn-outline" onclick="closeConfirm()">取消</button>
+      <button class="btn btn-default" onclick="closeConfirm()">以 @meiuxs 的身份发布</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // The spine every run follows. A feature run shows the two planning stops;
+  // they always sit in the same place, so a position means the same stage.
+  const SPINE = {
+    bug: ['claimed', 'preparing', 'implementing', 'reviewing', 'verifying', 'mr-open', 'done'],
+    feature: ['claimed', 'planning', 'waiting-approval', 'preparing', 'implementing', 'reviewing', 'verifying', 'mr-open', 'done'],
+  };
+  const STAGE_NAMES = {
+    claimed: '已认领',
+    planning: '出方案',
+    'waiting-approval': '等待审批',
+    preparing: '准备',
+    implementing: '实现中',
+    reviewing: '审核中',
+    verifying: '校验',
+    'mr-open': '已建 MR',
+    done: '完成',
+  };
+  const WAITING = new Set(['waiting-approval']);
+
+  function renderRail(element) {
+    const stages = SPINE[element.dataset.kind];
+    const blocked = element.dataset.phase === 'blocked';
+    const stage = blocked ? element.dataset.stop : element.dataset.phase;
+    const index = stages.indexOf(stage);
+    element.style.setProperty('--mark-color', blocked
+      ? 'var(--status-error)'
+      : WAITING.has(stage) ? 'var(--status-warning)' : 'var(--status-info)');
+    element.innerHTML = stages.map((name, i) => {
+      const status = i < index ? 'done' : i === index ? (blocked ? 'blocked' : 'current') : 'todo';
+      const mark = status === 'done'
+        ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.9997 15.1709L19.1921 5.97852L20.6063 7.39273L9.9997 17.9993L3.63574 11.6354L5.04996 10.2212L9.9997 15.1709Z"/></svg>'
+        : status === 'blocked' ? '!' : status === 'todo' ? String(i + 1) : '';
+      return `<span class="mark ${status}" title="${STAGE_NAMES[name]}">${mark}</span>`
+        + (i < stages.length - 1 ? `<span class="line ${status === 'done' ? 'done' : ''}"></span>` : '');
+    }).join('');
+  }
+
+  document.querySelectorAll('.rail').forEach(renderRail);
+
+  const BANNERS = {
+    'bot-invalid': `<div class="banner warn">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 7H13V9H11V7ZM11 11H13V17H11V11Z"/></svg>
+      <div><strong>bot 凭据已失效。</strong>本项目的调度已暂停，直到令牌续期。
+        <a class="link" href="#" onclick="return false">打开项目设置</a></div>
+    </div>`,
+    'error': `<div class="banner">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 7H13V9H11V7ZM11 11H13V17H11V11Z"/></svg>
+      <div><strong>运行记录加载失败。</strong>运行台账读不出来。
+        <span class="spacer"></span><button class="btn btn-outline btn-sm" onclick="setState('normal')">重试</button></div>
+    </div>`
+  };
+
+  const STATES = {
+    loading: `<div class="state-box">
+      <div class="skeleton"><span class="bar short"></span><span class="bar long"></span></div>
+      <div class="skeleton"><span class="bar short"></span><span class="bar mid"></span></div>
+      <div class="skeleton"><span class="bar short"></span><span class="bar long"></span></div>
+      <div style="margin-top:10px">正在加载运行记录</div>
+    </div>`,
+    empty: `<div class="state-box">
+      <div class="headline">还没有运行记录</div>
+      <div>给 GitLab 上的 issue 加上 <code>ai-ready</code> 标签，就能排一次运行。</div>
+    </div>`
+  };
+
+  function setState(name) {
+    document.body.dataset.state = name;
+    document.getElementById('state-picker').value = name;
+    document.getElementById('banner-slot').innerHTML = BANNERS[name] ?? '';
+    document.getElementById('filler').innerHTML = STATES[name] ?? '';
+  }
+
+  function scope(name, button) {
+    document.querySelectorAll('.segmented button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+    button.setAttribute('aria-pressed', 'true');
+    document.getElementById('view-project').classList.toggle('on', name === 'project');
+    document.getElementById('view-global').classList.toggle('on', name === 'global');
+    document.getElementById('head-meta').textContent = name === 'project'
+      ? 'intranet-uos/openchamber · gitlab.example.com · bot @oc-bot'
+      : 'gitlab.example.com · 2 个项目';
+    document.getElementById('poll').textContent = name === 'project'
+      ? '4 秒前更新'
+      : '6 秒前更新';
+  }
+
+  function toggleTheme() {
+    const root = document.documentElement;
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    document.getElementById('themebtn').textContent = next === 'dark' ? '浅色' : '深色';
+  }
+
+  function confirmAction(title, kind, payload, issue, effect) {
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-note').textContent = kind === 'labels'
+      ? `将以 @meiuxs 的身份修改 ${issue} 的标签，${effect}。`
+      : `将以 @meiuxs 的身份在 ${issue} 上发表评论，${effect}。`;
+    document.getElementById('confirm-comment').textContent = payload;
+    document.querySelector('.modal .row .btn-default').textContent =
+      kind === 'labels' ? '以 @meiuxs 的身份修改' : '以 @meiuxs 的身份发布';
+    document.getElementById('scrim').classList.add('on');
+  }
+  function closeConfirm() {
+    document.getElementById('scrim').classList.remove('on');
+  }
+</script>
+</body>
+</html>

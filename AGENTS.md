@@ -74,6 +74,10 @@ Answer in the language you were addressed in; code, comments, and docs stay in E
 
 Load the `communication-style` skill once, at the start of the session, before your first reply. It stays in context for the rest of the session: every reply, in any language, and every text people read follows it. Later turns use it as loaded; they do not load it again.
 
+## CodeGraph
+
+`.codegraph/` is a local code-graph index (SQLite + a daemon) exposed as the `codegraph` MCP, configured in the IDE's project-level MCP settings — not as a file in this repository. The daemon keeps the index in sync on its own; never re-initialize it. When a session has the `codegraph` tools mounted, prefer them over text search for cross-file navigation: finding definitions, references, call sites, and the blast radius of a change. Text search stays the fallback, and if the tools are missing from a session, the MCP is not mounted there — say so instead of silently searching without it.
+
 ## Project Skills
 
 Project skills live in `.agents/skills/*/SKILL.md`, and each skill's `description`

@@ -1,0 +1,33 @@
+name: gitlab
+
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:12.7.9-ce.0
+    container_name: gitlab-12-7
+    hostname: gitlab.local
+    shm_size: "256m"
+    restart: unless-stopped
+    ports:
+      - "8929:8929"
+      - "2224:22"
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:8929'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2224
+        unicorn['worker_processes'] = 2
+        unicorn['worker_timeout'] = 90
+        sidekiq['concurrency'] = 5
+        prometheus_monitoring['enable'] = false
+        postgresql['shared_buffers'] = '256MB'
+        gitlab_rails['time_zone'] = 'Asia/Shanghai'
+      GITLAB_ROOT_PASSWORD: ${GITLAB_ROOT_PASSWORD:?Run init-env.sh first, it writes .env with a generated root password}
+      GITLAB_ROOT_EMAIL: root@gitlab.local
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-data:/var/opt/gitlab
+      - gitlab-logs:/var/log/gitlab
+
+volumes:
+  gitlab-config:
+  gitlab-data:
+  gitlab-logs:
