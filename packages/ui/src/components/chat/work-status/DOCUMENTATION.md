@@ -145,6 +145,17 @@ closed, so the panel reappeared only once that number crossed the threshold:
 the chat widened and then narrowed again. The chat area does not move when the
 context panel opens. `useWorkStatusVisibility.test.ts` pins both properties.
 
+### Why the area is taken at the width the sidebar leaves it
+
+The session sidebar does move the chat area, over its own animation. The
+decision uses the measured width plus what the sidebar still has to travel
+(`sidebarPendingWidth`), re-decided in the commit that toggles the sidebar, so
+the answer is the settled one from the first frame. The alternative, the width
+as measured, flipped the answer mid-animation: collapsing an expanded context
+panel unfolds the sidebar, the card took its column beside the panel while the
+area was still wide, and gave it back when the area crossed the threshold, so
+the slot animated twice.
+
 The context-panel check mirrors `ContextPanel`'s own derivation: `isOpen` alone
 is not enough, because a panel with no resolvable active tab renders nothing
 and therefore displaces nothing.
@@ -822,7 +833,33 @@ a tab.
 ## Context sources
 
 The plan the session works on and linked issues and change requests first,
-then pinned knowledge, memory, skills and MCP counts.
+then pinned knowledge, the skills the session loaded, memory, skills and MCP
+counts.
+
+### Skills the session loaded
+
+One row per skill, in the order it first loaded, read from the session's
+loaded history (`loadedSkills.ts`): completed `skill` tool calls, skills
+attached to a prompt (`$name`, the user message's `skills`), and skill
+activations (`role: "skill"`). A pending, running or failed call loaded
+nothing. A later load of the same skill keeps the first one's place and adds
+the folder an attached skill lacks. History the session has not paged in is not read, so a skill loaded
+only there has no row. The Skills count below stays the number of skills the
+session could load.
+
+A row opens the skill's `SKILL.md` the way the transcript's Load Skill row
+does: an editor tab in VS Code, the Files pane on the phone, the context panel
+elsewhere. The file comes from the skills of the session's own directory, so
+a worktree session opens its own copy. A built-in skill has no file, so it
+opens in Settings > Skills on that skill, which shows OpenCode's text
+read-only; in VS Code the Settings tab gets the skill in its navigation
+request.
+
+### Why the skills come from history and not from a server list
+
+Every source is already in the loaded transcript, live through the same
+events. A server read of the full history would add a route and a request per
+session for skills the transcript already shows.
 
 ### The plan the session works on
 

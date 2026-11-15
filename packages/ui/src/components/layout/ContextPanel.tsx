@@ -16,8 +16,12 @@ import { type RepositoryUrlMatcher, useRepositoryUrlMatcher } from '@/lib/source
 import { type TrackerUrlMatcher, useTrackerUrlMatcher } from '@/lib/trackers/matchTrackerUrl';
 import { trackerPresentation } from '@/lib/trackers/presentation';
 import { lazyWithChunkRecovery } from '@/lib/chunkLoadRecovery';
-import { isDesktopShell } from '@/lib/desktop';
+import { isBrowserClientRuntime, isDesktopShell } from '@/lib/desktop';
 import { getDisambiguatingFolders } from '@/lib/path-utils';
+import { getRelativePathLabel } from './contextPanelPaths';
+import { copyTextToClipboard } from '@/lib/clipboard';
+import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
+import { toast } from '@/components/ui';
 
 // Heavy views stay on-demand (same as MainLayout): importing GitView or the
 // plan statically pulls their stacks into the eager startup graph even when
@@ -29,7 +33,7 @@ import { WorkflowsPanel } from '@/components/chat/workflows/WorkflowsPanel';
 import { useEffectiveDirectory } from '@/hooks/useEffectiveDirectory';
 import { useRepositoryReferenceProvider } from '@/components/references/referenceSources';
 import { useGuestSurfaces } from '@/hooks/useGuestSurfaces';
-import { cn } from '@/lib/utils';
+import { cn, getRevealLabelKey } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n';
 import { useBrowserFaviconStore } from '@/stores/useBrowserFaviconStore';
 import { useTrackedRecords } from '@/stores/useTrackedItemsStore';
@@ -55,6 +59,7 @@ import { beginLayoutAnimation, cancelWhenLayoutSettled, holdLayoutAnimation, LAY
 import { useLayoutAnimationMs } from '@/hooks/useLayoutAnimationMs';
 import { WORK_STATUS_COLUMN_WIDTH } from '@/components/chat/work-status/useWorkStatusVisibility';
 import { setWorkStatusHost, useRightSlotStore } from './rightSlot';
+import { sidebarPendingWidth } from './sidebarPendingWidth';
 import { changeRequestCopy } from '@/lib/source-control/changeRequestCopy';
 import { useChangeRequestTerm } from '@/lib/source-control/providers/registry';
 import { ContextPanelHeaderSlotProvider } from './contextPanelHeaderSlot';
@@ -110,18 +115,6 @@ const clampWidth = (width: number, maxWidth: number): number => {
 const maxPanelWidth = (availableWidth: number | null): number => {
   if (availableWidth === null) return Number.POSITIVE_INFINITY;
   return Math.max(CONTEXT_PANEL_MIN_WIDTH, availableWidth - CONTEXT_CHAT_MIN_WIDTH);
-};
-
-const getRelativePathLabel = (filePath: string | null, directory: string): string => {
-  if (!filePath) {
-    return '';
-  }
-  const normalizedFile = filePath.replace(/\\/g, '/');
-  const normalizedDir = directory.replace(/\\/g, '/').replace(/\/+$/, '');
-  if (normalizedDir && normalizedFile.startsWith(normalizedDir + '/')) {
-    return normalizedFile.slice(normalizedDir.length + 1);
-  }
-  return normalizedFile;
 };
 
 const getModeLabel = (
@@ -461,6 +454,7 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
   const layoutAnimationMs = useLayoutAnimationMs();
   const isVertical = geometry.axis === 'y';
   const { t, direction } = useI18n();
+  const { files, runtime } = useRuntimeAPIs();
   const isRtl = direction === 'rtl';
   const effectiveDirectory = useEffectiveDirectory() ?? '';
   const changeRequestTerm = useChangeRequestTerm(useRepositoryReferenceProvider(effectiveDirectory || null));
@@ -600,10 +594,7 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
     // to, so the zone moves once, together with the sidebar, instead of again
     // after it. Settled, the two widths are equal and this adds nothing. A
     // closed zone shows nothing that could move, so it forces no layout read.
-    if (measured !== null && !isVertical && isOpenRef.current) {
-      const sidebar = document.querySelector<HTMLElement>('[data-left-sidebar]');
-      if (sidebar) measured += Math.round(sidebar.getBoundingClientRect().width - (Number.parseFloat(sidebar.style.width) || 0));
-    }
+    if (measured !== null && !isVertical && isOpenRef.current) measured += sidebarPendingWidth();
     setMeasuredArea(measured !== null && areaDecidesRef.current(measured) ? measured : null);
   }, [isVertical]);
   // What the zone shares with the chat: the row less the other side.
@@ -978,6 +969,16 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
         return null;
       }
       const { id, index, allIds, close } = args;
+      const filePath = tabs.find((tab) => tab.id === id && tab.mode === 'file')?.targetPath;
+      const copyPath = (value: string, relative: boolean) => {
+        void copyTextToClipboard(value).then((result) => {
+          if (result.ok) {
+            toast.success(t(relative ? 'filesView.toast.relativePathCopied' : 'sidebarFilesTree.toast.pathCopied'));
+          } else {
+            toast.error(t('sidebarFilesTree.toast.copyFailed'));
+          }
+        });
+      };
       const closeOthers = () => closeContextPanelTabs(directoryKey, allIds.filter((tabId) => tabId !== id));
       // "Left" and "right" name the screen sides; in RTL the earlier tabs are on the right.
       const before = allIds.slice(0, index);
@@ -990,6 +991,24 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
       const nothingToRight = isRtl ? index === 0 : index === allIds.length - 1;
       return (
         <>
+          {filePath && (
+            <>
+              <ContextMenuItem onClick={() => copyPath(filePath, false)}>
+                <Icon name="link" className="me-2 size-4" /> {t('sidebarFilesTree.menu.copyPath')}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => copyPath(getRelativePathLabel(filePath, effectiveDirectory), true)}>
+                <Icon name="file-copy-2" className="me-2 size-4" /> {t('filesView.tree.menu.copyRelativePath')}
+              </ContextMenuItem>
+              {files.revealPath && !isBrowserClientRuntime(runtime.platform) && (
+                <ContextMenuItem onClick={() => {
+                  void files.revealPath?.(filePath).catch(() => toast.error(t('sidebarFilesTree.toast.revealFailed')));
+                }}>
+                  <Icon name="folder-received" className="me-2 size-4" /> {t(getRevealLabelKey())}
+                </ContextMenuItem>
+              )}
+              <ContextMenuSeparator />
+            </>
+          )}
           <ContextMenuItem onClick={close}>
             <Icon name="close" className="me-2 size-4" />
             {t('contextPanel.tab.menu.close')}
@@ -1022,7 +1041,7 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
         </>
       );
     },
-    [activeTab, closeContextPanelTabs, directoryKey, isRtl, t],
+    [activeTab, closeContextPanelTabs, directoryKey, effectiveDirectory, files, isRtl, runtime.platform, t, tabs],
   );
 
   // A tab dragged out of the strip moves its whole surface to a zone.
@@ -1110,6 +1129,7 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
             if (directoryKey) pinContextPanelTab(directoryKey, tabID);
           }}
           layoutMode="scrollable"
+          scrollWithWheel={isFileTabActive}
           variant="default"
           tabContextMenu={renderTabContextMenu}
           onTabDragOut={handleTabDragOut}
@@ -1297,6 +1317,11 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
       data-context-zone={zone}
       data-right-slot={zone === 'right' ? '' : undefined}
       data-context-panel-open={isOpen ? 'true' : 'false'}
+      // The size the zone is at or animating to, for a surface that must know
+      // it before the animation gets there (the browser page, `useSteadyStage`).
+      // An attribute and not a custom property: nothing selects on it, so
+      // changing it restyles nothing.
+      data-zone-size={size}
       tabIndex={-1}
       className={cn(
         // `overflow-clip` on both axes, never `hidden`: a `hidden` axis makes

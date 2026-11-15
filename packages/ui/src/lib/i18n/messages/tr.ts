@@ -24,6 +24,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -155,6 +156,7 @@ export const dict = {
   ...usageStatsI18n.tr,
   ...webSearchI18n.tr,
   ...sessionWarmingI18n.tr,
+  ...connectionHeartbeatI18n.tr,
   ...compactionSettingsI18n.tr,
   ...heapSnapshotI18n.tr,
   ...consoleBudgetsI18n.tr,
@@ -1519,7 +1521,7 @@ export const dict = {
   'contextPanel.browser.waitingForServerHint': 'Sunucu henüz bağlantı kabul etmiyor. Kabul ettiği anda bu sayfa yüklenecek.',
   'contextPanel.browser.tunnelFailed': 'Bu dev server\'a ulaşılamadı',
   'contextPanel.browser.remoteLoopback.title': '{url} OpenChamber makinesinde çalışıyor',
-  'contextPanel.browser.remoteLoopback.hint': 'Tarayıcı sekmesi orada çalışan sayfaları açamaz. Masaüstü uygulamasında açın.',
+  'contextPanel.browser.remoteLoopback.hint': 'Tarayıcı sekmesi orada çalışan sayfaları açamaz. OpenChamber masaüstü veya mobil uygulamasında açın.',
   'contextPanel.browser.tunnelFailedHint': '{url}, OpenChamber\'ın çalıştığı makinede çalışıyor ve onunla bağlantı kurulamadı. Kendi makinendeki hiçbir şey burada gösterilmiyor.',
   'contextPanel.browser.loadFailedUnknown': 'Sayfaya ulaşılamadı.',
   'contextPanel.browser.crashed': 'Bu sayfa yanıt vermeyi bıraktı',
@@ -1528,7 +1530,8 @@ export const dict = {
   'projectActions.toast.multipleServers': 'Birden fazla server başlatıldı — tarayıcı panelinden birini seç',
   'contextPanel.browser.devServers.justStarted': 'Az önce başlatıldı',
   'contextPanel.browser.devServers.unavailable': 'Çalışan dev server\'lar kontrol edilemedi.',
-  'contextPanel.browser.devServers.remoteOnly': 'Bunlar OpenChamber\'ı barındıran makinede çalışıyor. Açılmaları için masaüstü uygulaması gerekiyor.',
+  'contextPanel.browser.devServers.remoteOnly': 'Bunlar OpenChamber\'ı barındıran makinede çalışıyor. Açılmaları için masaüstü veya mobil uygulama gerekiyor.',
+  'contextPanel.browser.unsafeWebView': 'Bu telefonun Android System WebView\'i ile sayfalar güvenle gösterilemiyor. Google Play\'den güncelleyin.',
   'contextPanel.browser.annotate.toggle': 'Sayfaya açıklama ekle',
   'contextPanel.browser.annotate.intro': 'Bu, uygulama içi tarayıcıdan alınmış açıklamalı bir seçimdir.',
   'contextPanel.browser.annotate.attached': 'Açıklama sohbete eklendi',
@@ -1791,6 +1794,7 @@ export const dict = {
   'contextSidebar.tokens.cacheRead': 'Cache Okuma',
   'contextSidebar.tokens.cacheWrite': 'Cache Yazma',
   'contextSidebar.tokens.cacheHit': 'Cache Hit',
+  'chat.workStatus.replyCacheHit': 'Önbellek isabeti (yanıt)',
   'contextSidebar.actions.copyJson': 'JSON\'u Kopyala',
   'contextSidebar.actions.copy': 'Kopyala',
   'contextSidebar.actions.copied': 'Kopyalandı',
@@ -3555,6 +3559,7 @@ export const dict = {
   'chat.workStatus.breakdown.planCountSingle': '{count} plan',
   'chat.workStatus.breakdown.planCountPlural': '{count} plan',
   'chat.workStatus.linkedPlans.open': '{title} planını aç',
+  'chat.workStatus.loadedSkills.open': '{name} skill\'ini aç',
   'chat.workStatus.sections.open': 'Bölümleri seç',
   'chat.workStatus.sections.dialogTitle': 'Panel bölümleri',
   'chat.workStatus.sections.reorder': '{label} öğesini yeniden sıralamak için sürükleyin',
@@ -3806,6 +3811,7 @@ export const dict = {
   'chat.formCard.connectionLostReason': 'Sunucuyla bağlantı koptu ({reason}). Hiçbir şey gönderilmedi; bağlantı yeniden kurulunca tekrar deneyin.',
   'chat.formCard.notConnected': 'Henüz sunucuya bağlanılmadı. Hiçbir şey gönderilmedi; bağlantı kurulunca tekrar deneyin.',
   'chat.formCard.recoveredNotice': 'Tur beklerken durdu. Gönder, yeni bir ücretli tur başlatır.',
+  'chat.formCard.deferredNotice': 'Yanıtlamadan önce bir mesaj gönderdiniz. Gönder, yanıtınızı yeni bir mesaj olarak iletir.',
   'chat.formDock.progress': '{current} / {total}',
   'chat.formDock.waiting': '{count} tane daha bekliyor',
   'chat.formDock.back': 'Geri',

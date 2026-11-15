@@ -25,6 +25,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -227,6 +228,7 @@ export const dict: Record<I18nKey, string> = {
   ...usageStatsI18n.uk,
   ...webSearchI18n.uk,
   ...sessionWarmingI18n.uk,
+  ...connectionHeartbeatI18n.uk,
   ...compactionSettingsI18n.uk,
   ...heapSnapshotI18n.uk,
   ...consoleBudgetsI18n.uk,
@@ -1635,7 +1637,7 @@ export const dict: Record<I18nKey, string> = {
   "contextPanel.browser.waitingForServerHint": "Він ще не приймає зʼєднання. Сторінка завантажиться, щойно почне.",
   "contextPanel.browser.tunnelFailed": "Не вдалося дістатися цього dev-сервера",
   "contextPanel.browser.remoteLoopback.title": "{url} працює на машині з OpenChamber",
-  "contextPanel.browser.remoteLoopback.hint": "Вкладка браузера не може відкрити сторінки, що працюють там. Відкрийте це в десктопному застосунку.",
+  "contextPanel.browser.remoteLoopback.hint": "Вкладка браузера не може відкрити сторінки, що працюють там. Відкрийте це в десктопному або мобільному застосунку OpenChamber.",
   "contextPanel.browser.tunnelFailedHint": "{url} працює на машині, де запущено OpenChamber, і зʼєднання з ним відкрити не вдалося. Нічого зі своєї машини тут не показано.",
   "contextPanel.browser.loadFailedUnknown": "Не вдалося звернутися до сторінки.",
   "contextPanel.browser.crashed": "Ця сторінка перестала відповідати",
@@ -1644,7 +1646,8 @@ export const dict: Record<I18nKey, string> = {
   "projectActions.toast.multipleServers": "Запустилося кілька серверів — оберіть у панелі браузера",
   "contextPanel.browser.devServers.justStarted": "Щойно запущені",
   "contextPanel.browser.devServers.unavailable": "Не вдалося перевірити запущені dev-сервери.",
-  "contextPanel.browser.devServers.remoteOnly": "Вони працюють на машині, де запущено OpenChamber. Щоб їх відкрити, потрібен десктопний застосунок.",
+  "contextPanel.browser.devServers.remoteOnly": "Вони працюють на машині, де запущено OpenChamber. Щоб їх відкрити, потрібен десктопний або мобільний застосунок.",
+  "contextPanel.browser.unsafeWebView": "З Android System WebView цього телефона сторінки не можна показати безпечно. Оновіть його в Google Play.",
   "contextPanel.browser.annotate.toggle": "Анотувати сторінку",
   "contextPanel.browser.annotate.intro": "Це анотований фрагмент із вбудованого браузера.",
   "contextPanel.browser.annotate.attached": "Анотацію додано до чату",
@@ -1873,6 +1876,7 @@ export const dict: Record<I18nKey, string> = {
   "contextSidebar.tokens.cacheRead": "Читання кешу",
   "contextSidebar.tokens.cacheWrite": "Запис кешу",
   "contextSidebar.tokens.cacheHit": "Влучання в кеш",
+  "chat.workStatus.replyCacheHit": "Влучання в кеш (відповідь)",
   "contextSidebar.actions.copyJson": "Скопіювати JSON",
   "contextSidebar.actions.copy": "Копіювати",
   "contextSidebar.actions.copied": "Скопійовано",
@@ -3744,6 +3748,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.workStatus.breakdown.planCountSingle': '{count} план',
   'chat.workStatus.breakdown.planCountPlural': '{count} плани',
   'chat.workStatus.linkedPlans.open': 'Відкрити план {title}',
+  'chat.workStatus.loadedSkills.open': 'Відкрити скіл {name}',
   'chat.workStatus.sections.open': 'Обрати секції',
   'chat.workStatus.sections.dialogTitle': 'Секції панелі',
   'chat.workStatus.sections.reorder': 'Перетягніть {label}, щоб змінити порядок',
@@ -3809,6 +3814,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.formCard.connectionLostReason': 'Зʼєднання з сервером втрачено ({reason}). Нічого не надіслано; спробуйте ще раз, коли зʼєднання відновиться.',
   'chat.formCard.notConnected': 'Ще немає зʼєднання з сервером. Нічого не надіслано; спробуйте ще раз, коли зʼєднання встановиться.',
   'chat.formCard.recoveredNotice': 'Хід зупинився під час очікування. Надсилання розпочне новий платний хід.',
+  'chat.formCard.deferredNotice': 'Ви надіслали повідомлення до відповіді. Надсилання передасть вашу відповідь новим повідомленням.',
   'chat.formDock.progress': '{current} з {total}',
   'chat.formDock.waiting': 'ще {count} в черзі',
   'chat.formDock.back': 'Назад',

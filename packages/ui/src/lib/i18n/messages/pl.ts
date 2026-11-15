@@ -25,6 +25,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -217,6 +218,7 @@ export const dict: Record<I18nKey, string> = {
   ...usageStatsI18n.pl,
   ...webSearchI18n.pl,
   ...sessionWarmingI18n.pl,
+  ...connectionHeartbeatI18n.pl,
   ...compactionSettingsI18n.pl,
   ...heapSnapshotI18n.pl,
   ...consoleBudgetsI18n.pl,
@@ -2011,7 +2013,7 @@ export const dict: Record<I18nKey, string> = {
   'contextPanel.browser.waitingForServerHint': 'Jeszcze nie przyjmuje połączeń. Strona wczyta się, gdy tylko zacznie.',
   'contextPanel.browser.tunnelFailed': 'Nie udało się połączyć z tym serwerem deweloperskim',
   'contextPanel.browser.remoteLoopback.title': '{url} działa na komputerze z OpenChamber',
-  'contextPanel.browser.remoteLoopback.hint': 'Karta przeglądarki nie otworzy stron, które tam działają. Otwórz ją w aplikacji desktopowej.',
+  'contextPanel.browser.remoteLoopback.hint': 'Karta przeglądarki nie otworzy stron, które tam działają. Otwórz ją w aplikacji OpenChamber na komputer lub telefon.',
   'contextPanel.browser.tunnelFailedHint': '{url} działa na maszynie, na której jest OpenChamber, i nie udało się otworzyć do niej połączenia. Nic z twojej własnej maszyny nie jest tu pokazywane.',
   'contextPanel.browser.loadFailedUnknown': 'Nie udało się połączyć ze stroną.',
   'contextPanel.browser.crashed': 'Ta strona przestała odpowiadać',
@@ -2020,7 +2022,8 @@ export const dict: Record<I18nKey, string> = {
   'projectActions.toast.multipleServers': 'Uruchomiło się kilka serwerów — wybierz jeden w panelu przeglądarki',
   'contextPanel.browser.devServers.justStarted': 'Właśnie uruchomione',
   'contextPanel.browser.devServers.unavailable': 'Nie udało się sprawdzić działających serwerów deweloperskich.',
-  'contextPanel.browser.devServers.remoteOnly': 'Działają na komputerze, na którym uruchomiony jest OpenChamber. Do ich otwarcia potrzebna jest aplikacja desktopowa.',
+  'contextPanel.browser.devServers.remoteOnly': 'Działają na komputerze, na którym uruchomiony jest OpenChamber. Do ich otwarcia potrzebna jest aplikacja na komputer lub telefon.',
+  'contextPanel.browser.unsafeWebView': 'Android System WebView na tym telefonie nie pozwala bezpiecznie wyświetlać stron. Zaktualizuj go w Google Play.',
   'contextPanel.browser.annotate.toggle': 'Dodaj adnotację do strony',
   'contextPanel.browser.annotate.intro': 'To jest opatrzony adnotacją fragment z wbudowanej przeglądarki.',
   'contextPanel.browser.annotate.attached': 'Adnotacja dołączona do czatu',
@@ -2110,6 +2113,7 @@ export const dict: Record<I18nKey, string> = {
   'contextSidebar.tokens.cacheRead': 'Odczyt cache',
   'contextSidebar.tokens.cacheWrite': 'Zapis cache',
   'contextSidebar.tokens.cacheHit': 'Trafienie cache',
+  'chat.workStatus.replyCacheHit': 'Trafienie cache (odpowiedź)',
   'contextSidebar.tokens.input': 'Wejście',
   'contextSidebar.tokens.output': 'Wyjście',
   'contextSidebar.tokens.reasoning': 'Rozumowanie',
@@ -3758,6 +3762,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.workStatus.breakdown.planCountSingle': '{count} plan',
   'chat.workStatus.breakdown.planCountPlural': '{count} plany',
   'chat.workStatus.linkedPlans.open': 'Otwórz plan {title}',
+  'chat.workStatus.loadedSkills.open': 'Otwórz umiejętność {name}',
   'chat.workStatus.sections.open': 'Wybierz sekcje',
   'chat.workStatus.sections.dialogTitle': 'Sekcje panelu',
   'chat.workStatus.sections.reorder': 'Przeciągnij {label}, aby zmienić kolejność',
@@ -3813,6 +3818,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.formCard.connectionLostReason': 'Utracono połączenie z serwerem ({reason}). Nic nie zostało wysłane; spróbuj ponownie po przywróceniu połączenia.',
   'chat.formCard.notConnected': 'Brak jeszcze połączenia z serwerem. Nic nie zostało wysłane; spróbuj ponownie po nawiązaniu połączenia.',
   'chat.formCard.recoveredNotice': 'Tura zatrzymała się podczas oczekiwania. Wysłanie rozpocznie nową płatną turę.',
+  'chat.formCard.deferredNotice': 'Wysłano wiadomość przed udzieleniem odpowiedzi. Wysłanie przekaże odpowiedź jako nową wiadomość.',
   'chat.formDock.progress': '{current} z {total}',
   'chat.formDock.waiting': '{count} więcej czeka',
   'chat.formDock.back': 'Wstecz',

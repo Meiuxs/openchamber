@@ -24,6 +24,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -216,6 +217,7 @@ export const dict = {
   ...usageStatsI18n.fr,
   ...webSearchI18n.fr,
   ...sessionWarmingI18n.fr,
+  ...connectionHeartbeatI18n.fr,
   ...compactionSettingsI18n.fr,
   ...heapSnapshotI18n.fr,
   ...consoleBudgetsI18n.fr,
@@ -1670,6 +1672,7 @@ export const dict = {
   'contextSidebar.tokens.cacheRead': 'Lecture du cache',
   'contextSidebar.tokens.cacheWrite': 'Écriture du cache',
   'contextSidebar.tokens.cacheHit': 'Succès du cache',
+  'chat.workStatus.replyCacheHit': 'Succès du cache (réponse)',
   'contextSidebar.actions.copyJson': 'Copier JSON',
   'contextSidebar.actions.copy': 'Copie',
   'contextSidebar.actions.copied': 'Copié',
@@ -3527,7 +3530,7 @@ export const dict = {
   'contextPanel.browser.waitingForServerHint': 'Il n’accepte pas encore de connexions. La page se chargera dès que ce sera le cas.',
   'contextPanel.browser.tunnelFailed': 'Ce serveur de dev n’a pas pu être atteint',
   'contextPanel.browser.remoteLoopback.title': '{url} est sur la machine d’OpenChamber',
-  'contextPanel.browser.remoteLoopback.hint': 'Un onglet de navigateur ne peut pas ouvrir les pages qui y tournent. Ouvrez-la dans l’app de bureau.',
+  'contextPanel.browser.remoteLoopback.hint': 'Un onglet de navigateur ne peut pas ouvrir les pages qui y tournent. Ouvrez-la dans l’app OpenChamber de bureau ou mobile.',
   'contextPanel.browser.tunnelFailedHint': '{url} tourne sur la machine où se trouve OpenChamber, et la connexion vers elle n’a pas pu être ouverte. Rien de votre propre machine n’est affiché ici.',
   'contextPanel.browser.loadFailedUnknown': 'La page n’a pas pu être atteinte.',
   'contextPanel.browser.crashed': 'Cette page ne répond plus',
@@ -3536,7 +3539,8 @@ export const dict = {
   'projectActions.toast.multipleServers': 'Plusieurs serveurs ont démarré — choisissez-en un dans le panneau navigateur',
   'contextPanel.browser.devServers.justStarted': 'Démarrés à l’instant',
   'contextPanel.browser.devServers.unavailable': 'Impossible de vérifier les serveurs de développement actifs.',
-  'contextPanel.browser.devServers.remoteOnly': 'Ils tournent sur la machine qui héberge OpenChamber. Les ouvrir nécessite l’application de bureau.',
+  'contextPanel.browser.devServers.remoteOnly': 'Ils tournent sur la machine qui héberge OpenChamber. Les ouvrir nécessite l’application de bureau ou mobile.',
+  'contextPanel.browser.unsafeWebView': 'Le Android System WebView de ce téléphone ne permet pas d’afficher les pages en toute sécurité. Mettez-le à jour dans Google Play.',
   'contextPanel.browser.annotate.toggle': 'Annoter la page',
   'contextPanel.browser.annotate.intro': 'Ceci est une sélection annotée du navigateur intégré.',
   'contextPanel.browser.annotate.attached': 'Annotation jointe à la discussion',
@@ -3752,6 +3756,7 @@ export const dict = {
   'chat.workStatus.breakdown.planCountSingle': '{count} plan',
   'chat.workStatus.breakdown.planCountPlural': '{count} plans',
   'chat.workStatus.linkedPlans.open': 'Ouvrir le plan {title}',
+  'chat.workStatus.loadedSkills.open': 'Ouvrir la compétence {name}',
   'chat.workStatus.sections.open': 'Choisir les sections',
   'chat.workStatus.sections.dialogTitle': 'Sections du panneau',
   'chat.workStatus.sections.reorder': 'Faites glisser {label} pour réordonner',
@@ -3807,6 +3812,7 @@ export const dict = {
   'chat.formCard.connectionLostReason': 'La connexion au serveur a été perdue ({reason}). Rien n’a été envoyé ; réessayez une fois la connexion rétablie.',
   'chat.formCard.notConnected': 'Pas encore connecté au serveur. Rien n’a été envoyé ; réessayez une fois la connexion établie.',
   'chat.formCard.recoveredNotice': 'Le tour s\'est arrêté pendant l\'attente. Envoyer lance un nouveau tour payant.',
+  'chat.formCard.deferredNotice': 'Vous avez envoyé un message avant de répondre. Envoyer transmet votre réponse dans un nouveau message.',
   'chat.formDock.progress': '{current} sur {total}',
   'chat.formDock.waiting': '{count} de plus en attente',
   'chat.formDock.back': 'Retour',

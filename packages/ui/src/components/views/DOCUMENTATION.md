@@ -112,6 +112,10 @@ their scope: the work-status Changes row counts working-tree changes and opens
 `working`, and a file opened from the Git panel or a tool card opens its own
 working or staged diff.
 
+The comparison picker puts the bound remote's default branch first, without
+changing automatic base detection. Other remotes' defaults keep their place:
+a base on a remote other than the bound one is rejected.
+
 A status read re-reads the Branch file list (one request). Each expanded file
 re-reads its patch only when its own `revision` from that listing moved
 (`branchPathRevisions` into `useRangeKeyedCache`), so an agent's read-only shell
@@ -678,3 +682,52 @@ reads them from `GET /api/git/range-file-versions` or from the change request
 route with `binary=true`. A provider that ignores the flag, as an extension
 provider may, answers text that is no data URL, and the diff keeps the binary
 placeholder.
+
+## What a surface does while its zone animates
+
+A context zone opens, closes, expands and is dragged over an animation
+(`lib/layoutAnimation.ts`). Work a surface does inside it shows as dropped
+frames, so the heavy part waits for the end or is spread over frames.
+
+### Why the stacked diff list mounts a batch of entries per frame
+
+`DiffView` mounts the first `STACKED_ENTRIES_FIRST` file entries and then
+`STACKED_ENTRIES_PER_FRAME` more on each frame until the list is complete. All
+at once, the first open of an 88-file change was one 100 to 120 ms frame. A
+request to scroll to a file mounts every entry in that commit, because its
+entry may be past the limit and the alignment waits only 20 frames for it.
+Virtualizing the list was the alternative; it changes the scroller, the
+sticky headers and find, for a cost paid once per list.
+
+### Why a file that arrives mid-animation renders after it
+
+`FilesView` waits for the layout to settle (`whenLayoutSettled`) before it
+applies a file it has just read, and checks again that the load is still the
+current one. A long Markdown file's first render takes 50 to 60 ms; applied
+when the read returned, about 70 ms into the opening animation, it stopped the
+panel halfway. The cost is the same after the animation, where nothing moves.
+
+### Why a file surface leaves `inert` on open only with an editor showing
+
+Taking a zone's card out of `inert` restyles everything in it. A CodeMirror
+editor is re-attached as the zone opens, so its exit from `inert` is cheap in
+that commit and expensive later (`zoneInteractiveContext.ts`). A file shown
+rendered re-attaches nothing: leaving `inert` at once restyled the whole card
+in the frame of the click (25 ms for a long Markdown file), so it follows the
+other surfaces and leaves `inert` when the animation ends. `FilesView` says
+which case it is by rendering `DetachableEditorMarker` beside its editor.
+
+### Why the browser page keeps its width while its stage moves
+
+A `<webview>` page is drawn by another process, and the app's frame waits for
+it at every new size. `useSteadyStage` pins the page's width for as long as a
+side column animates or is dragged and lets the stage clip it: unchanged while
+the stage shrinks, one step (`GROW_STEP`) wider when the stage outgrows it,
+and the stage's width again once the layout settles. Following the stage on
+every frame, an expand with a site open drew 3 to 5 of the animation's 15
+frames in the desktop app. A zone that grows to a size it already knows (an
+expand) publishes it as `data-zone-size`, and the page takes its final width
+before the animation starts, so nothing snaps at the end. A drag has no final
+size: there the page takes the stage's width whenever the stage rests for
+`DRAG_REST_MS`, since a page held wider than its panel until the release read
+as broken.

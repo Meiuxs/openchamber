@@ -238,6 +238,12 @@ export interface SourceControlAuthAccount {
   user: SourceControlUser;
   scope?: string;
   current: boolean;
+  /**
+   * Whether a binding may pick this account now. Stored accounts are always
+   * usable; a gh login only while its host's switch is on. Absent from older
+   * servers and other providers, where `current` still decides a CLI login.
+   */
+  usable?: boolean;
   source: 'oauth' | 'pat' | 'cli';
   status: 'valid' | 'invalid';
 }
@@ -738,6 +744,18 @@ export interface CreateChangeRequestInput extends SourceControlMutationContext<S
 }
 
 export interface UpdateChangeRequestInput extends SourceControlMutationContext<SourceControlExistingMutationTarget> {
+  title: string;
+  body?: string;
+}
+
+/** An issue's title and body, replaced together; an empty body clears it. */
+export interface UpdateIssueInput extends SourceControlMutationContext<SourceControlExistingMutationTarget> {
+  title: string;
+  body?: string;
+}
+
+/** A discussion's title and body, replaced together; an empty body clears it. */
+export interface UpdateDiscussionInput extends SourceControlMutationContext<SourceControlExistingMutationTarget> {
   title: string;
   body?: string;
 }

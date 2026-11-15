@@ -25,6 +25,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -217,6 +218,7 @@ export const dict: Record<I18nKey, string> = {
   ...usageStatsI18n['zh-CN'],
   ...webSearchI18n['zh-CN'],
   ...sessionWarmingI18n['zh-CN'],
+  ...connectionHeartbeatI18n['zh-CN'],
   ...compactionSettingsI18n['zh-CN'],
   ...heapSnapshotI18n['zh-CN'],
   ...consoleBudgetsI18n['zh-CN'],
@@ -1645,7 +1647,7 @@ export const dict: Record<I18nKey, string> = {
   'contextPanel.browser.waitingForServerHint': '它还没有开始接受连接。一旦可用，本页就会加载。',
   'contextPanel.browser.tunnelFailed': '无法连接到这个开发服务器',
   'contextPanel.browser.remoteLoopback.title': '{url} 在 OpenChamber 所在的机器上',
-  'contextPanel.browser.remoteLoopback.hint': '浏览器标签页无法打开在那里运行的页面。请在桌面应用中打开。',
+  'contextPanel.browser.remoteLoopback.hint': '浏览器标签页无法打开在那里运行的页面。请在 OpenChamber 桌面应用或移动应用中打开。',
   'contextPanel.browser.tunnelFailedHint': '{url} 运行在 OpenChamber 所在的机器上，无法与其建立连接。这里不会显示你本机上的任何内容。',
   'contextPanel.browser.loadFailedUnknown': '无法访问该页面。',
   'contextPanel.browser.crashed': '此页面已停止响应',
@@ -1654,7 +1656,8 @@ export const dict: Record<I18nKey, string> = {
   'projectActions.toast.multipleServers': '启动了多个服务器 — 请在浏览器面板中选择',
   'contextPanel.browser.devServers.justStarted': '刚刚启动',
   'contextPanel.browser.devServers.unavailable': '无法检查正在运行的开发服务器。',
-  'contextPanel.browser.devServers.remoteOnly': '它们运行在托管 OpenChamber 的那台机器上。要打开它们需要桌面应用。',
+  'contextPanel.browser.devServers.remoteOnly': '它们运行在托管 OpenChamber 的那台机器上。要打开它们需要桌面应用或移动应用。',
+  'contextPanel.browser.unsafeWebView': '此手机的 Android System WebView 无法安全地显示页面。请在 Google Play 中更新。',
   'contextPanel.browser.annotate.toggle': '标注页面',
   'contextPanel.browser.annotate.intro': '这是来自应用内浏览器的标注选区。',
   'contextPanel.browser.annotate.attached': '标注已附加到聊天',
@@ -1883,6 +1886,7 @@ export const dict: Record<I18nKey, string> = {
   'contextSidebar.tokens.cacheRead': '缓存读取',
   'contextSidebar.tokens.cacheWrite': '缓存写入',
   'contextSidebar.tokens.cacheHit': '缓存命中',
+  'chat.workStatus.replyCacheHit': '缓存命中（回复）',
   'contextSidebar.actions.copyJson': '复制 JSON',
   'contextSidebar.actions.copy': '复制',
   'contextSidebar.actions.copied': '已复制',
@@ -3754,6 +3758,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.workStatus.breakdown.planCountSingle': '{count} 个计划',
   'chat.workStatus.breakdown.planCountPlural': '{count} 个计划',
   'chat.workStatus.linkedPlans.open': '打开计划 {title}',
+  'chat.workStatus.loadedSkills.open': '打开技能 {name}',
   'chat.workStatus.sections.open': '选择板块',
   'chat.workStatus.sections.dialogTitle': '面板板块',
   'chat.workStatus.sections.reorder': '拖动 {label} 以重新排序',
@@ -3809,6 +3814,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.formCard.connectionLostReason': '与服务器的连接已断开（{reason}）。未发送任何内容；重新连接后请重试。',
   'chat.formCard.notConnected': '尚未连接到服务器。未发送任何内容；连接后请重试。',
   'chat.formCard.recoveredNotice': '等待期间本轮已停止。提交将开启新一轮付费对话。',
+  'chat.formCard.deferredNotice': '你在回答前发送了一条消息。提交后，你的答案将作为一条新消息发送。',
   'chat.formDock.progress': '第 {current} / {total}',
   'chat.formDock.waiting': '还有 {count} 个等待中',
   'chat.formDock.back': '上一步',

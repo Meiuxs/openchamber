@@ -27,6 +27,7 @@ const SEARCH_TARGET_TABS = new Map<string, ProjectSettingsTab>([
   ['projects.gitlab-review-model', 'general'],
   ['projects.gitlab-templates', 'general'],
   ['projects.gitlab-bot-account', 'general'],
+  ['projects.notes-todos.repository', 'general'],
   ['projects.shared', 'general'],
   ['projects.shared.plansDir', 'general'],
   ['projects.actions', 'actions'],

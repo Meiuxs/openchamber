@@ -105,8 +105,15 @@ cancels a question the reader never saw. The line is not a collapsed
 and would overwrite what the card saved. The full panel still shows beside or
 instead of a card in three cases: a chat pinned in the side panel (see below),
 a session whose transcript is still loading, and an expanded composer. There
-it can overwrite the card's saved draft, for example when a reconnect hands it
-the same form again, as either of two docks on one form can today.
+it saves the shared draft when its own answers or its step change. Its draft
+key follows the form's id and session, not the form object, so a reconnect
+that hands it the same form again no longer saves over the card's answer or
+another dock's. A second dock whose step moves (Next or Back) still saves its
+own values over the shared draft. The panel is also keyed on the runtime:
+App and MobileApp remount on a runtime switch, VS Code and the desktop mini
+chat do not, and two runtimes can hold a form with the same id, session and directory, so a
+switch starts the panel over from the new runtime's draft instead of saving the
+old runtime's answers into it.
 The setting is device-local, not a
 synced preference: syncing it would need a server-side validator, and a phone
 and a desktop can reasonably want different answers. A chat pinned in the
@@ -254,7 +261,10 @@ composer send the whole queue now, as one visible message (#4746). While a turn
 runs only Enter does this: the send button gives way to Stop until the turn
 ends, and a row's own Send sends just that message. An empty-composer send
 dismisses open permission requests and the forms that hold a turn, as a direct
-composer send does; a row's own Send is queued-only and dismisses nothing.
+composer send does, and defers the session's own waiting question when the send
+goes out as a plain prompt to that session (`sync/DOCUMENTATION.md`, blocking
+requests; a command, or a local prompt command such as `/summary`, leaves it
+pending); a row's own Send is queued-only and dismisses nothing.
 Scheduled items stay visible in the queue rows with reorder and remove, but no
 edit or send action.
 
@@ -720,6 +730,11 @@ pending comment above the composer) are `components/comments/CommentTextEditor`:
 this editor with comment keys (Enter submits, Escape cancels, both after an IME
 composition), the `#` snippet picker and image paste, where a pasted image's
 citation is a chip at once through `pendingAttachmentFilenames`.
+
+A source-control item's own text is written in this editor too, through
+`components/references/ReferenceMarkdownEditor`: no agent, file, slash or
+snippet token resolves (they are the host's users and paths, not this
+workspace's), no image paste, Enter breaks the line and Mod+Enter saves.
 
 Diff, file editor and file preview line comments (`InlineCommentInput`) stay a
 textarea with the same keys, snippet picker and image paste, and show the
@@ -1829,9 +1844,11 @@ the Ctrl/Cmd+Enter send behavior.
 
 Shift+Enter at the end of a numbered item continues the list: the next line
 carries the following number with the same indentation and delimiter (`1.` →
-`2.`, `1)` → `2)`). Anywhere else Shift+Enter is the plain newline above,
-including numbered text inside a code fence: `text.ts` reads fences through
-`matchFenceOpen` and `isFenceClose`, the same boundaries the highlighter uses,
+`2.`, `1)` → `2)`). On an item with no text the key ends the list instead: the
+marker and its indentation are removed, so a nested item leaves the list too,
+and the caret stays on the empty line. Anywhere else Shift+Enter is the plain
+newline above, including numbered text inside a code fence: `text.ts` reads
+fences through `matchFenceOpen` and `isFenceClose`, the same boundaries the highlighter uses,
 so an unclosed fence runs to the end of the prompt.
 `getOrderedListContinuationEdit` in `text.ts` owns that rule and runs inside the
 same markdown-source branch as auto-pairing, so autocomplete and Alt/Option+Enter

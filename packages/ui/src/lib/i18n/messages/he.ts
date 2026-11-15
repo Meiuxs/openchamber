@@ -24,6 +24,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -1562,7 +1563,7 @@ export const dict = {
   'contextPanel.browser.waitingForServerHint': 'הוא עדיין לא מקבל חיבורים. הדף ייטען ברגע שיתחיל לקבל.',
   'contextPanel.browser.tunnelFailed': 'לא ניתן היה להגיע לשרת הפיתוח הזה',
   'contextPanel.browser.remoteLoopback.title': '{url} נמצא במחשב של OpenChamber',
-  'contextPanel.browser.remoteLoopback.hint': 'כרטיסיית דפדפן לא יכולה לפתוח דפים שרצים שם. יש לפתוח זאת באפליקציית שולחן העבודה.',
+  'contextPanel.browser.remoteLoopback.hint': 'כרטיסיית דפדפן לא יכולה לפתוח דפים שרצים שם. יש לפתוח זאת באפליקציית OpenChamber לשולחן העבודה או לנייד.',
   'contextPanel.browser.tunnelFailedHint': '{url} רץ במחשב שבו OpenChamber פועל, ולא ניתן היה לפתוח אליו חיבור. שום דבר מהמחשב שלך לא מוצג כאן.',
   'contextPanel.browser.loadFailedUnknown': 'לא ניתן היה להגיע לדף.',
   'contextPanel.browser.crashed': 'הדף הזה הפסיק להגיב',
@@ -1571,7 +1572,8 @@ export const dict = {
   'projectActions.toast.multipleServers': 'כמה שרתים הופעלו — יש לבחור אחד בחלונית הדפדפן',
   'contextPanel.browser.devServers.justStarted': 'הופעל זה עתה',
   'contextPanel.browser.devServers.unavailable': 'לא ניתן היה לבדוק אם יש שרתי פיתוח פעילים.',
-  'contextPanel.browser.devServers.remoteOnly': 'הם רצים במחשב שמארח את OpenChamber. כדי לפתוח אותם צריך את אפליקציית שולחן העבודה.',
+  'contextPanel.browser.devServers.remoteOnly': 'הם רצים במחשב שמארח את OpenChamber. כדי לפתוח אותם צריך את אפליקציית שולחן העבודה או את אפליקציית הנייד.',
+  'contextPanel.browser.unsafeWebView': 'אי אפשר להציג דפים בבטחה עם Android System WebView של הטלפון הזה. יש לעדכן אותו ב-Google Play.',
   'contextPanel.browser.annotate.toggle': 'הוסף הערות לדף',
   'contextPanel.browser.annotate.intro': 'זוהי בחירה עם הערות מהדפדפן המובנה באפליקציה.',
   'contextPanel.browser.annotate.attached': 'ההערה צורפה לצ\'אט',
@@ -1820,6 +1822,7 @@ export const dict = {
   'contextSidebar.tokens.cacheRead': 'קריאה מהמטמון',
   'contextSidebar.tokens.cacheWrite': 'כתיבה למטמון',
   'contextSidebar.tokens.cacheHit': 'פגיעה במטמון',
+  'chat.workStatus.replyCacheHit': 'פגיעה במטמון (תשובה)',
   'contextSidebar.actions.copyJson': 'העתק JSON',
   'contextSidebar.actions.copy': 'העתק',
   'contextSidebar.actions.copied': 'הועתק',
@@ -3656,6 +3659,7 @@ export const dict = {
   'chat.workStatus.breakdown.planCountSingle': 'תוכנית {count}',
   'chat.workStatus.breakdown.planCountPlural': '{count} תוכניות',
   'chat.workStatus.linkedPlans.open': 'פתיחת התוכנית {title}',
+  'chat.workStatus.loadedSkills.open': 'פתיחת המיומנות {name}',
   'chat.workStatus.sections.open': 'בחר מקטעים',
   'chat.workStatus.sections.dialogTitle': 'מקטעי החלונית',
   'chat.workStatus.sections.reorder': 'גרור את {label} כדי לשנות את הסדר',
@@ -3688,6 +3692,7 @@ export const dict = {
   'chat.formCard.connectionLostReason': 'החיבור לשרת אבד ({reason}). לא נשלח דבר; נסה שוב אחרי שהחיבור יחזור.',
   'chat.formCard.notConnected': 'עדיין אין חיבור לשרת. לא נשלח דבר; נסה שוב אחרי שהחיבור ייווצר.',
   'chat.formCard.recoveredNotice': 'התור נעצר בזמן ההמתנה. שליחה תתחיל תור חדש בתשלום.',
+  'chat.formCard.deferredNotice': 'שלחת הודעה לפני שענית. שליחה תעביר את התשובה שלך כהודעה חדשה.',
   'chat.formDock.progress': '{current} מתוך {total}',
   'chat.formDock.waiting': 'עוד {count} ממתינות',
   'chat.formDock.back': 'חזרה',
@@ -3958,6 +3963,7 @@ export const dict = {
   ...usageStatsI18n.he,
   ...webSearchI18n.he,
   ...sessionWarmingI18n.he,
+  ...connectionHeartbeatI18n.he,
   ...compactionSettingsI18n.he,
   ...heapSnapshotI18n.he,
   ...consoleBudgetsI18n.he,

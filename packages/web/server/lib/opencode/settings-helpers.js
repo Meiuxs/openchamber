@@ -539,6 +539,10 @@ export const createSettingsHelpers = (dependencies) => {
     if (typeof candidate.sidebarKeepPinnedInPlace === 'boolean') {
       result.sidebarKeepPinnedInPlace = candidate.sidebarKeepPinnedInPlace;
     }
+    if (Number.isFinite(candidate.sidebarSessionBatchSize)) {
+      // The range of `SIDEBAR_SESSION_BATCH_MIN`/`MAX` in the UI's sidebarSections.ts.
+      result.sidebarSessionBatchSize = Math.max(3, Math.min(50, Math.round(candidate.sidebarSessionBatchSize)));
+    }
     if (SIDEBAR_PROJECT_SORT_ORDER_VALUES.has(candidate.sidebarProjectSortOrder)) {
       result.sidebarProjectSortOrder = candidate.sidebarProjectSortOrder;
     }
@@ -712,6 +716,9 @@ export const createSettingsHelpers = (dependencies) => {
     }
     if (candidate.terminalCloseOnExit === true || candidate.terminalCloseOnExit === false) {
       result.terminalCloseOnExit = candidate.terminalCloseOnExit;
+    }
+    if (candidate.terminalOpenOnProjectAction === true || candidate.terminalOpenOnProjectAction === false) {
+      result.terminalOpenOnProjectAction = candidate.terminalOpenOnProjectAction;
     }
     if (typeof candidate.largeTextPasteBehavior === 'string') {
       const mode = candidate.largeTextPasteBehavior.trim();
@@ -1024,6 +1031,9 @@ export const createSettingsHelpers = (dependencies) => {
     if (candidate.agentUsageToolEnabled === true || candidate.agentUsageToolEnabled === false) {
       result.agentUsageToolEnabled = candidate.agentUsageToolEnabled;
     }
+    if (candidate.agentTerminalToolEnabled === true || candidate.agentTerminalToolEnabled === false) {
+      result.agentTerminalToolEnabled = candidate.agentTerminalToolEnabled;
+    }
     if (typeof candidate.isolatedSpacesEnabled === 'boolean') {
       result.isolatedSpacesEnabled = candidate.isolatedSpacesEnabled;
     }
@@ -1094,6 +1104,10 @@ export const createSettingsHelpers = (dependencies) => {
     if (typeof candidate.promptNavigatorEnabled === 'boolean') {
       result.promptNavigatorEnabled = candidate.promptNavigatorEnabled;
     }
+    if (candidate.chatWidth === 'default' || candidate.chatWidth === 'wider' || candidate.chatWidth === 'full') {
+      result.chatWidth = candidate.chatWidth;
+    }
+    // Legacy: older clients still write the boolean; the UI reads it as chatWidth.
     if (typeof candidate.wideChatLayoutEnabled === 'boolean') {
       result.wideChatLayoutEnabled = candidate.wideChatLayoutEnabled;
     }

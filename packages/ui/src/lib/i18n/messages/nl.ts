@@ -24,6 +24,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -216,6 +217,7 @@ export const dict = {
   ...usageStatsI18n.nl,
   ...webSearchI18n.nl,
   ...sessionWarmingI18n.nl,
+  ...connectionHeartbeatI18n.nl,
   ...compactionSettingsI18n.nl,
   ...heapSnapshotI18n.nl,
   ...consoleBudgetsI18n.nl,
@@ -1639,7 +1641,7 @@ export const dict = {
   'contextPanel.browser.waitingForServerHint': 'De server accepteert nog geen verbindingen. Deze pagina laadt zodra dat wel zo is.',
   'contextPanel.browser.tunnelFailed': 'Deze dev server was niet bereikbaar',
   'contextPanel.browser.remoteLoopback.title': '{url} draait op de OpenChamber-machine',
-  'contextPanel.browser.remoteLoopback.hint': 'Een browsertabblad kan pagina\'s die daar draaien niet openen. Open deze in de desktop-app.',
+  'contextPanel.browser.remoteLoopback.hint': 'Een browsertabblad kan pagina\'s die daar draaien niet openen. Open deze in de OpenChamber-desktop- of mobiele app.',
   'contextPanel.browser.tunnelFailedHint': '{url} draait op de machine waarop OpenChamber draait en de verbinding ermee kon niet worden geopend. Er wordt niets van uw eigen machine getoond.',
   'contextPanel.browser.loadFailedUnknown': 'De pagina was niet bereikbaar.',
   'contextPanel.browser.crashed': 'Deze pagina reageert niet meer',
@@ -1648,7 +1650,8 @@ export const dict = {
   'projectActions.toast.multipleServers': 'Meerdere servers gestart — kies er een in het browserpaneel',
   'contextPanel.browser.devServers.justStarted': 'Net gestart',
   'contextPanel.browser.devServers.unavailable': 'Kan niet controleren welke dev servers actief zijn.',
-  'contextPanel.browser.devServers.remoteOnly': 'Deze draaien op de machine die OpenChamber host. Om ze te openen is de desktop-app nodig.',
+  'contextPanel.browser.devServers.remoteOnly': 'Deze draaien op de machine die OpenChamber host. Om ze te openen is de desktop- of mobiele app nodig.',
+  'contextPanel.browser.unsafeWebView': 'Met de Android System WebView van deze telefoon kunnen pagina\'s niet veilig worden getoond. Werk hem bij in Google Play.',
   'contextPanel.browser.annotate.toggle': 'Pagina annoteren',
   'contextPanel.browser.annotate.intro': 'Dit is een geannoteerde selectie uit de browser in de app.',
   'contextPanel.browser.annotate.attached': 'Annotatie aan de chat toegevoegd',
@@ -1912,6 +1915,7 @@ export const dict = {
   'contextSidebar.tokens.cacheRead': 'Cache gelezen',
   'contextSidebar.tokens.cacheWrite': 'Cache geschreven',
   'contextSidebar.tokens.cacheHit': 'Cachehit',
+  'chat.workStatus.replyCacheHit': 'Cachehit (antwoord)',
   'contextSidebar.actions.copyJson': 'JSON kopiëren',
   'contextSidebar.actions.copy': 'Kopiëren',
   'contextSidebar.actions.copied': 'Gekopieerd',
@@ -3753,6 +3757,7 @@ export const dict = {
   'chat.workStatus.breakdown.planCountSingle': '{count} plan',
   'chat.workStatus.breakdown.planCountPlural': '{count} plannen',
   'chat.workStatus.linkedPlans.open': 'Plan {title} openen',
+  'chat.workStatus.loadedSkills.open': 'Skill {name} openen',
   'chat.workStatus.sections.open': 'Secties kiezen',
   'chat.workStatus.sections.dialogTitle': 'Paneelsecties',
   'chat.workStatus.sections.reorder': 'Sleep {label} om te herschikken',
@@ -3789,6 +3794,7 @@ export const dict = {
   'chat.formCard.connectionLostReason': 'De verbinding met de server is verbroken ({reason}). Er is niets verzonden; probeer het opnieuw zodra de verbinding hersteld is.',
   'chat.formCard.notConnected': 'Nog niet verbonden met de server. Er is niets verzonden; probeer het opnieuw zodra er verbinding is.',
   'chat.formCard.recoveredNotice': 'De beurt is tijdens het wachten gestopt. Verzenden start een nieuwe betaalde beurt.',
+  'chat.formCard.deferredNotice': 'U hebt een bericht verstuurd voordat u antwoordde. Versturen stuurt uw antwoord als nieuw bericht.',
   'chat.formDock.progress': '{current} van {total}',
   'chat.formDock.waiting': 'nog {count} in de wachtrij',
   'chat.formDock.back': 'Terug',

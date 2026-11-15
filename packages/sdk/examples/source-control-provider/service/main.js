@@ -130,7 +130,9 @@ var HOST_PUSH_TYPES = new Set([
   "file-open",
   "file-snapshot",
   "file-saved",
-  "generate-late"
+  "generate-late",
+  "microphone-audio",
+  "microphone-ended"
 ]);
 // packages/sdk/src/service-providers.ts
 var BROWSER_CONTROL_ACTIONS = [
@@ -919,6 +921,13 @@ var perform = async (call, input) => {
       await api(call, "PATCH", `${repo}/pulls/${providerTarget.number}`, { body: payload });
       return {};
     }
+    case "issue-update": {
+      const payload = { title: text(normalized, "title") };
+      if (Object.hasOwn(normalized, "body"))
+        payload.body = text(normalized, "body");
+      await api(call, "PATCH", `${repo}/issues/${providerTarget.number}`, { body: payload });
+      return {};
+    }
     case "change-request-merge": {
       const payload = { Do: text(normalized, "method") || "merge" };
       const headSha = text(target, "headSha");
@@ -960,6 +969,11 @@ var reconcile = async (call, input) => {
     case "change-request-update": {
       const pull = await readPull(call, providerTarget, providerTarget.number ?? 0);
       const landed = pull.title === text(normalized, "title") && (!Object.hasOwn(normalized, "body") || (pull.body ?? "") === text(normalized, "body"));
+      return landed ? { state: "succeeded", result: {} } : { state: "outcome-unknown" };
+    }
+    case "issue-update": {
+      const { data } = await api(call, "GET", `${repo}/issues/${providerTarget.number}`);
+      const landed = data.title === text(normalized, "title") && (!Object.hasOwn(normalized, "body") || (data.body ?? "") === text(normalized, "body"));
       return landed ? { state: "succeeded", result: {} } : { state: "outcome-unknown" };
     }
     case "change-request-merge": {

@@ -24,6 +24,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -216,6 +217,7 @@ export const dict = {
   ...usageStatsI18n.de,
   ...webSearchI18n.de,
   ...sessionWarmingI18n.de,
+  ...connectionHeartbeatI18n.de,
   ...compactionSettingsI18n.de,
   ...heapSnapshotI18n.de,
   ...consoleBudgetsI18n.de,
@@ -1385,7 +1387,7 @@ export const dict = {
   'contextPanel.browser.waitingForServerHint': 'Er nimmt noch keine Verbindungen an. Die Seite lädt, sobald er es tut.',
   'contextPanel.browser.tunnelFailed': 'Dieser Dev-Server war nicht erreichbar',
   'contextPanel.browser.remoteLoopback.title': '{url} läuft auf dem OpenChamber-Rechner',
-  'contextPanel.browser.remoteLoopback.hint': 'Ein Browser-Tab kann dort laufende Seiten nicht öffnen. Öffne sie in der Desktop-App.',
+  'contextPanel.browser.remoteLoopback.hint': 'Ein Browser-Tab kann dort laufende Seiten nicht öffnen. Öffne sie in der OpenChamber-Desktop- oder Mobil-App.',
   'contextPanel.browser.tunnelFailedHint': '{url} läuft auf der Maschine, auf der OpenChamber läuft, und die Verbindung dorthin ließ sich nicht öffnen. Von deiner eigenen Maschine wird hier nichts angezeigt.',
   'contextPanel.browser.loadFailedUnknown': 'Die Seite war nicht erreichbar.',
   'contextPanel.browser.crashed': 'Diese Seite reagiert nicht mehr',
@@ -1394,7 +1396,8 @@ export const dict = {
   'projectActions.toast.multipleServers': 'Mehrere Server gestartet — wähle einen im Browser-Panel',
   'contextPanel.browser.devServers.justStarted': 'Gerade gestartet',
   'contextPanel.browser.devServers.unavailable': 'Laufende Dev-Server konnten nicht geprüft werden.',
-  'contextPanel.browser.devServers.remoteOnly': 'Diese laufen auf dem Rechner, der OpenChamber hostet. Zum Öffnen wird die Desktop-App benötigt.',
+  'contextPanel.browser.devServers.remoteOnly': 'Diese laufen auf dem Rechner, der OpenChamber hostet. Zum Öffnen wird die Desktop- oder Mobil-App benötigt.',
+  'contextPanel.browser.unsafeWebView': 'Mit dem Android System WebView dieses Telefons lassen sich Seiten nicht sicher anzeigen. Aktualisiere es in Google Play.',
   'contextPanel.browser.annotate.toggle': 'Seite annotieren',
   'contextPanel.browser.annotate.intro': 'Dies ist eine annotierte Auswahl aus dem integrierten Browser.',
   'contextPanel.browser.annotate.attached': 'Annotation an den Chat angehängt',
@@ -1654,6 +1657,7 @@ export const dict = {
   'contextSidebar.tokens.cacheRead': 'Cache-Lesevorgang',
   'contextSidebar.tokens.cacheWrite': 'Cache-Schreibvorgang',
   'contextSidebar.tokens.cacheHit': 'Cache-Treffer',
+  'chat.workStatus.replyCacheHit': 'Cache-Treffer (Antwort)',
   'contextSidebar.actions.copyJson': 'JSON kopieren',
   'contextSidebar.actions.copy': 'Kopieren',
   'contextSidebar.actions.copied': 'Kopiert',
@@ -3751,6 +3755,7 @@ export const dict = {
   'chat.workStatus.breakdown.planCountSingle': '{count} Plan',
   'chat.workStatus.breakdown.planCountPlural': '{count} Pläne',
   'chat.workStatus.linkedPlans.open': 'Plan {title} öffnen',
+  'chat.workStatus.loadedSkills.open': 'Skill {name} öffnen',
   'chat.workStatus.sections.open': 'Abschnitte wählen',
   'chat.workStatus.sections.dialogTitle': 'Panel-Abschnitte',
   'chat.workStatus.sections.reorder': '{label} ziehen, um neu anzuordnen',
@@ -3806,6 +3811,7 @@ export const dict = {
   'chat.formCard.connectionLostReason': 'Die Verbindung zum Server wurde unterbrochen ({reason}). Es wurde nichts gesendet; versuchen Sie es erneut, sobald die Verbindung wieder steht.',
   'chat.formCard.notConnected': 'Noch nicht mit dem Server verbunden. Es wurde nichts gesendet; versuchen Sie es erneut, sobald die Verbindung steht.',
   'chat.formCard.recoveredNotice': 'Der Lauf wurde während des Wartens beendet. Absenden startet einen neuen kostenpflichtigen Lauf.',
+  'chat.formCard.deferredNotice': 'Sie haben vor der Antwort eine Nachricht gesendet. Absenden schickt Ihre Antwort als neue Nachricht.',
   'chat.formDock.progress': '{current} von {total}',
   'chat.formDock.waiting': '{count} weitere warten',
   'chat.formDock.back': 'Zurück',

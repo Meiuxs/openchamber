@@ -25,6 +25,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -217,6 +218,7 @@ export const dict: Record<I18nKey, string> = {
   ...usageStatsI18n.ja,
   ...webSearchI18n.ja,
   ...sessionWarmingI18n.ja,
+  ...connectionHeartbeatI18n.ja,
   ...compactionSettingsI18n.ja,
   ...heapSnapshotI18n.ja,
   ...consoleBudgetsI18n.ja,
@@ -1641,7 +1643,7 @@ export const dict: Record<I18nKey, string> = {
   'contextPanel.browser.waitingForServerHint': 'まだ接続を受け付けていません。受け付け次第このページを読み込みます。',
   'contextPanel.browser.tunnelFailed': 'この開発サーバーに接続できませんでした',
   'contextPanel.browser.remoteLoopback.title': '{url} は OpenChamber のマシン上にあります',
-  'contextPanel.browser.remoteLoopback.hint': 'ブラウザーのタブからは、そこで動いているページを開けません。デスクトップアプリで開いてください。',
+  'contextPanel.browser.remoteLoopback.hint': 'ブラウザーのタブからは、そこで動いているページを開けません。OpenChamber のデスクトップアプリかモバイルアプリで開いてください。',
   'contextPanel.browser.tunnelFailedHint': '{url} は OpenChamber が動いているマシン上にあり、そこへの接続を開けませんでした。あなたのマシンの内容はここには表示されません。',
   'contextPanel.browser.loadFailedUnknown': 'ページに到達できませんでした。',
   'contextPanel.browser.crashed': 'このページは応答しなくなりました',
@@ -1650,7 +1652,8 @@ export const dict: Record<I18nKey, string> = {
   'projectActions.toast.multipleServers': '複数のサーバーが起動しました。ブラウザパネルで選んでください',
   'contextPanel.browser.devServers.justStarted': '起動したばかり',
   'contextPanel.browser.devServers.unavailable': '実行中の開発サーバーを確認できませんでした。',
-  'contextPanel.browser.devServers.remoteOnly': 'これらは OpenChamber を動かしているマシン上で動作しています。開くにはデスクトップアプリが必要です。',
+  'contextPanel.browser.devServers.remoteOnly': 'これらは OpenChamber を動かしているマシン上で動作しています。開くにはデスクトップアプリかモバイルアプリが必要です。',
+  'contextPanel.browser.unsafeWebView': 'この端末の Android System WebView ではページを安全に表示できません。Google Play で更新してください。',
   'contextPanel.browser.annotate.toggle': 'ページに注釈を付ける',
   'contextPanel.browser.annotate.intro': 'これはアプリ内ブラウザで注釈を付けた選択範囲です。',
   'contextPanel.browser.annotate.attached': '注釈をチャットに添付しました',
@@ -1913,6 +1916,7 @@ export const dict: Record<I18nKey, string> = {
   'contextSidebar.tokens.cacheRead': 'キャッシュ読み取り',
   'contextSidebar.tokens.cacheWrite': 'キャッシュ書き込み',
   'contextSidebar.tokens.cacheHit': 'キャッシュヒット',
+  'chat.workStatus.replyCacheHit': 'キャッシュヒット（応答）',
   'contextSidebar.actions.copyJson': 'JSONをコピー',
   'contextSidebar.actions.copy': 'コピー',
   'contextSidebar.actions.copied': 'コピーしました',
@@ -3753,6 +3757,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.workStatus.breakdown.planCountSingle': 'プラン {count} 件',
   'chat.workStatus.breakdown.planCountPlural': 'プラン {count} 件',
   'chat.workStatus.linkedPlans.open': 'プラン「{title}」を開く',
+  'chat.workStatus.loadedSkills.open': 'スキル「{name}」を開く',
   'chat.workStatus.sections.open': 'セクションを選択',
   'chat.workStatus.sections.dialogTitle': 'パネルのセクション',
   'chat.workStatus.sections.reorder': '{label}をドラッグして並び替え',
@@ -3808,6 +3813,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.formCard.connectionLostReason': 'サーバーとの接続が切れました（{reason}）。何も送信されていません。再接続後にもう一度お試しください。',
   'chat.formCard.notConnected': 'まだサーバーに接続されていません。何も送信されていません。接続後にもう一度お試しください。',
   'chat.formCard.recoveredNotice': '待機中にターンが停止しました。送信すると、新しい有料ターンが開始します。',
+  'chat.formCard.deferredNotice': '回答する前にメッセージを送信しました。送信すると、回答は新しいメッセージとして送られます。',
   'chat.formDock.progress': '{current} / {total}',
   'chat.formDock.waiting': 'あと {count} 件が待機中',
   'chat.formDock.back': '戻る',

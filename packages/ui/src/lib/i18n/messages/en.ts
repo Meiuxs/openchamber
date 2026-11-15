@@ -24,6 +24,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -216,6 +217,7 @@ export const dict = {
   ...usageStatsI18n.en,
   ...webSearchI18n.en,
   ...sessionWarmingI18n.en,
+  ...connectionHeartbeatI18n.en,
   ...compactionSettingsI18n.en,
   ...heapSnapshotI18n.en,
   ...consoleBudgetsI18n.en,
@@ -1644,7 +1646,7 @@ export const dict = {
   'contextPanel.browser.waitingForServerHint': 'It is not accepting connections yet. This page will load as soon as it does.',
   'contextPanel.browser.tunnelFailed': 'This dev server could not be reached',
   'contextPanel.browser.remoteLoopback.title': '{url} is on the OpenChamber machine',
-  'contextPanel.browser.remoteLoopback.hint': 'A browser tab can\'t open pages that run there. Open this in the desktop app.',
+  'contextPanel.browser.remoteLoopback.hint': 'A browser tab can\'t open pages that run there. Open this in the OpenChamber desktop or mobile app.',
   'contextPanel.browser.tunnelFailedHint': '{url} runs on the machine OpenChamber is on, and the connection to it could not be opened. Nothing from your own machine is shown here.',
   'contextPanel.browser.loadFailedUnknown': 'The page could not be reached.',
   'contextPanel.browser.crashed': 'This page stopped responding',
@@ -1653,7 +1655,8 @@ export const dict = {
   'projectActions.toast.multipleServers': 'Several servers started — pick one in the browser panel',
   'contextPanel.browser.devServers.justStarted': 'Just started',
   'contextPanel.browser.devServers.unavailable': 'Could not check for running dev servers.',
-  'contextPanel.browser.devServers.remoteOnly': 'These run on the machine hosting OpenChamber. Opening them needs the desktop app.',
+  'contextPanel.browser.devServers.remoteOnly': 'These run on the machine hosting OpenChamber. Opening them needs the desktop or mobile app.',
+  'contextPanel.browser.unsafeWebView': 'Pages can\'t be shown safely with this phone\'s Android System WebView. Update it in Google Play.',
   'contextPanel.browser.annotate.toggle': 'Annotate page',
   'contextPanel.browser.annotate.intro': 'This is an annotated selection from the in-app browser.',
   'contextPanel.browser.annotate.attached': 'Annotation attached to chat',
@@ -1917,6 +1920,7 @@ export const dict = {
   'contextSidebar.tokens.cacheRead': 'Cache read',
   'contextSidebar.tokens.cacheWrite': 'Cache write',
   'contextSidebar.tokens.cacheHit': 'Cache hit',
+  'chat.workStatus.replyCacheHit': 'Cache hit (reply)',
   'contextSidebar.actions.copyJson': 'Copy JSON',
   'contextSidebar.actions.copy': 'Copy',
   'contextSidebar.actions.copied': 'Copied',
@@ -3753,6 +3757,7 @@ export const dict = {
   'chat.workStatus.breakdown.planCountSingle': '{count} plan',
   'chat.workStatus.breakdown.planCountPlural': '{count} plans',
   'chat.workStatus.linkedPlans.open': 'Open plan {title}',
+  'chat.workStatus.loadedSkills.open': 'Open skill {name}',
   'chat.workStatus.sections.open': 'Choose sections',
   'chat.workStatus.sections.dialogTitle': 'Panel sections',
   'chat.workStatus.sections.reorder': 'Drag {label} to reorder',
@@ -3789,6 +3794,7 @@ export const dict = {
   'chat.formCard.connectionLostReason': 'Connection to the server was lost ({reason}). Nothing was sent; try again once it reconnects.',
   'chat.formCard.notConnected': 'Not connected to the server yet. Nothing was sent; try again once it connects.',
   'chat.formCard.recoveredNotice': 'The turn stopped while waiting. Submit starts a new paid turn.',
+  'chat.formCard.deferredNotice': 'You sent a message before answering. Submit sends your answer as a new message.',
   'chat.formDock.progress': '{current} of {total}',
   'chat.formDock.waiting': '{count} more waiting',
   'chat.formDock.back': 'Back',

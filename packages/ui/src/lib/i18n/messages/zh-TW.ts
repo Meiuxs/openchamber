@@ -25,6 +25,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -217,6 +218,7 @@ export const dict: Record<I18nKey, string> = {
   ...usageStatsI18n['zh-TW'],
   ...webSearchI18n['zh-TW'],
   ...sessionWarmingI18n['zh-TW'],
+  ...connectionHeartbeatI18n['zh-TW'],
   ...compactionSettingsI18n['zh-TW'],
   ...heapSnapshotI18n['zh-TW'],
   ...consoleBudgetsI18n['zh-TW'],
@@ -1664,7 +1666,7 @@ export const dict: Record<I18nKey, string> = {
   'contextPanel.browser.waitingForServerHint': '它尚未開始接受連線。一旦可用，本頁就會載入。',
   'contextPanel.browser.tunnelFailed': '無法連線到這個開發伺服器',
   'contextPanel.browser.remoteLoopback.title': '{url} 在 OpenChamber 所在的機器上',
-  'contextPanel.browser.remoteLoopback.hint': '瀏覽器分頁無法開啟在那裡執行的頁面。請在桌面應用程式中開啟。',
+  'contextPanel.browser.remoteLoopback.hint': '瀏覽器分頁無法開啟在那裡執行的頁面。請在 OpenChamber 桌面應用程式或行動應用程式中開啟。',
   'contextPanel.browser.tunnelFailedHint': '{url} 執行在 OpenChamber 所在的機器上，無法與其建立連線。這裡不會顯示你本機上的任何內容。',
   'contextPanel.browser.loadFailedUnknown': '無法連線到該頁面。',
   'contextPanel.browser.crashed': '此頁面已停止回應',
@@ -1673,7 +1675,8 @@ export const dict: Record<I18nKey, string> = {
   'projectActions.toast.multipleServers': '啟動了多個伺服器 — 請在瀏覽器面板中選擇',
   'contextPanel.browser.devServers.justStarted': '剛剛啟動',
   'contextPanel.browser.devServers.unavailable': '無法檢查執行中的開發伺服器。',
-  'contextPanel.browser.devServers.remoteOnly': '它們執行在託管 OpenChamber 的那台機器上。要開啟它們需要桌面應用程式。',
+  'contextPanel.browser.devServers.remoteOnly': '它們執行在託管 OpenChamber 的那台機器上。要開啟它們需要桌面應用程式或行動應用程式。',
+  'contextPanel.browser.unsafeWebView': '這支手機的 Android System WebView 無法安全地顯示頁面。請在 Google Play 中更新。',
   'contextPanel.browser.annotate.toggle': '標註頁面',
   'contextPanel.browser.annotate.intro': '這是來自應用程式內建瀏覽器的標註選取範圍。',
   'contextPanel.browser.annotate.attached': '標註已附加至聊天',
@@ -1900,6 +1903,7 @@ export const dict: Record<I18nKey, string> = {
   'contextSidebar.tokens.cacheRead': '快取讀取',
   'contextSidebar.tokens.cacheWrite': '快取寫入',
   'contextSidebar.tokens.cacheHit': '快取命中',
+  'chat.workStatus.replyCacheHit': '快取命中（回覆）',
   'contextSidebar.actions.copyJson': '複製 JSON',
   'contextSidebar.actions.copy': '複製',
   'contextSidebar.actions.copied': '已複製',
@@ -3753,6 +3757,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.workStatus.breakdown.planCountSingle': '{count} 個計畫',
   'chat.workStatus.breakdown.planCountPlural': '{count} 個計畫',
   'chat.workStatus.linkedPlans.open': '開啟計畫 {title}',
+  'chat.workStatus.loadedSkills.open': '開啟技能 {name}',
   'chat.workStatus.sections.open': '選擇區塊',
   'chat.workStatus.sections.dialogTitle': '面板區塊',
   'chat.workStatus.sections.reorder': '拖曳 {label} 以重新排序',
@@ -3808,6 +3813,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.formCard.connectionLostReason': '與伺服器的連線已中斷（{reason}）。未傳送任何內容；重新連線後請再試一次。',
   'chat.formCard.notConnected': '尚未連線到伺服器。未傳送任何內容；連線後請再試一次。',
   'chat.formCard.recoveredNotice': '等待期間本輪已停止。提交將開啟新一輪付費對話。',
+  'chat.formCard.deferredNotice': '你在回答前傳送了一則訊息。送出後，你的答案會以一則新訊息傳送。',
   'chat.formDock.progress': '第 {current} / {total}',
   'chat.formDock.waiting': '還有 {count} 個等待中',
   'chat.formDock.back': '上一步',

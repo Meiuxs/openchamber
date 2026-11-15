@@ -41,6 +41,7 @@ import {
 } from '@/components/references/referencePickerItems';
 import { GitlabRunsPanel } from '@/components/gitlab-runs/GitlabRunsPanel';
 import { itemDirectory } from '@/components/references/acrossRepositories';
+import { usePreviewReturnScroll } from '@/components/references/usePreviewReturnScroll';
 import { forgetRepositoryPullStatus, forgetRepositoryPullStatuses, useRepositoryAcrossReferenceList, useTrackerItemDetail, useRepositoryHostProvider, useRepositoryReadContext, useRepositoryReferenceList } from '@/components/references/referenceSources';
 import { openExternalUrl } from '@/lib/url';
 import { useEffectiveDirectory } from '@/hooks/useEffectiveDirectory';
@@ -85,6 +86,7 @@ import { choiceForFocus, resolveBoardTab, shouldRememberAll, useBoardRepository,
 import { isSameRepositoryItemLink } from './openTrackerItem';
 import { usePullAttachments } from './pullAttachments';
 import { useThreadActions } from './threadActions';
+import { updateRepositoryItemText } from './updateItemText';
 import { useBoardRevalidation } from './useBoardRevalidation';
 import { MOBILE_HEADER_BUTTON_CLASS, MOBILE_HEADER_CLASS } from '@/components/ui/mobileHeader';
 
@@ -721,6 +723,13 @@ const SourceBoardBody: React.FC<{
         () => Promise.all([refreshRepositoryDetail(), retryList()]).then(() => undefined),
         [refreshRepositoryDetail, retryList],
     );
+    // An edit of the previewed item's title and description: the host's own
+    // edit, then the item and the list read again.
+    const writableReference = previewItem?.source === 'repository' && context ? { context, reference: previewItem.reference } : null;
+    const saveText = writableReference ? async (input: { title: string; body: string }) => {
+        await updateRepositoryItemText(sourceControl, writableReference.context, writableReference.reference, input);
+        await refreshRepositoryItem();
+    } : undefined;
     const threadActions = useThreadActions(previewItem?.source === 'repository' ? previewItem.reference : null, context, refreshRepositoryItem);
     // The preview's refresh button, for a change made on the host's own site,
     // which the server's short-lived answers would otherwise hide for up to
@@ -894,6 +903,7 @@ const SourceBoardBody: React.FC<{
             onRefresh={previewItem?.source === 'repository' && readContext
                 ? refreshFromHost
                 : previewItem?.source === 'tracker' ? browser.refreshTrackerDetail : undefined}
+            onSaveText={saveText}
             threadActions={threadActions}
             stateMenu={previewItem?.source === 'repository' && previewItem.reference.state !== 'merged' && context
                 && (previewItem.reference.kind !== 'discussion' || canChangeDiscussionState(previewItem.reference, previewDiscussion)) ? (
@@ -1095,6 +1105,10 @@ const SourceBoardBody: React.FC<{
     const listWidth = useSourceBoardStore((state) => state.listWidth);
     const splitRef = React.useRef<HTMLDivElement>(null);
     const listRef = React.useRef<HTMLDivElement>(null);
+    // The phone's list and preview share one scroller: the list's offset is kept
+    // while an item takes its place, and every preview starts at its top.
+    const inPreview = isMobile && Boolean(browser.mobilePreviewKey && previewItem);
+    const mobileScrollRef = usePreviewReturnScroll(inPreview ? browser.mobilePreviewKey : null);
     const [resizing, setResizing] = React.useState(false);
     const clampWidth = (width: number) => {
         const max = Math.max(LIST_MIN_WIDTH, (splitRef.current?.clientWidth ?? 0) * LIST_MAX_FRACTION);
@@ -1128,7 +1142,6 @@ const SourceBoardBody: React.FC<{
     };
 
     if (isMobile) {
-        const inPreview = Boolean(browser.mobilePreviewKey && previewItem);
         return (
             <>
                 {inPreview ? (
@@ -1148,7 +1161,7 @@ const SourceBoardBody: React.FC<{
                 {/* A crash below keeps the header, the only way to close the page on iOS. */}
                 <ErrorBoundary>
                     {runsView ? runsView : (
-                        <ScrollableOverlay outerClassName="min-h-0 flex-1" className={inPreview ? 'px-4 py-3' : undefined} disableHorizontal>
+                        <ScrollableOverlay ref={mobileScrollRef} outerClassName="min-h-0 flex-1" className={inPreview ? 'px-4 py-3' : undefined} disableHorizontal>
                             {inPreview ? preview : list}
                         </ScrollableOverlay>
                     )}

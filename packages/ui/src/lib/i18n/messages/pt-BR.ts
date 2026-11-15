@@ -25,6 +25,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -227,6 +228,7 @@ export const dict: Record<I18nKey, string> = {
   ...usageStatsI18n['pt-BR'],
   ...webSearchI18n['pt-BR'],
   ...sessionWarmingI18n['pt-BR'],
+  ...connectionHeartbeatI18n['pt-BR'],
   ...compactionSettingsI18n['pt-BR'],
   ...heapSnapshotI18n['pt-BR'],
   ...consoleBudgetsI18n['pt-BR'],
@@ -1635,7 +1637,7 @@ export const dict: Record<I18nKey, string> = {
   "contextPanel.browser.waitingForServerHint": "Ele ainda não aceita conexões. A página carregará assim que aceitar.",
   "contextPanel.browser.tunnelFailed": "Não foi possível alcançar este servidor de desenvolvimento",
   "contextPanel.browser.remoteLoopback.title": "{url} está na máquina do OpenChamber",
-  "contextPanel.browser.remoteLoopback.hint": "Uma aba do navegador não consegue abrir páginas que rodam lá. Abra no app para desktop.",
+  "contextPanel.browser.remoteLoopback.hint": "Uma aba do navegador não consegue abrir páginas que rodam lá. Abra no app do OpenChamber para desktop ou celular.",
   "contextPanel.browser.tunnelFailedHint": "{url} roda na máquina onde o OpenChamber está e não foi possível abrir a conexão com ela. Nada da sua própria máquina é mostrado aqui.",
   "contextPanel.browser.loadFailedUnknown": "Não foi possível acessar a página.",
   "contextPanel.browser.crashed": "Esta página parou de responder",
@@ -1644,7 +1646,8 @@ export const dict: Record<I18nKey, string> = {
   "projectActions.toast.multipleServers": "Vários servidores iniciaram — escolha um no painel do navegador",
   "contextPanel.browser.devServers.justStarted": "Recém-iniciados",
   "contextPanel.browser.devServers.unavailable": "Não foi possível verificar os servidores de desenvolvimento em execução.",
-  "contextPanel.browser.devServers.remoteOnly": "Eles rodam na máquina que hospeda o OpenChamber. Abri-los exige o aplicativo desktop.",
+  "contextPanel.browser.devServers.remoteOnly": "Eles rodam na máquina que hospeda o OpenChamber. Abri-los exige o aplicativo para desktop ou celular.",
+  "contextPanel.browser.unsafeWebView": "Com o Android System WebView deste celular não é possível mostrar páginas com segurança. Atualize-o no Google Play.",
   "contextPanel.browser.annotate.toggle": "Anotar página",
   "contextPanel.browser.annotate.intro": "Esta é uma seleção anotada do navegador integrado.",
   "contextPanel.browser.annotate.attached": "Anotação anexada ao chat",
@@ -1873,6 +1876,7 @@ export const dict: Record<I18nKey, string> = {
   "contextSidebar.tokens.cacheRead": "Leitura de cache",
   "contextSidebar.tokens.cacheWrite": "Escrita de cache",
   "contextSidebar.tokens.cacheHit": "Acerto de cache",
+  "chat.workStatus.replyCacheHit": "Acerto de cache (resposta)",
   "contextSidebar.actions.copyJson": "Copiar JSON",
   "contextSidebar.actions.copy": "Copiar",
   "contextSidebar.actions.copied": "Copiado",
@@ -3744,6 +3748,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.workStatus.breakdown.planCountSingle': '{count} plano',
   'chat.workStatus.breakdown.planCountPlural': '{count} planos',
   'chat.workStatus.linkedPlans.open': 'Abrir o plano {title}',
+  'chat.workStatus.loadedSkills.open': 'Abrir a habilidade {name}',
   'chat.workStatus.sections.open': 'Escolher seções',
   'chat.workStatus.sections.dialogTitle': 'Seções do painel',
   'chat.workStatus.sections.reorder': 'Arraste {label} para reordenar',
@@ -3809,6 +3814,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.formCard.connectionLostReason': 'A conexão com o servidor foi perdida ({reason}). Nada foi enviado; tente de novo quando reconectar.',
   'chat.formCard.notConnected': 'Ainda não há conexão com o servidor. Nada foi enviado; tente de novo quando conectar.',
   'chat.formCard.recoveredNotice': 'A execução parou enquanto aguardava. Enviar inicia uma nova execução paga.',
+  'chat.formCard.deferredNotice': 'Você enviou uma mensagem antes de responder. Enviar manda sua resposta como uma nova mensagem.',
   'chat.formDock.progress': '{current} de {total}',
   'chat.formDock.waiting': 'mais {count} aguardando',
   'chat.formDock.back': 'Voltar',

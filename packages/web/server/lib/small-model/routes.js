@@ -1,4 +1,5 @@
 import { asNonEmptyString } from '../shared/guards.js';
+import { getTrustRefusal } from './client.js';
 
 export function registerSmallModelRoutes(app, { getSmallModelService }) {
   app.get('/api/small-model', async (req, res) => {
@@ -16,6 +17,10 @@ export function registerSmallModelRoutes(app, { getSmallModelService }) {
         authenticatedProviders: await listAuthenticatedProviders(directory),
       });
     } catch (error) {
+      const refusal = getTrustRefusal(error);
+      if (refusal) {
+        return res.status(403).json({ error: refusal.message, code: refusal.code, directory: refusal.directory });
+      }
       console.error('Failed to resolve small model:', error);
       res.status(500).json({ error: error.message || 'Failed to resolve small model' });
     }
@@ -36,6 +41,10 @@ export function registerSmallModelRoutes(app, { getSmallModelService }) {
       });
       res.json(result);
     } catch (error) {
+      const refusal = getTrustRefusal(error);
+      if (refusal) {
+        return res.status(403).json({ error: refusal.message, code: refusal.code, directory: refusal.directory });
+      }
       // OpenCode tags a provider that refused the call itself (connection
       // refused, a 5xx from upstream). The message names the cause, and asking
       // the same provider again through another route cannot change the answer.

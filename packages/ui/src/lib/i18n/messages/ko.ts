@@ -25,6 +25,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -217,6 +218,7 @@ export const dict: Record<I18nKey, string> = {
   ...usageStatsI18n.ko,
   ...webSearchI18n.ko,
   ...sessionWarmingI18n.ko,
+  ...connectionHeartbeatI18n.ko,
   ...compactionSettingsI18n.ko,
   ...heapSnapshotI18n.ko,
   ...consoleBudgetsI18n.ko,
@@ -1645,7 +1647,7 @@ export const dict: Record<I18nKey, string> = {
   'contextPanel.browser.waitingForServerHint': '아직 연결을 받지 않습니다. 준비되는 대로 이 페이지를 불러옵니다.',
   'contextPanel.browser.tunnelFailed': '이 개발 서버에 연결하지 못했습니다',
   'contextPanel.browser.remoteLoopback.title': '{url}은(는) OpenChamber 컴퓨터에 있습니다',
-  'contextPanel.browser.remoteLoopback.hint': '브라우저 탭에서는 그곳에서 실행 중인 페이지를 열 수 없습니다. 데스크톱 앱에서 여세요.',
+  'contextPanel.browser.remoteLoopback.hint': '브라우저 탭에서는 그곳에서 실행 중인 페이지를 열 수 없습니다. OpenChamber 데스크톱 앱이나 모바일 앱에서 여세요.',
   'contextPanel.browser.tunnelFailedHint': '{url} 은(는) OpenChamber가 실행 중인 컴퓨터에 있으며, 그곳으로의 연결을 열지 못했습니다. 이 화면에는 사용자 컴퓨터의 내용이 표시되지 않습니다.',
   'contextPanel.browser.loadFailedUnknown': '페이지에 접근할 수 없습니다.',
   'contextPanel.browser.crashed': '이 페이지가 응답하지 않습니다',
@@ -1654,7 +1656,8 @@ export const dict: Record<I18nKey, string> = {
   'projectActions.toast.multipleServers': '여러 서버가 시작되었습니다. 브라우저 패널에서 선택하세요',
   'contextPanel.browser.devServers.justStarted': '방금 시작됨',
   'contextPanel.browser.devServers.unavailable': '실행 중인 개발 서버를 확인하지 못했습니다.',
-  'contextPanel.browser.devServers.remoteOnly': '이 서버들은 OpenChamber가 실행 중인 컴퓨터에 있습니다. 열려면 데스크톱 앱이 필요합니다.',
+  'contextPanel.browser.devServers.remoteOnly': '이 서버들은 OpenChamber가 실행 중인 컴퓨터에 있습니다. 열려면 데스크톱 앱이나 모바일 앱이 필요합니다.',
+  'contextPanel.browser.unsafeWebView': '이 휴대폰의 Android System WebView로는 페이지를 안전하게 표시할 수 없습니다. Google Play에서 업데이트하세요.',
   'contextPanel.browser.annotate.toggle': '페이지에 주석 달기',
   'contextPanel.browser.annotate.intro': '앱 내 브라우저에서 주석을 단 선택 영역입니다.',
   'contextPanel.browser.annotate.attached': '주석을 채팅에 첨부했습니다',
@@ -1917,6 +1920,7 @@ export const dict: Record<I18nKey, string> = {
   'contextSidebar.tokens.cacheRead': '캐시 읽기',
   'contextSidebar.tokens.cacheWrite': '캐시 쓰기',
   'contextSidebar.tokens.cacheHit': '캐시 적중',
+  'chat.workStatus.replyCacheHit': '캐시 적중 (응답)',
   'contextSidebar.actions.copyJson': 'JSON 복사',
   'contextSidebar.actions.copy': '복사',
   'contextSidebar.actions.copied': '복사됨',
@@ -3753,6 +3757,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.workStatus.breakdown.planCountSingle': '계획 {count}개',
   'chat.workStatus.breakdown.planCountPlural': '계획 {count}개',
   'chat.workStatus.linkedPlans.open': '{title} 계획 열기',
+  'chat.workStatus.loadedSkills.open': '{name} 스킬 열기',
   'chat.workStatus.sections.open': '섹션 선택',
   'chat.workStatus.sections.dialogTitle': '패널 섹션',
   'chat.workStatus.sections.reorder': '{label} 드래그하여 순서 변경',
@@ -3808,6 +3813,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.formCard.connectionLostReason': '서버 연결이 끊어졌습니다({reason}). 아무것도 전송되지 않았습니다. 다시 연결되면 다시 시도하세요.',
   'chat.formCard.notConnected': '아직 서버에 연결되지 않았습니다. 아무것도 전송되지 않았습니다. 연결되면 다시 시도하세요.',
   'chat.formCard.recoveredNotice': '대기 중 턴이 중지되었습니다. 제출하면 새로운 유료 턴이 시작됩니다.',
+  'chat.formCard.deferredNotice': '답변하기 전에 메시지를 보냈습니다. 제출하면 답변이 새 메시지로 전송됩니다.',
   'chat.formDock.progress': '{total} 중 {current}',
   'chat.formDock.waiting': '{count}개 더 대기 중',
   'chat.formDock.back': '뒤로',

@@ -326,6 +326,8 @@ const isRepositoryFilePath = (value: string): boolean => value.length > 0 && val
 const prefixSchema = z.string().min(1).max(4).regex(/^\S+$/);
 const literalSchema = z.string().trim().min(1).max(64);
 
+const DECLARED_CAPABILITIES_MESSAGE = `contributes.capabilities may list ${DECLARED_GUEST_CAPABILITIES.map((capability) => `"${capability}"`).join(', ')}.`;
+
 const sourceControlCapabilitiesSchema = z.object({
   projects: z.boolean().default(false),
   issues: z.boolean().default(false),
@@ -427,6 +429,8 @@ const sourceControlSchema = z.object({
     features: z.object({
       authorCanReview: z.boolean().default(false),
       issueCloseReason: z.boolean().default(false),
+      issueEdit: z.boolean().optional(),
+      changeRequestEdit: z.boolean().optional(),
       submitRequirements: z.boolean().optional(),
     }).strict(),
     changeRequestTemplates: z.array(z.string().trim().max(256).refine(isRepositoryFilePath, {
@@ -1173,7 +1177,7 @@ const failureFromIssue = (issue: { path: ReadonlyArray<PropertyKey>; code: strin
     case 'contributes.panel.mobile':
       return fail('invalid-panel', 'panel.mobile is true or left out.');
     case 'contributes.capabilities':
-      return fail('invalid-capabilities', 'contributes.capabilities may list "prompt", "sessions", and "files".');
+      return fail('invalid-capabilities', DECLARED_CAPABILITIES_MESSAGE);
     default:
       break;
   }
@@ -1195,7 +1199,7 @@ const failureFromIssue = (issue: { path: ReadonlyArray<PropertyKey>; code: strin
     );
   }
   if (path.startsWith('contributes.capabilities')) {
-    return fail('invalid-capabilities', 'contributes.capabilities may list "prompt", "sessions", and "files".');
+    return fail('invalid-capabilities', DECLARED_CAPABILITIES_MESSAGE);
   }
   if (path.startsWith('contributes.filesystem')) {
     return fail(

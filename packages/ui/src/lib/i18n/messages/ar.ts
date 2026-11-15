@@ -25,6 +25,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
@@ -1563,7 +1564,7 @@ export const dict: I18nDictionary = {
   'contextPanel.browser.waitingForServerHint': 'لا يقبل الاتصالات بعد. ستُحمَّل هذه الصفحة فور أن يبدأ بقبولها.',
   'contextPanel.browser.tunnelFailed': 'تعذّر الوصول إلى خادم التطوير هذا',
   'contextPanel.browser.remoteLoopback.title': '{url} موجود على جهاز OpenChamber',
-  'contextPanel.browser.remoteLoopback.hint': 'لا يمكن لعلامة تبويب في المتصفح فتح الصفحات التي تعمل هناك. افتحها في تطبيق سطح المكتب.',
+  'contextPanel.browser.remoteLoopback.hint': 'لا يمكن لعلامة تبويب في المتصفح فتح الصفحات التي تعمل هناك. افتحها في تطبيق OpenChamber لسطح المكتب أو للهاتف.',
   'contextPanel.browser.tunnelFailedHint': 'يعمل {url} على الجهاز الذي يعمل عليه OpenChamber، وتعذّر فتح الاتصال به. لا يُعرض هنا أي شيء من جهازك أنت.',
   'contextPanel.browser.loadFailedUnknown': 'تعذّر الوصول إلى الصفحة.',
   'contextPanel.browser.crashed': 'توقفت هذه الصفحة عن الاستجابة',
@@ -1572,7 +1573,8 @@ export const dict: I18nDictionary = {
   'projectActions.toast.multipleServers': 'بدأ تشغيل عدة خوادم — اختر واحدًا في لوحة المتصفح',
   'contextPanel.browser.devServers.justStarted': 'بدأ للتو',
   'contextPanel.browser.devServers.unavailable': 'تعذّر التحقق من خوادم التطوير العاملة.',
-  'contextPanel.browser.devServers.remoteOnly': 'تعمل هذه على الجهاز الذي يستضيف OpenChamber. يتطلب فتحها تطبيق سطح المكتب.',
+  'contextPanel.browser.devServers.remoteOnly': 'تعمل هذه على الجهاز الذي يستضيف OpenChamber. يتطلب فتحها تطبيق سطح المكتب أو تطبيق الهاتف.',
+  'contextPanel.browser.unsafeWebView': 'لا يمكن عرض الصفحات بأمان باستخدام Android System WebView على هذا الهاتف. حدّثه من Google Play.',
   'contextPanel.browser.annotate.toggle': 'إضافة تعليقات على الصفحة',
   'contextPanel.browser.annotate.intro': 'هذا تحديد عليه تعليق توضيحي من المتصفح المدمج في التطبيق.',
   'contextPanel.browser.annotate.attached': 'تم إرفاق التعليق بالمحادثة',
@@ -1821,6 +1823,7 @@ export const dict: I18nDictionary = {
   'contextSidebar.tokens.cacheRead': 'قراءة من الذاكرة المؤقتة',
   'contextSidebar.tokens.cacheWrite': 'كتابة إلى الذاكرة المؤقتة',
   'contextSidebar.tokens.cacheHit': 'إصابة الذاكرة المؤقتة',
+  'chat.workStatus.replyCacheHit': 'إصابة الذاكرة المؤقتة (الرد)',
   'contextSidebar.actions.copyJson': 'نسخ JSON',
   'contextSidebar.actions.copy': 'نسخ',
   'contextSidebar.actions.copied': 'تم النسخ',
@@ -3657,6 +3660,7 @@ export const dict: I18nDictionary = {
   'chat.workStatus.breakdown.planCountSingle': '{count} خطة',
   'chat.workStatus.breakdown.planCountPlural': '{count} خطط',
   'chat.workStatus.linkedPlans.open': 'فتح الخطة {title}',
+  'chat.workStatus.loadedSkills.open': 'فتح المهارة {name}',
   'chat.workStatus.sections.open': 'اختيار الأقسام',
   'chat.workStatus.sections.dialogTitle': 'أقسام اللوحة',
   'chat.workStatus.sections.reorder': 'اسحب {label} لإعادة الترتيب',
@@ -3689,6 +3693,7 @@ export const dict: I18nDictionary = {
   'chat.formCard.connectionLostReason': 'انقطع الاتصال بالخادم ({reason}). لم يُرسَل شيء؛ أعد المحاولة بعد عودة الاتصال.',
   'chat.formCard.notConnected': 'لم يتم الاتصال بالخادم بعد. لم يُرسَل شيء؛ أعد المحاولة بعد الاتصال.',
   'chat.formCard.recoveredNotice': 'توقّفت الجولة أثناء الانتظار. سيؤدي الإرسال إلى بدء جولة جديدة مدفوعة.',
+  'chat.formCard.deferredNotice': 'أرسلت رسالة قبل الإجابة. سيؤدي الإرسال إلى إرسال إجابتك في رسالة جديدة.',
   'chat.formDock.progress': '{current} من {total}',
   'chat.formDock.waiting': '{count} أخرى في الانتظار',
   'chat.formDock.back': 'رجوع',
@@ -3959,6 +3964,7 @@ export const dict: I18nDictionary = {
   ...usageStatsI18n.ar,
   ...webSearchI18n.ar,
   ...sessionWarmingI18n.ar,
+  ...connectionHeartbeatI18n.ar,
   ...compactionSettingsI18n.ar,
   ...heapSnapshotI18n.ar,
   ...consoleBudgetsI18n.ar,
