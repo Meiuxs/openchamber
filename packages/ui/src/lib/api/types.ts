@@ -1524,6 +1524,17 @@ export interface ProjectEntry {
   gitlabIssueBotAccountId?: string;
   /** Implementing-phase timeout in minutes; defaults to 30. */
   gitlabIssueTimeoutMinutes?: number;
+  /** Model for the pre-push review session, `provider/model`; defaults to the project model. */
+  gitlabIssueReviewModel?: string;
+  /** Variant for the review model; defaults to the project variant. */
+  gitlabIssueReviewVariant?: string;
+  /** Description templates offered when filing a GitLab issue. */
+  gitlabIssueTemplates?: Array<{
+    id: string;
+    name: string;
+    kind: 'bug' | 'feature' | null;
+    body: string;
+  }>;
 }
 
 /**

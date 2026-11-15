@@ -1198,6 +1198,20 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     keywords: ['gitlab', 'account', 'bot', 'automation', 'project metadata'],
   },
   {
+    id: 'projects.gitlab-review-model',
+    page: 'projects',
+    titleKey: 'settings.projects.page.field.gitlabReviewModel',
+    descriptionKey: 'settings.projects.page.field.gitlabReviewModelInfo',
+    keywords: ['gitlab', 'review', 'model', 'automation', 'project metadata'],
+  },
+  {
+    id: 'projects.gitlab-templates',
+    page: 'projects',
+    titleKey: 'settings.projects.page.field.gitlabTemplates',
+    descriptionKey: 'settings.projects.page.field.gitlabTemplatesInfo',
+    keywords: ['gitlab', 'issue', 'template', 'description', 'project metadata'],
+  },
+  {
     id: 'projects.icon',
     page: 'projects',
     titleKey: 'settings.projects.page.field.projectIcon',

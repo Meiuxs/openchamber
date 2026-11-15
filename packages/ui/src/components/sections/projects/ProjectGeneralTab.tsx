@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { NumberInput } from '@/components/ui/number-input';
 import {
   SettingsCheckboxRow,
+  SettingsControlGroup,
   SettingsFieldRow,
   SettingsSection,
   SETTINGS_CUSTOM_TRIGGER_CLASS,
@@ -15,6 +16,15 @@ import {
   SETTINGS_NUMBER_INPUT_CLASS,
   SETTINGS_SELECT_ROW_TRIGGER_CLASS,
 } from '@/components/sections/shared/SettingsSection';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  builtinIssueTemplateDefaults,
+  resolveIssueTemplates,
+  toStoredIssueTemplates,
+  type BuiltinIssueTemplateNameKey,
+  type GitlabIssueTemplateKind,
+  type ResolvedIssueTemplate,
+} from '@/lib/gitlab-issues/issueTemplates';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { getSourceControlAuthKey, useSourceControlAuthStore } from '@/stores/useSourceControlAuthStore';
 import { buildManagedAccountOptions, getManagedCredentialSourceLabelKey } from '@/lib/source-control/identity';
@@ -28,6 +38,7 @@ import { isPrimaryMode } from '@/components/chat/mobileControlsUtils';
 import { updateSharedProjectSetup, type ProjectRef } from '@/lib/openchamberConfig';
 import { ensureSharedSetupTrusted, resetSharedSetupTrust } from '@/lib/sharedTrustConfirmation';
 import { useI18n } from '@/lib/i18n';
+import { generateUuid } from '@/lib/uuid';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icon/Icon';
 import type { ProjectEntry } from '@/lib/api/types';
@@ -149,6 +160,141 @@ const LocalIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =>
   );
 };
 
+/** The "no type" option; a template without a kind leaves the form's type alone. */
+const NO_TEMPLATE_KIND_VALUE = '__none__';
+
+const replaceTemplateAt = (
+  templates: readonly ResolvedIssueTemplate[],
+  index: number,
+  patch: Partial<ResolvedIssueTemplate>,
+): ResolvedIssueTemplate[] => templates.map((entry, at) => (at === index ? { ...entry, ...patch } : entry));
+
+/**
+ * The description templates a project offers when filing a GitLab issue. A
+ * built-in template stores nothing while it matches its default, so an
+ * untouched project keeps receiving built-in changes; editing one stores the
+ * override, and its reset action removes that entry again.
+ */
+const GitlabIssueTemplatesEditor: React.FC<{ project: ProjectEntry }> = ({ project }) => {
+  const { t } = useI18n();
+  const updateProjectMeta = useProjectsStore((state) => state.updateProjectMeta);
+  const stored = project.gitlabIssueTemplates;
+  const nameOf = React.useCallback((key: BuiltinIssueTemplateNameKey) => t(key), [t]);
+  const resolved = React.useMemo(() => resolveIssueTemplates(stored, nameOf), [stored, nameOf]);
+  const [drafts, setDrafts] = React.useState<ResolvedIssueTemplate[]>(resolved);
+
+  // Store changes and language switches land here; typing does not, so a
+  // half-typed name is never written.
+  React.useEffect(() => { setDrafts(resolved); }, [resolved]);
+
+  const commit = (next: ResolvedIssueTemplate[]) => {
+    setDrafts(next);
+    const stored = toStoredIssueTemplates(next, nameOf);
+    // A blur that changed nothing must not rewrite the project file.
+    if (JSON.stringify(stored) === JSON.stringify(project.gitlabIssueTemplates ?? [])) return;
+    updateProjectMeta(project.id, { gitlabIssueTemplates: stored });
+  };
+
+  const addTemplate = () => {
+    commit([
+      ...drafts,
+      {
+        id: `custom-${generateUuid()}`,
+        name: t('settings.projects.page.field.gitlabTemplateNewName'),
+        kind: null,
+        body: '',
+        builtin: false,
+      },
+    ]);
+  };
+
+  return (
+    <SettingsControlGroup
+      title={t('settings.projects.page.field.gitlabTemplates')}
+      info={t('settings.projects.page.field.gitlabTemplatesInfo')}
+      settingsItem="projects.gitlab-templates"
+      className="border-t border-edge pt-4"
+    >
+      <div className="space-y-4">
+        {drafts.map((template, index) => (
+          <div key={template.id} className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={template.name}
+                onChange={(event) => setDrafts(replaceTemplateAt(drafts, index, { name: event.target.value }))}
+                onBlur={() => commit(drafts)}
+                onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                aria-label={t('settings.projects.page.field.gitlabTemplateName')}
+                className="h-8 w-full max-w-[16rem] rounded-md px-3 text-xs"
+              />
+              <Select
+                value={template.kind ?? NO_TEMPLATE_KIND_VALUE}
+                onValueChange={(value) => commit(replaceTemplateAt(drafts, index, {
+                  // SAFETY: the Select only offers the two kinds and the "none"
+                  // value handled beside this cast.
+                  kind: value === NO_TEMPLATE_KIND_VALUE ? null : value as GitlabIssueTemplateKind,
+                }))}
+              >
+                <SelectTrigger
+                  className="h-8 w-fit text-xs"
+                  aria-label={t('settings.projects.page.field.gitlabTemplateKind')}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bug">{t('gitlabIssue.kind.bug')}</SelectItem>
+                  <SelectItem value="feature">{t('gitlabIssue.kind.feature')}</SelectItem>
+                  <SelectItem value={NO_TEMPLATE_KIND_VALUE}>
+                    {t('settings.projects.page.field.gitlabTemplateKindNone')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {template.builtin ? (
+                <span className="typography-micro text-muted-foreground">
+                  {t('settings.projects.page.field.gitlabTemplateBuiltin')}
+                </span>
+              ) : null}
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                className="ms-auto shrink-0 !font-normal"
+                onClick={() => (template.builtin
+                  ? commit(replaceTemplateAt(drafts, index, builtinIssueTemplateDefaults(template.id, nameOf) ?? {}))
+                  : commit(drafts.filter((_, at) => at !== index)))}
+              >
+                {template.builtin
+                  ? t('settings.projects.page.field.gitlabTemplateReset')
+                  : t('settings.projects.page.field.gitlabTemplateRemove')}
+              </Button>
+            </div>
+            <Textarea
+              value={template.body}
+              onChange={(event) => setDrafts(replaceTemplateAt(drafts, index, { body: event.target.value }))}
+              onBlur={() => commit(drafts)}
+              rows={6}
+              aria-label={t('settings.projects.page.field.gitlabTemplateBody')}
+              className="max-w-[40rem] resize-y font-mono text-xs"
+            />
+          </div>
+        ))}
+      </div>
+      <Button type="button" size="sm" variant="outline" className="mt-3" onClick={addTemplate}>
+        {t('settings.projects.page.field.gitlabTemplateAdd')}
+      </Button>
+    </SettingsControlGroup>
+  );
+};
+
+/** The instance as a person names it: `localhost:8929`, `gitlab.com`. */
+const instanceLabelOf = (instance: string): string => {
+  try {
+    return new URL(instance.includes('://') ? instance : `https://${instance}`).host || instance;
+  } catch {
+    return instance;
+  }
+};
+
 /**
  * The project's GitLab issue automation: whether the server may pick up
  * `ai-ready` issues, which bot account comments and labels, the branch prefix,
@@ -167,17 +313,32 @@ const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =
     void refreshAccounts(sourceControl);
   }, [refreshAccounts, sourceControl]);
 
-  const accountOptions = React.useMemo(() => identities.flatMap((identity) => {
-    if (identity.provider !== 'gitlab') return [];
-    const entry = authEntries[getSourceControlAuthKey(identity)];
-    if (!entry?.hasChecked || entry.status?.status !== 'connected') return [];
-    return buildManagedAccountOptions(
-      identity,
-      descriptorOf(identity.provider),
-      entry.status.accounts,
-      (account) => t(getManagedCredentialSourceLabelKey(account.source)),
-    ).map((option) => ({ id: option.reference.accountId, label: option.label }));
-  }), [authEntries, descriptorOf, identities, t]);
+  // Choosing a bot answers one question — who comments and labels — so the list
+  // says the person. The provider is named by the field itself, the credential
+  // source never tells two GitLab accounts apart, and the instance only matters
+  // when the list spans more than one of them.
+  const accountOptions = React.useMemo(() => {
+    const options = identities.flatMap((identity) => {
+      if (identity.provider !== 'gitlab') return [];
+      const entry = authEntries[getSourceControlAuthKey(identity)];
+      if (!entry?.hasChecked || entry.status?.status !== 'connected') return [];
+      return buildManagedAccountOptions(
+        identity,
+        descriptorOf(identity.provider),
+        entry.status.accounts,
+        (account) => t(getManagedCredentialSourceLabelKey(account.source)),
+      ).map((option) => ({
+        id: option.reference.accountId,
+        username: option.username,
+        instance: instanceLabelOf(option.reference.instance),
+      }));
+    });
+    const instances = new Set(options.map((option) => option.instance));
+    return options.map((option) => ({
+      id: option.id,
+      label: instances.size > 1 ? `@${option.username} · ${option.instance}` : `@${option.username}`,
+    }));
+  }, [authEntries, descriptorOf, identities, t]);
 
   const storedPrefix = project.gitlabIssueBranchPrefix ?? 'openchamber/';
   const [prefixDraft, setPrefixDraft] = React.useState(storedPrefix);
@@ -189,6 +350,25 @@ const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =
     // same error the form shows, so the stopped dispatcher is explained.
     setPrefixError(Boolean(configuredPrefix) && !isValidBranchPrefix(configuredPrefix ?? ''));
   }, [project.id, project.gitlabIssueBranchPrefix]);
+
+  const [reviewModelDraft, setReviewModelDraft] = React.useState(project.gitlabIssueReviewModel ?? '');
+  const [reviewVariantDraft, setReviewVariantDraft] = React.useState(project.gitlabIssueReviewVariant ?? '');
+  React.useEffect(() => {
+    setReviewModelDraft(project.gitlabIssueReviewModel ?? '');
+    setReviewVariantDraft(project.gitlabIssueReviewVariant ?? '');
+  }, [project.id, project.gitlabIssueReviewModel, project.gitlabIssueReviewVariant]);
+
+  const commitReviewModel = () => {
+    const trimmed = reviewModelDraft.trim();
+    if (trimmed === (project.gitlabIssueReviewModel ?? '')) return;
+    updateProjectMeta(project.id, { gitlabIssueReviewModel: trimmed });
+  };
+
+  const commitReviewVariant = () => {
+    const trimmed = reviewVariantDraft.trim();
+    if (trimmed === (project.gitlabIssueReviewVariant ?? '')) return;
+    updateProjectMeta(project.id, { gitlabIssueReviewVariant: trimmed });
+  };
 
   const storedTimeout = project.gitlabIssueTimeoutMinutes;
   const timeoutInvalid = storedTimeout !== undefined
@@ -268,6 +448,34 @@ const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =
             ) : null}
           </SettingsFieldRow>
           <SettingsFieldRow
+            settingsItem="projects.gitlab-review-model"
+            label={t('settings.projects.page.field.gitlabReviewModel')}
+            info={t('settings.projects.page.field.gitlabReviewModelInfo')}
+          >
+            <div className="flex flex-col gap-2">
+              <Input
+                value={reviewModelDraft}
+                onChange={(event) => setReviewModelDraft(event.target.value)}
+                onBlur={commitReviewModel}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') event.currentTarget.blur();
+                }}
+                placeholder={t('settings.projects.page.field.gitlabReviewModelPlaceholder')}
+                aria-label={t('settings.projects.page.field.gitlabReviewModel')}
+              />
+              <Input
+                value={reviewVariantDraft}
+                onChange={(event) => setReviewVariantDraft(event.target.value)}
+                onBlur={commitReviewVariant}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') event.currentTarget.blur();
+                }}
+                placeholder={t('settings.projects.page.field.gitlabReviewVariantPlaceholder')}
+                aria-label={t('settings.projects.page.field.gitlabReviewVariant')}
+              />
+            </div>
+          </SettingsFieldRow>
+          <SettingsFieldRow
             settingsItem="projects.gitlab-bot-account"
             label={t('settings.projects.page.field.gitlabBotAccount')}
             info={t('settings.projects.page.field.gitlabBotAccountInfo')}
@@ -280,7 +488,11 @@ const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =
                 className={SETTINGS_SELECT_ROW_TRIGGER_CLASS}
                 aria-label={t('settings.projects.page.field.gitlabBotAccount')}
               >
-                <SelectValue placeholder={t('settings.projects.page.field.gitlabBotAccountPlaceholder')} />
+                <SelectValue placeholder={t('settings.projects.page.field.gitlabBotAccountPlaceholder')}>
+                  {project.gitlabIssueBotAccountId
+                    ? accountOptions.find((option) => option.id === project.gitlabIssueBotAccountId)?.label
+                    : undefined}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {accountOptions.map((option) => (
@@ -291,6 +503,7 @@ const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =
           </SettingsFieldRow>
         </>
       ) : null}
+      <GitlabIssueTemplatesEditor project={project} />
     </SettingsSection>
   );
 };

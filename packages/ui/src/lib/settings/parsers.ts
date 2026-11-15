@@ -456,6 +456,14 @@ const projectEntrySchema = z.object({
   // Out-of-range values are kept: the settings page shows the error and the
   // dispatcher stays off until the value is fixed.
   gitlabIssueTimeoutMinutes: z.number().finite().optional().catch(undefined),
+  // The issue description templates this project offers. A built-in template is
+  // overridden by an entry that reuses its id; custom templates carry their own.
+  gitlabIssueTemplates: z.array(z.object({
+    id: nonEmptyTrimmed,
+    name: nonEmptyTrimmed,
+    kind: z.enum(['bug', 'feature']).nullish().catch(null),
+    body: z.string().catch(''),
+  })).optional().catch(undefined),
 });
 
 export const parseProjects = fromSchema(
@@ -492,6 +500,14 @@ export const parseProjects = fromSchema(
       if (parsed.data.gitlabIssueBotAccountId) project.gitlabIssueBotAccountId = parsed.data.gitlabIssueBotAccountId;
       if (parsed.data.gitlabIssueTimeoutMinutes !== undefined) {
         project.gitlabIssueTimeoutMinutes = parsed.data.gitlabIssueTimeoutMinutes;
+      }
+      if (parsed.data.gitlabIssueTemplates?.length) {
+        project.gitlabIssueTemplates = parsed.data.gitlabIssueTemplates.map((template) => ({
+          id: template.id,
+          name: template.name,
+          kind: template.kind ?? null,
+          body: template.body,
+        }));
       }
       result.push(project);
     }

@@ -24,6 +24,8 @@ const SEARCH_TARGET_TABS = new Map<string, ProjectSettingsTab>([
   ['projects.gitlab-auto-dispatch', 'general'],
   ['projects.gitlab-branch-prefix', 'general'],
   ['projects.gitlab-timeout', 'general'],
+  ['projects.gitlab-review-model', 'general'],
+  ['projects.gitlab-templates', 'general'],
   ['projects.gitlab-bot-account', 'general'],
   ['projects.shared', 'general'],
   ['projects.shared.plansDir', 'general'],

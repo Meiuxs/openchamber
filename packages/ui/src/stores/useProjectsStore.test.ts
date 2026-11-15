@@ -25,6 +25,32 @@ describe("useProjectsStore settings synchronization", () => {
     }
   })
 
+  test("settings sync keeps issue templates and the review model through the sanitizer", () => {
+    const previous = useProjectsStore.getState()
+    try {
+      // SAFETY: a settings document another window wrote; the sanitizer only
+      // reads the projects it knows, and the junk template entry is
+      // deliberate.
+      const settings = { projects: [{
+        id: "repo", path: "/repo", label: "Repo",
+        gitlabIssueReviewModel: "anthropic/claude", gitlabIssueReviewVariant: "review",
+        gitlabIssueTemplates: [
+          { id: "t1", name: "Bug", kind: "bug", body: "steps" },
+          { id: "", name: "No id", kind: null, body: "" },
+          "junk",
+        ],
+      }] } as DesktopSettings
+      useProjectsStore.getState().synchronizeFromSettings(settings)
+      const project = useProjectsStore.getState().projects.find((entry) => entry.path === "/repo")
+      expect(project?.gitlabIssueReviewModel).toBe("anthropic/claude")
+      // Invalid entries are dropped, valid ones survive the round-trip that
+      // used to erase them.
+      expect(project?.gitlabIssueTemplates).toEqual([{ id: "t1", name: "Bug", kind: "bug", body: "steps" }])
+    } finally {
+      useProjectsStore.setState(previous, true)
+    }
+  })
+
   test("directory navigation preserves roots and does not create history duplicates for Windows spelling variants", () => {
     const previous = useDirectoryStore.getState()
     const sdkDirectory = opencodeClient.getDirectory()
@@ -69,7 +95,8 @@ describe("useProjectsStore settings synchronization", () => {
 
   test("a reconcile sync never adopts another window's active project", () => {
     // Ids are path-derived inside the store's sanitizer, so seed real ones by
-    // bootstrapping once and reading them back.
+    // bootstrapping once and reading them back. The sanitizer fills in every
+    // field a partial settings document leaves out.
     const raw = { projects: [{ path: "/repo-a" }, { path: "/repo-b" }] } as DesktopSettings
     useProjectsStore.getState().synchronizeFromSettings(raw)
     const [first, second] = useProjectsStore.getState().projects
@@ -264,7 +291,8 @@ describe("useProjectsStore.addProjects", () => {
   test("skips invalid paths and returns an empty array when nothing is addable", async () => {
     resetProjects()
 
-    const added = await useProjectsStore.getState().addProjects(["", "   ", 42 as unknown as string])
+    // SAFETY: addProjects must skip a non-string path; the number is that input.
+    const added = await useProjectsStore.getState().addProjects(["", "   ", 42 as never])
 
     expect(added).toEqual([])
     expect(useProjectsStore.getState().projects).toEqual([])

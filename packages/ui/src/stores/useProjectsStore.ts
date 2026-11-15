@@ -86,6 +86,14 @@ interface ProjectsStore {
     gitlabIssueBranchPrefix?: string | null;
     gitlabIssueBotAccountId?: string | null;
     gitlabIssueTimeoutMinutes?: number | null;
+    gitlabIssueReviewModel?: string | null;
+    gitlabIssueReviewVariant?: string | null;
+    gitlabIssueTemplates?: Array<{
+      id: string;
+      name: string;
+      kind: 'bug' | 'feature' | null;
+      body: string;
+    }> | null;
   }) => void;
   uploadProjectIcon: (id: string, file: File) => Promise<{ ok: boolean; error?: string }>;
   removeProjectIcon: (id: string) => Promise<{ ok: boolean; error?: string }>;
@@ -376,6 +384,36 @@ const sanitizeProjects = (value: unknown): ProjectEntry[] => {
     if (gitlabBotAccountId) project.gitlabIssueBotAccountId = gitlabBotAccountId;
     const gitlabTimeout = parseFiniteNumber(candidate.gitlabIssueTimeoutMinutes, {});
     if (gitlabTimeout !== undefined) project.gitlabIssueTimeoutMinutes = gitlabTimeout;
+    const gitlabReviewModel = parseNonEmptyTrimmedString(candidate.gitlabIssueReviewModel, {});
+    if (gitlabReviewModel) project.gitlabIssueReviewModel = gitlabReviewModel;
+    const gitlabReviewVariant = parseNonEmptyTrimmedString(candidate.gitlabIssueReviewVariant, {});
+    if (gitlabReviewVariant) project.gitlabIssueReviewVariant = gitlabReviewVariant;
+
+    // The issue templates ride through the same sync, and this sanitizer is
+    // their only gate: dropping them here would erase every project's
+    // templates from disk on the next settings round-trip.
+    if (candidate.gitlabIssueTemplates !== undefined) {
+      // An entry without an id or a name is unusable and dropped instead of
+      // repaired; the body may be empty, which is how a person clears a
+      // built-in template.
+      const issueTemplateSchema = z.object({
+        id: z.string().trim().min(1),
+        name: z.string().trim().min(1),
+        kind: z.enum(['bug', 'feature']).nullable().catch(null),
+        body: z.string().catch(''),
+      });
+      const templates = Array.isArray(candidate.gitlabIssueTemplates)
+        ? candidate.gitlabIssueTemplates
+          .map((template) => {
+            const parsed = issueTemplateSchema.safeParse(template);
+            return parsed.success ? parsed.data : null;
+          })
+          .filter((entry) => entry !== null)
+        : [];
+      if (templates.length > 0) {
+        project.gitlabIssueTemplates = templates;
+      }
+    }
     result.push(project);
   }
 
@@ -955,6 +993,14 @@ export const useProjectsStore = create<ProjectsStore>()(
       gitlabIssueBranchPrefix?: string | null;
       gitlabIssueBotAccountId?: string | null;
       gitlabIssueTimeoutMinutes?: number | null;
+      gitlabIssueReviewModel?: string | null;
+      gitlabIssueReviewVariant?: string | null;
+      gitlabIssueTemplates?: Array<{
+        id: string;
+        name: string;
+        kind: 'bug' | 'feature' | null;
+        body: string;
+      }> | null;
     }) => {
       if (isVSCodeProjectsRuntime) {
         return;
@@ -1035,6 +1081,33 @@ export const useProjectsStore = create<ProjectsStore>()(
           } else {
             delete updated.gitlabIssueTimeoutMinutes;
           }
+        }
+        if (meta.gitlabIssueReviewModel !== undefined) {
+          const reviewModel = parseNonEmptyTrimmedString(meta.gitlabIssueReviewModel, {});
+          if (reviewModel && /^\S+\/\S+$/.test(reviewModel)) {
+            updated.gitlabIssueReviewModel = reviewModel;
+          } else {
+            delete updated.gitlabIssueReviewModel;
+          }
+        }
+        if (meta.gitlabIssueReviewVariant !== undefined) {
+          const reviewVariant = parseNonEmptyTrimmedString(meta.gitlabIssueReviewVariant, {});
+          if (reviewVariant) updated.gitlabIssueReviewVariant = reviewVariant;
+          else delete updated.gitlabIssueReviewVariant;
+        }
+        // Templates are stored whole: the caller sends the list it wants kept,
+        // and an empty list removes the field so the built-ins show again.
+        if (meta.gitlabIssueTemplates !== undefined) {
+          const templates = (meta.gitlabIssueTemplates ?? [])
+            .map((template) => ({
+              id: template.id.trim(),
+              name: template.name.trim(),
+              kind: template.kind ?? null,
+              body: template.body ?? '',
+            }))
+            .filter((template) => template.id.length > 0 && template.name.length > 0);
+          if (templates.length > 0) updated.gitlabIssueTemplates = templates;
+          else delete updated.gitlabIssueTemplates;
         }
         return updated;
       });

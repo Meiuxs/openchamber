@@ -391,6 +391,8 @@ type ManagedAccountOption = {
   key: string;
   reference: SourceControlIdentity & { accountId: string };
   label: string;
+  /** The account's own name, for a picker that needs to say just who it is. */
+  username: string;
   source: SourceControlAuthAccount['source'];
 };
 
@@ -452,6 +454,7 @@ export const buildManagedAccountOptions = (
     key: JSON.stringify([identity.provider, identity.instance, account.id]),
     reference: { ...identity, accountId: account.id },
     label: formatSourceControlAccountLabel(identity, descriptor.label, account, sourceLabel(account)),
+    username: account.user.username,
     source: account.source,
   }));
 };
