@@ -362,7 +362,7 @@ const ReferenceFilterMenu: React.FC<{ browser: ReferenceBrowser }> = ({ browser 
             group(t('references.picker.filter.group.status'), state, trackerDescriptor.stateFilters, (option) => trackerStateFilterLabel(option, t), (option) => browser.selectTrackerFilter({ state: option })),
             ...(filters.people ? [group(t('references.picker.filter.group.people'), people, TRACKER_PEOPLE_FILTERS, (option) => t(TRACKER_PEOPLE_LABEL_KEYS[option]), (option) => browser.selectTrackerFilter({ people: option }))] : []),
             ...(filters.priority ? [group(t('references.picker.filter.group.priority'), priority, TRACKER_PRIORITY_FILTERS, (option) => t(TRACKER_PRIORITY_LABEL_KEYS[option]), (option) => browser.selectTrackerFilter({ priority: option }))] : []),
-            ...(featureOffered ? [group(t('references.picker.filter.group.feature'), feature ?? ALL_FEATURES, [ALL_FEATURES, ...features] as readonly string[], (option) => (option === ALL_FEATURES ? t('references.picker.filter.tracker.feature.all') : option), (option) => browser.selectTrackerFilter({ feature: option === ALL_FEATURES ? null : option }))] : []),
+            ...(featureOffered ? [group(t('references.picker.filter.group.feature'), feature ?? ALL_FEATURES, [ALL_FEATURES, ...features], (option) => (option === ALL_FEATURES ? t('references.picker.filter.tracker.feature.all') : option), (option) => browser.selectTrackerFilter({ feature: option === ALL_FEATURES ? null : option }))] : []),
         ];
     const labelSection = labelsAvailable ? {
         directory: browser.directory,
