@@ -5,7 +5,6 @@ export type OpenInApp = {
   id: string;
   label: string;
   appName: string;
-  /** The app's monochrome mark from the sprite (see scripts/icons/open-in-apps.mjs). */
   icon: IconName;
   /** CLI command for the server-side open route; macOS launches by appName instead. */
   command?: string;
