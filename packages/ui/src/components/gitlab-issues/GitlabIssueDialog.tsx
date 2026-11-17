@@ -253,7 +253,7 @@ export const GitlabIssueDialog: React.FC = () => {
                 disabled={submitting}
               >
                 <SelectTrigger id="gitlab-issue-template" className="w-full">
-                  <SelectValue placeholder={t('gitlabIssue.template.none')} />
+                  <SelectValue placeholder={t('gitlabIssue.template.none')}>{selectedTemplate?.name}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NO_TEMPLATE_VALUE}>{t('gitlabIssue.template.none')}</SelectItem>

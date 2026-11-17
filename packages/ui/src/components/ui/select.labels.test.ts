@@ -11,6 +11,7 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // branch, remote, voice or timezone name. Anywhere else the trigger has to
 // render the label as children.
 const VALUE_IS_LABEL = [
+  'components/gitlab-issues/GitlabIssueDialog.tsx',
   'components/multirun/BranchSelector.tsx',
   'components/sections/git-identities/GitIdentityEditorDialog.tsx',
   'components/sections/openchamber/RepositoryBindingEditors.tsx',
