@@ -1,6 +1,5 @@
 import type { TrackerDescriptor } from './types';
 
-/** Linear as the server describes it (`server/lib/linear/tracker.js`). */
 export const linearLikeTrackerDescriptor = (overrides: Partial<TrackerDescriptor> = {}): TrackerDescriptor => ({
   id: 'linear',
   name: 'Linear',

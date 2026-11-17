@@ -1,9 +1,5 @@
 import { normalizeOriginInstance } from '../source-control/origin-instance.js';
 
-/**
- * GitLab's static description: synchronous and SDK-free, so the Git layer,
- * bindings and the client can read it without loading GitBeaker.
- */
 export const gitlabDescriptor = Object.freeze({
   id: 'gitlab',
   label: 'GitLab',
@@ -23,7 +19,6 @@ export const gitlabDescriptor = Object.freeze({
     changeRequests: true,
     draftChangeRequests: true,
     draftConversion: true,
-    // Rebase is not one atomic merge on GitLab, so it is never offered.
     merge: Object.freeze({ methods: Object.freeze(['merge', 'squash']) }),
     ci: true,
     comments: true,
@@ -60,7 +55,6 @@ export const gitlabDescriptor = Object.freeze({
   trackedItems: Object.freeze({ nestedOwners: true, defaultInstance: null, batchLimit: 50 }),
   limits: Object.freeze({
     commentMaxLength: 1_000_000,
-    // GitLab names a reviewer by numeric user id.
     reviewerId: /^\d+$/,
     labelsMax: 100,
     reviewersMax: 50,
@@ -71,7 +65,6 @@ export const gitlabDescriptor = Object.freeze({
     Object.freeze({ key: 'token', type: 'personal-access-token', secret: true, scope: 'instance' }),
   ]),
   instances: Object.freeze({ legacyFlow: null }),
-  // What only the client draws; see the GitHub descriptor.
   presentation: Object.freeze({
     sharedNumberSpace: false,
     abbreviation: 'MR',
@@ -81,7 +74,6 @@ export const gitlabDescriptor = Object.freeze({
       multiple: true, allowLoopbackHttp: true, allowPort: true,
       reserved: Object.freeze([]), placeholder: 'https://gitlab.example.com',
     }),
-    // A glab login serves API reads only; Git transport needs a stored account.
     cliTransport: false,
     // `/-/user_settings/...` is the page a newer GitLab redirects to; older ones
     // (12.7, the intranet deployment) serve it at `/profile/...` only.

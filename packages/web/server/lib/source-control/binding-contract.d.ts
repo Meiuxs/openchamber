@@ -9,7 +9,6 @@ export type BindingStorageSnapshot = {
   version: 2;
   repositories: { [repositoryId: string]: { revision: number; binding: StoredBinding | null } };
 };
-// These parsers are the persisted and process-boundary entrypoints.
 export function parseBinding(value: StoredBinding): StoredBinding;
 // `insecureOrigins` is the machine policy's plain-HTTP allowlist as the
 // caller resolved it: a response instance may be HTTP on loopback or on one

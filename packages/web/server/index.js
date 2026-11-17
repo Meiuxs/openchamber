@@ -688,7 +688,7 @@ const sessionMetadataStore = createSessionMetadataStore({
   // further down and only ever used once a request arrives.
   openCode: {
     read: (...args) => createOpenCodeSessionMetadata({ buildOpenCodeUrl, getOpenCodeAuthHeaders }).read(...args),
-    write: (...args) => createOpenCodeSessionMetadata({ buildOpenCodeUrl, getOpenCodeAuthHeaders }).write(...args),
+    write: (sessionID, metadata, options) => createOpenCodeSessionMetadata({ buildOpenCodeUrl, getOpenCodeAuthHeaders }).write(sessionID, metadata, options).then(() => sessionLineage.noteMetadata(sessionID, metadata) && permissionAutoAcceptRuntime.forgetSession(sessionID)),
   },
 });
 
@@ -1479,10 +1479,8 @@ const mergeFollowRuntime = createMergeFollowRuntime({
 
 // Agent workflows: scripts that fan a task out to many agents, run here while
 // the agent that asked stays free. Off until the user turns the tool on.
-const isWorkflowToolEnabled = async () => {
-  const settings = await readSettingsFromDiskMigrated().catch(() => null);
-  return settings?.agentWorkflowToolEnabled === true;
-};
+const readWorkflowSettings = () => readSettingsFromDiskMigrated().catch(() => null);
+const isWorkflowToolEnabled = async () => (await readWorkflowSettings())?.agentWorkflowToolEnabled === true;
 const workflowAgentSessions = createWorkflowAgentSessions({
   buildOpenCodeUrl,
   getOpenCodeAuthHeaders,
@@ -1497,6 +1495,7 @@ const workflowRuntime = createWorkflowRuntime({
   // Declared further down; only ever called after startup.
   broadcast: (event) => broadcastOpenChamberUiEvent(event),
   isEnabled: isWorkflowToolEnabled,
+  startsWithoutApproval: async () => (await readWorkflowSettings())?.agentWorkflowAutoApprove === true,
   fsPromises,
   path,
 });

@@ -39,11 +39,6 @@ const requiredString = (value, name) => {
   if (result.startsWith('-') || /[\0\r\n]/.test(result)) throw planError(`${name} is invalid`);
   return result;
 };
-// A server-generated digest the client echoes back (configRevision, endpoint
-// fingerprint, transportRevision): an opaque sha256/base64url value, never a CLI
-// argument. Base64url may legitimately start with '-', so the leading-dash
-// injection guard in `requiredString` must not apply; only real control
-// characters are rejected.
 const parseDigest = (value, name) => {
   if (!isString(value) || !value.trim()) throw planError(`${name} is required`);
   const result = value.trim();
@@ -137,12 +132,6 @@ const parseHydrationTransfers = (value, requirements) => {
   if (new Set(transferKeys).size !== transferKeys.length) throw planError('checkout hydration transfers must be unique');
   return transfers;
 };
-/**
- * The provider account a cloned repository is associated with, for issues and
- * change requests. Separate from the transport credential — a repository can
- * fetch over SSH and still answer to a GitHub account — so it is accepted for
- * every transport and checked only against the endpoint it will be bound to.
- */
 const parseCloneProviderAccount = (value, parsedEndpoint, providers) => {
   if (value === undefined) return null;
   if (!isPlainObject(value) || !hasExactKeys(value, ['provider', 'instance', 'accountId'])
@@ -255,7 +244,6 @@ const assertSafeRemoteEndpoint = (endpoint, providers, options = undefined) => {
     throw error;
   }
 };
-// Display URLs are redacted, so a URL-form display never carries userinfo.
 const assertSafeDisplayEndpoint = (endpoint) => {
   const value = requiredString(endpoint, 'Git endpoint');
   if (!isSafeTransferEndpoint(value) || (value.includes('://') && new URL(value).username)) {
@@ -272,40 +260,24 @@ const parseExactRef = (value, name, namespaces) => {
   return ref;
 };
 
-/**
- * Whether a remote may carry a change host's review refs: it is the primary
- * remote of a ready provider association (`authority.primaryOf`, from the
- * binding service) whose descriptor creates changes by push. Checked at
- * planning and again before every transfer.
- */
 export const isChangeReviewRemote = (authority, providers = sourceControlProviderDescriptors) => (
   Array.isArray(authority?.primaryOf)
   && authority.primaryOf.some((id) => providers.get(id)?.capabilities.createVia === 'push')
 );
 
-// Topics and hashtags go into the push refspec after `%` unencoded, so they
-// are limited to characters that can never end or extend an option.
 const REVIEW_OPTION_RE = /^[A-Za-z0-9._-]{1,128}$/;
 const REVIEW_HASHTAGS_MAX = 16;
-// `refs/changes/<last two digits>/<change>/<revision>`, a change host's revision ref.
 const CHANGE_REF_RE = /^refs\/changes\/(\d{2})\/([1-9]\d{0,9})\/([1-9]\d{0,5})$/;
 const isChangeRef = (ref) => {
   const match = CHANGE_REF_RE.exec(ref);
   return Boolean(match) && match[2].padStart(2, '0').slice(-2) === match[1];
 };
 
-/**
- * A push for review: the target branch and the change's options, every one
- * validated here because the server writes them into the refspec itself
- * (`<sha>:refs/for/<target>%topic=…,wip,private,t=…`). The caller names no
- * refspec, destination ref, force lease or upstream.
- */
 const parseReviewPush = (value) => {
   if (!isPlainObject(value) || !hasExactKeys(value, ['target'], ['topic', 'wip', 'private', 'hashtags'])) {
     throw planError('review is invalid');
   }
   const target = requiredString(value.target, 'review target');
-  // `%` starts the push options and `,` separates them; a branch may contain both.
   if (target !== value.target || /[%,]/.test(target)) throw planError('review target is invalid');
   parseExactRef(`refs/for/${target}`, 'review target', ['refs/for/']);
   const review = { target };
@@ -327,7 +299,6 @@ const parseReviewPush = (value) => {
   }
   return review;
 };
-/** The refspec a review push sends, composed only from validated fields. */
 const reviewRefspec = (sourceSha, review) => {
   const options = [
     ...(review.topic ? [`topic=${review.topic}`] : []),
@@ -352,14 +323,7 @@ const parseCloneEndpoint = (value, providers, options = undefined) => {
   if (!isSafeTransferEndpoint(endpoint, providers, options)) throw planError('remoteUrl is invalid');
   return endpoint;
 };
-/**
- * Some providers (GitLab) answer an HTTPS repository address without `.git`
- * with a redirect, and managed and anonymous transfers never follow one, so a
- * clone from such a provider's instance uses the `.git` address it offers
- * itself; the descriptor's `appendDotGitToHttpsClone` names them. Other hosts
- * keep the address as given: some serve a repository only under its own name.
- * `dotGitOrigins` are those instances' origins.
- */
+// external: https://docs.gitlab.com/topics/git/clone/ GitLab clone URLs need .git because isolated transports refuse redirects.
 const dotGitCloneEndpoint = (endpoint, dotGitOrigins) => {
   if (!endpoint.startsWith('https://')) return endpoint;
   const parsed = new URL(endpoint);
@@ -607,10 +571,8 @@ export function createNetworkOperationPlanner({
 
   const planExisting = async (input) => {
     const remoteFetch = input.operation === 'fetch' && input.fetchScope === 'remote';
-    // A push for review names a target branch; the server composes the destination.
     const reviewPush = input.operation === 'push' && Object.hasOwn(input, 'review');
     const pushMutation = input.operation === 'push' || input.operation === 'delete-remote-branch';
-    // A review push may echo its destination, which must then be exactly `refs/for/<target>`.
     const optional = input.operation === 'push'
       ? (reviewPush ? ['destinationRef'] : ['forceWithLease', 'configureUpstream', 'destinationSelectionId']) : [];
     if (input.operation === 'fetch') optional.push('fetchScope');
@@ -631,7 +593,6 @@ export function createNetworkOperationPlanner({
     const repositoryId = requiredString(input.repositoryId, 'repositoryId');
     const configRevision = parseDigest(input.configRevision, 'configRevision');
     const remote = parseRemote(input.remote);
-    // A single-ref fetch may take a change host's revision ref, under the review gate below.
     const sourceNamespaces = operation === 'fetch' ? ['refs/heads/', 'refs/tags/', 'refs/changes/'] : ['refs/heads/', 'refs/tags/'];
     const destinationNamespaces = operation === 'fetch'
       ? ['refs/remotes/', 'refs/heads/', 'refs/tags/']
@@ -705,8 +666,6 @@ export function createNetworkOperationPlanner({
     if (transportMode === 'managed' && !authority.credentialId) {
       throw planError('Managed Git transport credential is required', 409, 'GIT_NETWORK_OPERATION_AUTHORITY_CHANGED');
     }
-    // Review refs reach only a change host, through the remote its association
-    // names; anywhere else `refs/for/*` would create an ordinary branch.
     if ((review || changeRefFetch) && !isChangeReviewRemote(authority, sourceControlProviders)) {
       throw planError('Review refs are only available on the primary remote of a change host', 400, 'INVALID_REQUEST');
     }
@@ -880,7 +839,6 @@ export function createNetworkOperationPlanner({
     );
     if (await pathExists(destination, fsImpl)) throw planError('Clone destination already exists');
     if (await pathExists(temporaryDirectory, fsImpl)) throw planError('Clone temporary directory already exists');
-    // The provider account is matched by host; the name a System clone URL may carry is no part of that.
     const providerAccount = parseCloneProviderAccount(input.providerAccount, normalizeGitRemoteEndpoint(redactRemoteUrl(endpoint)), sourceControlProviders);
     if (providerAccount) noteDotGitInstance(providerAccount.provider, providerAccount.instance);
     const transferEndpoint = dotGitCloneEndpoint(endpoint, dotGitOrigins);

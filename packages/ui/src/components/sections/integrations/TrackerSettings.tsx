@@ -45,11 +45,6 @@ function snapshotAccounts(status: TrackerAuthStatus | null): AccountSnapshot {
   };
 }
 
-/**
- * The browser sign-in finished when the tracker now reports a connection it
- * did not have: the first account, another account, or the current one
- * authorized again.
- */
 function authorizationCompleted(previous: AccountSnapshot, next: AccountSnapshot): boolean {
   if (!next.connected) return false;
   if (!previous.connected) return true;
@@ -58,7 +53,6 @@ function authorizationCompleted(previous: AccountSnapshot, next: AccountSnapshot
     || next.currentAuthorizedAt !== previous.currentAuthorizedAt;
 }
 
-/** The origin of a server address typed so far, or null while it is not one yet. */
 const typedOrigin = (value: string): string | null => {
   try {
     const url = new URL(value.trim());
@@ -68,12 +62,10 @@ const typedOrigin = (value: string): string | null => {
   }
 };
 
-/** An extension's tracker: its catalog row, for the icon and the name, and the public slice of its contribution. */
 export type TrackerSettingsExtension = { guest: InstalledGuest; tracker: PublicTracker };
 
 type TrackerSettingsProps = {
   descriptor: TrackerDescriptor;
-  /** Present for an extension tracker, drawn under Extension accounts; absent for a built-in one. */
   extension?: TrackerSettingsExtension;
 };
 
@@ -117,9 +109,7 @@ export const TrackerSettings: React.FC<TrackerSettingsProps> = ({ descriptor, ex
   const [clientId, setClientId] = React.useState('');
   const [clientSecret, setClientSecret] = React.useState('');
   const [copied, setCopied] = React.useState(false);
-  // An extension tracker that takes both ways in shows one form at a time; browser sign-in first, as the descriptor orders them.
   const [method, setMethod] = React.useState<'oauth' | 'token'>(descriptor.authMethods.includes('oauth') ? 'oauth' : 'token');
-  // Another account's form opens on Add account; while one is connected the card stays quiet.
   const [adding, setAdding] = React.useState(false);
   const pollTimerRef = React.useRef<number | null>(null);
 
@@ -135,16 +125,11 @@ export const TrackerSettings: React.FC<TrackerSettingsProps> = ({ descriptor, ex
     if (trackers && !hasChecked) void refreshTrackerStatus(trackers, providerId);
   }, [hasChecked, providerId, refreshTrackerStatus, trackers]);
 
-  // Only leaving the card ends a browser sign-in wait. Tied to the effect above,
-  // the wait also ended when a poll's answer first set `hasChecked` (the
-  // opening status read had failed), and the card never saw the sign-in land.
   React.useEffect(() => stopWaiting, [stopWaiting]);
 
   const connect = status?.connect;
   const takesToken = Boolean(extension) && descriptor.authMethods.includes('token');
   const takesOauth = descriptor.authMethods.includes('oauth');
-  // The server an extension tracker's accounts live on: fixed by the manifest,
-  // the one connected, or the one typed before the first account.
   const needsInstance = Boolean(extension) && connect?.instances.kind === 'user' && !connect.instance;
   const instanceOrigin = connect?.instance ?? (needsInstance ? typedOrigin(instance) : null);
   const tokenFormat = extension?.tracker.token;
@@ -167,7 +152,6 @@ export const TrackerSettings: React.FC<TrackerSettingsProps> = ({ descriptor, ex
     }
   }, [provider, t]);
 
-  /** The instance the connect routes take: only while the card asks for one. */
   const instanceInput = needsInstance ? instance.trim() || undefined : undefined;
 
   const startConnect = React.useCallback(async () => {
@@ -181,7 +165,6 @@ export const TrackerSettings: React.FC<TrackerSettingsProps> = ({ descriptor, ex
           toast.error(t('settings.integrations.tracker.toast.instanceRequired'));
           return;
         }
-        // The client the user registered goes first; an empty id keeps the saved one.
         const nextClientId = clientId.trim();
         if (nextClientId || !connect?.hasClient) {
           if (!nextClientId) {
@@ -223,7 +206,6 @@ export const TrackerSettings: React.FC<TrackerSettingsProps> = ({ descriptor, ex
         })();
       }, AUTHORIZATION_POLL_MS);
     } catch (error) {
-      // An extension tracker refuses a start with its own reason (a full tracker, another server): show it.
       toast.error(t(copy.toastStartConnectFailed, { provider }), extension && error instanceof Error && error.message ? { description: error.message } : undefined);
       stopWaiting();
     } finally {
@@ -258,7 +240,6 @@ export const TrackerSettings: React.FC<TrackerSettingsProps> = ({ descriptor, ex
         toast.error(failureText(result));
         return;
       }
-      // The server took the token: it leaves the field.
       setToken('');
       setUsername('');
       setAdding(false);
@@ -310,9 +291,6 @@ export const TrackerSettings: React.FC<TrackerSettingsProps> = ({ descriptor, ex
   if (!trackers) return null;
 
   const icon = trackerPresentation(providerId).icon;
-  // Browser sign-in is the one method a built-in draws; one that only takes
-  // another asks for an update instead of showing a dead Connect. An extension
-  // tracker draws every method its manifest declares.
   const canConnect = takesOauth || takesToken;
   // A tracker that signs in through no method this version performs takes no
   // auth actions here: its connection is always on (the local tracker).
@@ -320,7 +298,6 @@ export const TrackerSettings: React.FC<TrackerSettingsProps> = ({ descriptor, ex
   const connected = Boolean(status?.connected);
   const account = status?.connected ? status.account ?? null : null;
   const user = account?.user;
-  // Disconnected with stored accounts: every one of them was written off (the server refused its credential).
   const storedAccounts = status?.accounts ?? [];
   const needsAttention = account?.status === 'invalid' || (!connected && storedAccounts.some((entry) => entry.status === 'invalid'));
   const otherAccounts = capabilities.multipleAccounts && status?.connected
@@ -343,8 +320,6 @@ export const TrackerSettings: React.FC<TrackerSettingsProps> = ({ descriptor, ex
           : t(copy.notConnected);
   const expanded = isWaiting || open;
   const settingsItem = `integrations.${providerId}`;
-  // An extension tracker's forms: always while nobody is connected, and for
-  // another account once the user asks for one (a tracker with several).
   const showForms = Boolean(extension) && (!connected || (capabilities.multipleAccounts && adding));
   const bothMethods = takesOauth && takesToken;
   const formMethod: 'oauth' | 'token' = !takesToken ? 'oauth' : !takesOauth ? 'token' : method;
@@ -432,7 +407,6 @@ export const TrackerSettings: React.FC<TrackerSettingsProps> = ({ descriptor, ex
     </div>
   ) : null;
 
-  /** Add account: a built-in, or an extension whose only step left is the browser, signs in at once; otherwise the form opens. */
   const addAccount = () => {
     if (!extension || (formMethod === 'oauth' && !bothMethods && connect?.hasClient && !needsInstance)) {
       void startConnect();
@@ -479,7 +453,6 @@ export const TrackerSettings: React.FC<TrackerSettingsProps> = ({ descriptor, ex
         </Button>
       ) : null}
       {connected || storedAccounts.length > 0 ? (
-        // Disconnect also removes a written-off account, which frees the server for another one.
         <Button type="button" size="sm" variant="destructive" onClick={() => void disconnect()} disabled={isBusy}>
           {t(copy.disconnect)}
         </Button>
@@ -530,7 +503,6 @@ export const TrackerSettings: React.FC<TrackerSettingsProps> = ({ descriptor, ex
           <p className="text-xs text-muted-foreground">{t(copy.flowDescription, { provider })}</p>
         ) : null}
         {needsAttention ? (
-          // A written-off account is a problem the user fixes here: it stays visible, with the server it was on.
           <div className="space-y-0.5">
             {writtenOff?.name ? <div className="truncate text-sm font-medium text-foreground">{writtenOff.name}</div> : null}
             {!connected && connect?.instance ? (

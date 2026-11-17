@@ -34,7 +34,6 @@ export const GitSettings: React.FC = () => {
     [t]
   );
 
-  // Load current settings
   React.useEffect(() => {
     const loadSettings = async () => {
       try {

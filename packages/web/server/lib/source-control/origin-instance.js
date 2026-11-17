@@ -38,12 +38,6 @@ export function normalizeOriginInstance(value, { label, insecureOrigins = null }
 
 const webPort = (url) => Number(url.port || (url.protocol === 'http:' ? 80 : 443));
 
-/**
- * The known origin a remote's host belongs to. `port` is the remote's web
- * port when the remote is an HTTP(S) URL, so two instances on one host with
- * different ports stay apart; an SSH remote names no web port, so its host
- * alone decides and the first known origin there wins.
- */
 export function ownedOriginInstance({ host, port, knownInstances }) {
   const name = String(host ?? '').toLowerCase();
   return knownInstances.find((origin) => {

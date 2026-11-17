@@ -45,9 +45,6 @@ const MODELS_DEV_PROXY_URL = "/api/openchamber/models-metadata";
 
 const FALLBACK_PROVIDER_ID = "opencode";
 const FALLBACK_MODEL_ID = "big-pickle";
-// Sentinel selectedProviderId used by the providers UI while the "Add provider"
-// form is open. It is intentionally not a real provider id and must not be
-// persisted as a stable provider selection.
 const ADD_PROVIDER_SENTINEL = "__add_provider__";
 const GIT_UTILITY_PROVIDER_ID = "zen";
 const GIT_UTILITY_PREFERRED_MODEL_ID = "big-pickle";
@@ -76,14 +73,10 @@ interface OpenChamberDefaults {
     sttCorrectTranscript?: boolean;
 }
 
-// Directory activation re-reads the OpenChamber defaults, which are global,
-// not per directory: one request serves the switches that land inside this
-// window, and concurrent activations share the in-flight one.
 const OPENCHAMBER_DEFAULTS_FRESH_MS = 15_000;
 type ConfigRuntimeContext = { runtimeKey: string; generation: number };
 
 let configRuntimeGeneration = 0;
-// A transport change retires in-flight reads but keeps delayed same-instance discovery.
 let configInstanceGeneration = 0;
 
 const captureConfigRuntimeContext = (): ConfigRuntimeContext => ({
@@ -128,8 +121,6 @@ const fetchOpenChamberDefaults = (context: ConfigRuntimeContext): Promise<OpenCh
     const cacheEntry = { at: now, context, request };
     openChamberDefaultsCache = cacheEntry;
     void request.then((result) => {
-        // A failed settings read must not become a 15-second authoritative
-        // empty result. The next directory activation should retry it.
         if (result === null && openChamberDefaultsCache === cacheEntry) {
             openChamberDefaultsCache = null;
         }
@@ -202,11 +193,6 @@ const parseModelString = (modelString: string): { providerId: string; modelId: s
 const normalizeProviderId = (value: string) => value?.toLowerCase?.() ?? '';
 
 type ProviderModel = Model;
-/**
- * OpenCode v2 reports providers and models as two flat lists. Every selection
- * path in this store works provider-first, so the loader regroups the catalog's
- * models under their provider and the rest of the store keeps that shape.
- */
 type ProviderWithModelList = Provider & { models: Model[] };
 
 type GitModelSelection = { providerId: string; modelId: string };
@@ -232,17 +218,10 @@ const findProviderModel = (
     findCatalogModel(providers.find((provider) => provider.id === providerId)?.models, modelId)
 );
 
-/** v2 lists model variants as records with an `id`, not as a keyed map. */
 const modelHasVariant = (model: Model | undefined, variant: string | null | undefined): boolean => (
     typeof variant === "string" && listModelVariantIds(model?.variants).includes(variant)
 );
 
-/**
- * The level this model was last sent with, when the model still offers it.
- * `null` is an explicit Default. A remembered name the model no longer offers
- * is ignored instead of becoming a choice, and a model the catalog does not
- * list is left alone rather than guessed at.
- */
 const resolveRememberedVariantForModel = (
     providers: ProviderWithModelList[],
     providerId: string | undefined,
@@ -261,8 +240,6 @@ const hasProviderModel = (
     providerId: string,
     modelId: string
 ): boolean => {
-    // Auto is not a provider OpenCode reports; it is a valid selection exactly
-    // while the server says routing can honour it.
     if (isAutoModel(providerId, modelId)) {
         return selectAutoReady(useRoutingStore.getState());
     }
@@ -273,14 +250,6 @@ const hasProviderModel = (
     return findCatalogModel(provider.models, modelId) !== undefined;
 };
 
-/**
- * An `openchamber/auto` selection that this server cannot honour. Auto is a
- * valid choice only while the server says routing is available and ready;
- * a selection saved under another build (or before the token was removed)
- * must not be kept, or the sentinel would be sent to OpenCode as a model.
- * Unknown readiness (settings or the routing state not loaded yet) keeps the
- * selection, so a real Auto choice survives startup.
- */
 export const isStaleAutoSelection = (providerId?: string | null, modelId?: string | null): boolean => {
     if (!providerId || !modelId || !isAutoModel(providerId, modelId)) return false;
     if (!useConfigStore.getState().settingsDefaultsLoaded) return false;
@@ -289,21 +258,10 @@ export const isStaleAutoSelection = (providerId?: string | null, modelId?: strin
     return routing.loaded && !selectAutoReady(routing);
 };
 
-/**
- * Whether a live catalog for the directory has arrived. Only a live load sets
- * the snapshot's flag; a catalog shown from the local cache does not.
- */
 const hasLiveCatalog = (state: Pick<ConfigStore, 'directoryScoped'>, directoryKey: string): boolean => (
     state.directoryScoped[directoryKey]?.providersLoaded === true
 );
 
-/**
- * A model the directory's live catalog does not list: its provider was removed
- * or switched off, or no longer offers it. Before a live catalog arrives nothing
- * is known to be missing, and neither is it from an empty one: a location still
- * starting can answer empty, and with no model at all there is nothing better
- * to pick. Auto is judged by `isStaleAutoSelection` instead.
- */
 const isMissingFromCatalog = (
     providers: ProviderWithModelList[],
     catalogLoaded: boolean,
@@ -314,10 +272,8 @@ const isMissingFromCatalog = (
     && !isAutoModel(providerId, modelId)
     && !hasProviderModel(providers, providerId, modelId);
 
-/** A configured default model with the thinking level configured for it. */
 type ConfiguredDefault = { model: string | undefined; variant: string | undefined };
 
-/** A directory's agent-pinned model and OpenCode `model`, as cascade candidates. */
 const inheritedDefaultsFor = (
     agents: Agent[],
     agentName: string | undefined,
@@ -331,7 +287,6 @@ const inheritedDefaultsFor = (
     ];
 };
 
-/** The first configured default that can still run, in the order given. */
 const pickConfiguredDefault = (
     providers: ProviderWithModelList[],
     catalogLoaded: boolean,
@@ -364,12 +319,7 @@ const resolveProviderModelSelection = ({
     currentModelId?: string;
     currentVariant?: string;
     preserveCurrent?: boolean;
-    /** The project default first, then the global one. */
     configuredDefaults: ConfiguredDefault[];
-    /**
-     * The current agent's pinned model, then OpenCode's `model`: what the full
-     * default cascade tries next, once settings are known.
-     */
     inheritedDefaults: ConfiguredDefault[];
     allowFallback: boolean;
     fallbackPrefs: FallbackModelPrefs;
@@ -431,7 +381,6 @@ const resolveProviderModelSelection = ({
     };
 };
 
-/** What the automatic pick reads from the user's model preferences. */
 type FallbackModelPrefs = {
     hiddenModels: readonly ModelRef[];
     lastSelectedModel: string | undefined;
@@ -446,11 +395,6 @@ const isModelHidden = (hiddenModels: readonly ModelRef[], providerId: string, mo
     (hidden) => hidden.providerID === providerId && hidden.modelID === modelId,
 );
 
-// The model last picked in a chat composer, once nothing configured names one.
-// Like a configured default it stands until the live catalog arrives, so a new
-// session does not start on Big Pickle while providers load. A model hidden
-// since, one the live catalog no longer lists, or an Auto pick this server
-// cannot honour, is skipped.
 const resolveLastSelectedModel = (
     { hiddenModels, lastSelectedModel }: FallbackModelPrefs,
     providers: ProviderWithModelList[],
@@ -464,10 +408,6 @@ const resolveLastSelectedModel = (
     return parsed;
 };
 
-// The pick when nothing is configured or remembered: Big Pickle, else the first
-// model. A model the user hid in the picker is skipped; configured defaults never
-// come through here, so they stay honoured even when hidden. With every model
-// hidden the conversation still needs one to send with, so the unfiltered pick stands.
 const resolveFallbackModel = (
     providers: ProviderWithModelList[],
     hiddenModels: readonly ModelRef[],
@@ -500,11 +440,9 @@ type DefaultAgentModelSelection = {
     agentName: string | undefined;
     providerId?: string;
     modelId?: string;
-    /** `null` is an explicit Default remembered for that model. */
     variant?: string | null;
 };
 
-/** `agentName` is unset when the directory's agents could not be read: OpenCode then picks its own default there. */
 type DirectoryDefaultSelection = {
     agentName: string | undefined;
     providerId: string;
@@ -512,22 +450,6 @@ type DirectoryDefaultSelection = {
     variant?: string | null;
 };
 
-// Shared default-selection cascade used both at startup (loadAgents) and when opening a
-// fresh draft (applyDefaultModelAgentSelection), so the two paths stay identical.
-//
-//   Agent: project.defaultAgent → settings.defaultAgent → opencode default_agent → build → first primary → first
-//   Model: project.defaultModel → settings.defaultModel → resolved agent's pinned model+variant → opencode config.model
-//          → last model picked in a chat → opencode/big-pickle → first (these three skip models hidden in the picker)
-//
-// The opencode default_agent / default model (config fields on the OpenCode server) are honored
-// only when our own settings have no default. Until the directory's live catalog
-// arrives (`catalogLoaded`), a configured identifier stays selected even when the
-// catalog does not list it. Once it has arrived, a model it does not list is skipped
-// for the next one down: its provider was removed or switched off.
-// OpenCode itself resolves a model the same way:
-// an agent's pinned model wins, otherwise the global `model` config applies — so we check the
-// agent's model before opencodeDefaultModel. When the agent supplies the model, its `variant` is
-// carried through too (if the model actually exposes that variant).
 const resolveDefaultAgentModelSelection = ({
     agents,
     providers,
@@ -563,7 +485,6 @@ const resolveDefaultAgentModelSelection = ({
         }
         return modelHasVariant(findProviderModel(providers, providerId, modelId), variant) ? variant : undefined;
     };
-    // --- Agent cascade ---
     const primaryAgents = agents.filter((agent) => isPrimaryMode(agent.mode) && !isAgentHidden(agent));
 
     let resolvedAgent: Agent | undefined;
@@ -575,7 +496,6 @@ const resolveDefaultAgentModelSelection = ({
     }
     if (!resolvedAgent && opencodeDefaultAgent) {
         const candidate = agents.find((agent) => agent.name === opencodeDefaultAgent);
-        // OpenCode requires the default agent to be a visible primary agent.
         if (candidate && isPrimaryMode(candidate.mode) && !isAgentHidden(candidate)) {
             resolvedAgent = candidate;
         }
@@ -584,8 +504,6 @@ const resolveDefaultAgentModelSelection = ({
         resolvedAgent = primaryAgents.find((agent) => agent.name === "build") || primaryAgents[0] || agents[0];
     }
 
-    // With nothing configured for the model: the resolved agent's own pin (if
-    // it pins this model), then the level the model was last sent with.
     const resolveAgentOrRememberedVariant = (): string | null | undefined => {
         if (!providerId || !modelId) return undefined;
         const model = findProviderModel(providers, providerId, modelId);
@@ -598,13 +516,10 @@ const resolveDefaultAgentModelSelection = ({
         return resolveEffortChoice([agentVariant, readRememberedEffort(providerId, modelId)], variants);
     };
 
-    // --- Model cascade ---
     let providerId: string | undefined;
     let modelId: string | undefined;
     let variant: string | null | undefined;
 
-    // A project default carries its own variant; the settings variant belongs
-    // to the settings model and must not leak onto it.
     const configured = pickConfiguredDefault(providers, catalogLoaded, [
         { model: projectDefaultModel, variant: projectDefaultVariant },
         { model: settingsDefaultModel, variant: settingsDefaultVariant },
@@ -634,7 +549,6 @@ const resolveDefaultAgentModelSelection = ({
             : agentModel.variant;
     }
 
-    // OpenCode's global default model — used when neither our settings nor the agent pin a model.
     if (!providerId && opencodeDefaultModel) {
         const parsed = parseModelSelection(opencodeDefaultModel);
         if (parsed && !isMissingFromCatalog(providers, catalogLoaded, parsed.providerID, parsed.modelID)) {
@@ -652,8 +566,6 @@ const resolveDefaultAgentModelSelection = ({
         modelId = fallback?.modelId;
     }
 
-    // Nothing configured names a level for this model: its last sent level,
-    // if the model still offers it, is what a new session starts on.
     if (variant === undefined) {
         variant = resolveAgentOrRememberedVariant();
     }
@@ -776,16 +688,6 @@ const runtimeModelReleaseDate = (released: number | undefined): string | undefin
     return /^\d{4}-/.test(iso) ? iso.slice(0, 10) : undefined;
 };
 
-/**
- * Fallback metadata for models models.dev does not list (custom providers,
- * proxies). v2 prices a model per context tier; the untiered entry is the base
- * price, so that is what the UI quotes.
- *
- * v2 has no reasoning capability flag. Its model record signals reasoning only
- * through reasoning variants (effort levels) and the reasoning compatibility
- * fields, so reasoning is claimed when one of those is present and left
- * unknown otherwise.
- */
 const deriveModelMetadata = (providerId: string, model: ProviderModel): ModelMetadata => {
     const baseCost = model.cost.find((entry) => !entry.tier) ?? model.cost[0];
     const hasReasoningSignal = modelVariantNames(model).length > 0
@@ -836,12 +738,6 @@ const findDescriptiveMetadata = (
     return match;
 };
 
-/**
- * The metadata shown for a model: the models.dev entry with the running
- * OpenCode's limits over it, or, for a model models.dev does not list, what the
- * provider reports with the catalog's descriptive fields. A pure function of
- * the two catalogs, so a render can memoize it on them.
- */
 export const resolveModelMetadata = (
     modelsMetadata: ReadonlyMap<string, ModelMetadata>,
     providers: readonly ProviderWithModelList[],
@@ -856,9 +752,6 @@ export const resolveModelMetadata = (
     const provider = providers.find((p) => p.id === providerId);
     const model = findCatalogModel(provider?.models, modelId);
 
-    // The running OpenCode's limits win over the models.dev
-    // catalog: providers adjust them per auth (ChatGPT sign-in
-    // serves GPT models with a 400K window, the catalog says 1M+).
     if (cached) {
         if (!model) return cached;
         const releaseDate = runtimeModelReleaseDate(model.time?.released);
@@ -876,7 +769,6 @@ export const resolveModelMetadata = (
         return metadata;
     }
 
-    // Fallback: derive metadata from provider model data (covers custom providers not in models.dev)
     if (!model) return undefined;
     const derived = deriveModelMetadata(providerId, model);
     const descriptive = findDescriptiveMetadata(modelsMetadata, model, provider?.canonical);
@@ -1042,7 +934,7 @@ const whenIdle = (): Promise<void> => new Promise((resolve) => {
         resolve();
         return;
     }
-    // Safari and iOS have no requestIdleCallback.
+    // external: https://developer.mozilla.org/en-US/docs/Web/API/Window/requestIdleCallback#browser_compatibility Safari and iOS need the timer fallback.
     if (typeof window.requestIdleCallback === 'function') {
         window.requestIdleCallback(() => resolve(), { timeout: MODELS_METADATA_IDLE_TIMEOUT_MS });
     } else {
@@ -1065,9 +957,6 @@ const ensureModelsMetadataFetch = (
 
     markStartupTrace('modelsMetadata:queued');
     const runtimeContext = captureConfigRuntimeContext();
-    // Model metadata (prices, limits, capabilities) only enriches the pickers
-    // and usage display, so it waits until the browser is idle instead of
-    // competing with startup for the network and main thread.
     const request: Promise<Map<string, ModelMetadata>> = whenIdle()
         .then(() => isConfigRuntimeContextCurrent(runtimeContext)
             ? measureStartupTrace('modelsMetadata', fetchModelsDevMetadata)
@@ -1088,9 +977,6 @@ const ensureModelsMetadataFetch = (
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const CONNECTION_PROBE_TIMEOUT_MS = 800;
-// How long the server may hold one startup health probe for OpenCode to become
-// ready. It answers within ~100 ms of readiness, so startup notices OpenCode
-// at once instead of on the next poll.
 const CONNECTION_HEALTH_WAIT_MS = 3_000;
 
 const probeOpenCodeHealth = async (timeoutMs = CONNECTION_PROBE_TIMEOUT_MS): Promise<boolean> => {
@@ -1118,8 +1004,6 @@ const resolveInitialDirectoryKey = (): string => {
     return toConfigDirectoryKey(directory);
 };
 
-// Persisted worktree→project mapping for project-level defaults. Config catalogs
-// themselves are scoped to the worktree's own directory.
 const WORKTREE_PROJECT_MAP_KEY = 'oc.worktreeProjectMap.v2';
 const LEGACY_WORKTREE_PROJECT_MAP_KEY = 'oc.worktreeProjectMap';
 const MAX_WORKTREE_PROJECT_RUNTIME_MAPS = 8;
@@ -1243,12 +1127,6 @@ const readProjectDefaults = (configDirectory: string): ProjectDefaults => {
     };
 };
 
-/**
- * The effort configured next to a default model applies to that model only:
- * the project's for the project model, the settings one for the settings
- * model. Any other model starts on its own default, so an effort chosen for
- * one model never follows the user onto the next.
- */
 const resolveConfiguredDefaultVariant = (
     defaults: {
         projectDefaultModel?: string;
@@ -1273,15 +1151,10 @@ const resolveProjectDirectory = (directory: string | null | undefined): string |
     const projects = getKnownProjectDirectories();
     if (!dir) return null;
     if (projects.includes(dir)) return dir;
-    // A space's sessions take their models from what the space was given, never from the host
-    // project's defaults, so its directory maps to no project here (see `space-catalog-sync.ts`).
     if (isSpaceDirectory(dir)) return null;
 
-    // 1. Persisted mapping — resolves synchronously when the async worktree
-    //    discovery has not populated the runtime map yet.
     const cached = normalizeConfigPath(getWorktreeProjectMap()[dir]);
     if (cached) return cached;
-    // 2. Live resolution via projects + discovered worktree map; cache the hit.
     try {
         const project = resolveProjectForSessionDirectory(
             useProjectsStore.getState().projects,
@@ -1302,22 +1175,12 @@ const resolveConfigDirectory = normalizeConfigPath;
 const toConfigDirectoryKey = (directory: string | null | undefined): string =>
     toDirectoryKey(resolveConfigDirectory(directory));
 
-// Runtime freshness tracking (NOT persisted) for the stale-while-revalidate
-// background refresh, keyed by config-directory key. Prevents re-fetching
-// catalogs we just loaded for the same project or worktree.
 const _providersLoadedAt = new Map<string, number>();
 const _agentsLoadedAt = new Map<string, number>();
 const CONFIG_REFRESH_TTL_MS = 30_000;
 
-// OpenCode announces a rebuilt catalog for the directory it rebuilt, and only
-// the active directory is re-read at once. Any other directory is marked stale
-// so returning to it re-reads instead of trusting its snapshot. A load that began before the mark must not make
-// the directory fresh again, so marks carry a revision and loads capture one.
 const ALL_DIRECTORIES = '*';
 let _catalogRevision = 0;
-// A configuration reload can replace every directory's catalog. Reads that
-// began before it describe the old OpenCode configuration and must not publish,
-// whichever directory they target.
 let _configCatalogLoadEpoch = 0;
 const _providersStaleAt = new Map<string, number>();
 const _agentsStaleAt = new Map<string, number>();
@@ -1333,7 +1196,6 @@ const markCatalogStale = (loadedAt: Map<string, number>, staleAt: Map<string, nu
     staleAt.set(directoryKey, _catalogRevision);
 };
 
-/** True when a catalog event for the directory landed after a load began at `loadRevision`. */
 const isCatalogStaleSince = (staleAt: Map<string, number>, directoryKey: string, loadRevision: number): boolean =>
     Math.max(staleAt.get(directoryKey) ?? 0, staleAt.get(ALL_DIRECTORIES) ?? 0) > loadRevision;
 
@@ -1347,10 +1209,6 @@ const markCatalogLoaded = (
     loadedAt.set(directoryKey, Date.now());
 };
 
-/**
- * Called for every catalog event with the directory it names (`null` for a
- * server-wide one such as a credential change).
- */
 export const markConfigCatalogStale = (kind: CatalogKind, directory: string | null): void => {
     const directoryKey = directory ? toConfigDirectoryKey(directory) : null;
     if (kind === 'provider' || kind === 'model' || kind === 'credential' || kind === 'config') {
@@ -1364,10 +1222,6 @@ const getConfigLoadKey = (context: ConfigRuntimeContext, directoryKey: string): 
     JSON.stringify([context.generation, context.runtimeKey, directoryKey])
 );
 
-/**
- * Persists a catalog a live load applied, once it has settled. A load a later
- * catalog event superseded is never stored; the re-read the event triggers is.
- */
 const persistLoadedCatalog = (
     context: ConfigRuntimeContext,
     directoryKey: string,
@@ -1384,12 +1238,6 @@ const persistLoadedCatalog = (
     );
 };
 
-/**
- * Shows the cached catalog of a directory whose live catalog has not loaded
- * yet, so the pickers render while OpenCode starts. Never replaces a live
- * catalog, and never marks anything loaded: settings pickers keep waiting for
- * the live load, which revalidates and replaces it.
- */
 const hydrateConfigCatalogFromCache = async (directoryKey: string): Promise<void> => {
     if (directoryKey === DIRECTORY_KEY_GLOBAL) return;
     const context = captureConfigRuntimeContext();
@@ -1420,13 +1268,8 @@ const hydrateConfigCatalogFromCache = async (directoryKey: string): Promise<void
     });
 };
 
-// Last agent-load error per config-directory key, read by initializeApp to
-// explain a startup failure. Cleared when that directory loads again.
 const _agentsLoadErrors = new Map<string, Error>();
 
-// OpenCode cannot open the directory at all (deleted, or a path it cannot
-// resolve). Retrying gives the same answer, and startup treats the project like
-// one whose folder is gone.
 const clearProjectConfigError = (directoryKey: string): void => {
     if (!useConfigStore.getState().projectConfigErrors[directoryKey]) return;
     useConfigStore.setState((state) => {
@@ -1506,29 +1349,9 @@ interface DirectoryScopedConfig {
     opencodeDefaultAgent?: string;
     opencodeDefaultModel?: string;
     selectionSource?: "auto" | "manual";
-    // Whether the current agent was chosen for this chat (`setAgent`) rather
-    // than resolved from defaults. Separate from `selectionSource`, which is
-    // about the model: an agent pick keeps an inherited model inherited.
     agentSelectionSource?: "auto" | "manual";
 }
 
-/**
- * The thinking-effort selection, split into what the user picked and what
- * applies when they picked nothing:
- *
- * - `override: string`    an effort chosen in the picker
- * - `override: null`      "Default" chosen in the picker — send no effort
- * - `override: undefined` nothing chosen — the inherited default applies
- *
- * `null` and `undefined` are not interchangeable: collapsing them makes the
- * "Default" entry unpickable, because the settings default silently takes
- * effect again and the next assistant reply echoes it back as an explicit
- * choice.
- *
- * `inherited: null` means the inherited choice is a remembered explicit
- * Default. Like the override, it sends no effort but must not be mistaken for
- * "nothing inherited" when a lower-priority source is resolved.
- */
 type CurrentVariantSelection = {
     override: string | null | undefined;
     inherited: string | null | undefined;
@@ -1552,23 +1375,10 @@ const hasCompatibleCachedVariants = (providers: ProviderWithModelList[] | undefi
     ))
 );
 
-/**
- * The effort the next send carries after a loader resolved `resolved` for the
- * model: a pick kept in `selection` wins. Loaders that kept the pick in
- * `currentVariantSelection` but wrote the resolved default to `currentVariant`
- * showed one effort in the picker and sent another.
- */
 const variantAfterResolve = (selection: CurrentVariantSelection | undefined, resolved: string | null | undefined): string | undefined => (
     selection?.override === undefined ? resolved ?? undefined : resolveVariantFromSelection(selection)
 );
 
-/**
- * Lift the active directory's snapshot into the top-level fields the pickers
- * read (`providers`, `agents`, selections). Persisted snapshots carry no
- * catalogs, so this restores selections; a blob from before that change still
- * has catalogs, and those paint instantly. Falls back to whatever top-level
- * data was persisted; handles legacy blobs that only stored directoryScoped.
- */
 const hydrateActiveDirectorySnapshot = <T extends Partial<ConfigStore>>(merged: T): T => {
     const directoryScoped = merged.directoryScoped;
     const activeKey = merged.activeDirectoryKey;
@@ -1603,7 +1413,6 @@ const hydrateActiveDirectorySnapshot = <T extends Partial<ConfigStore>>(merged: 
     return next as T;
 };
 
-/** A directory snapshot as persisted: its selections, without the catalogs. */
 const toPersistedDirectorySnapshot = (snapshot: DirectoryScopedConfig) => {
     const { providers: _providers, agents: _agents, providersLoaded: _providersLoaded, agentsLoaded: _agentsLoaded, ...selection } = snapshot;
     void _providers;
@@ -1619,14 +1428,6 @@ const toPersistedDirectorySnapshot = (snapshot: DirectoryScopedConfig) => {
 const SELECTION_FIELDS = ["currentProviderId", "currentModelId", "currentAgentName", "selectionSource", "agentSelectionSource"] as const;
 type SelectionField = typeof SELECTION_FIELDS[number];
 
-/**
- * Whether writing `next` would leave both the top-level selection and the
- * active directory's snapshot as they are. The persist middleware writes the
- * whole store after every `set()`, even one whose updater returns the same
- * state, and VS Code delivers each `config-store` write to every OpenChamber
- * webview in every window. So a setter makes this check before it calls
- * `set()`. A missing snapshot is a change: the write would create it.
- */
 const isUnchangedSelection = (
     state: Pick<ConfigStore, "activeDirectoryKey" | "directoryScoped" | SelectionField>,
     next: Partial<Pick<DirectoryScopedConfig, SelectionField>>,
@@ -1636,11 +1437,6 @@ const isUnchangedSelection = (
     return SELECTION_FIELDS.every((field) => !(field in next) || (next[field] === state[field] && next[field] === snapshot[field]));
 };
 
-/**
- * An effort is chosen for one model, so a change of model drops it, an
- * explicit "Default" included. The composer then resolves the new model's own
- * effort: the one this session saved for it, else its configured default.
- */
 const variantResetForModelChange = (
     state: Pick<ConfigStore, "currentProviderId" | "currentModelId">,
     providerId: string,
@@ -1696,8 +1492,6 @@ const resolveSelectionWithManualGuard = ({
     const manualAgentName = currentAgentName;
     const manualModelValid = !!currentProviderId
         && !!currentModelId;
-    // A picked agent protects the model `setAgent` resolved for it as well:
-    // the defaults cascade resolves a model for the default agent, not this one.
     const userOwnsSelection = selectionSource === "manual" || (agentSelectionSource === "manual" && !!manualAgentName);
     const preserveManual = userOwnsSelection && (!!manualAgentName || manualModelValid);
 
@@ -1715,7 +1509,6 @@ interface ConfigStore {
     activeDirectoryKey: string;
     directoryScoped: Record<string, DirectoryScopedConfig>;
     configRuntimeKey: string;
-    /** Bumped when a configuration reload takes every directory's catalog out of the freshness window. */
     catalogReloadRevision: number;
 
     providers: ProviderWithModelList[];
@@ -1736,63 +1529,43 @@ interface ConfigStore {
     hasEverConnected: boolean;
     connectionPhase: "connecting" | "connected" | "reconnecting";
     lastDisconnectReason: string | null;
-    /** Why the last initializeApp attempt did not finish. Runtime-only; cleared on success. */
     lastInitFailure: InitFailure | null;
-    /** Projects whose OpenCode config OpenCode refused to load, keyed by config-directory key. Runtime-only. */
     projectConfigErrors: Record<string, ProjectConfigError>;
-    /**
-     * Per config-directory key: providers with no chat model, so image models or
-     * none at all. Kept apart from `providers`, which feeds the chat pickers; only
-     * Settings → Providers lists them. Runtime-only.
-     */
     settingsOnlyProviders: Record<string, ProviderWithModelList[]>;
     isInitialized: boolean;
     modelsMetadata: Map<string, ModelMetadata>;
-    // OpenChamber settings-based defaults (take precedence over agent preferences)
-    settingsDefaultModel: string | undefined; // format: "provider/model"
+    settingsDefaultModel: string | undefined;
     settingsDefaultsLoaded: boolean;
     settingsDefaultVariant: string | undefined;
     settingsDefaultAgent: string | undefined;
-    // OpenCode server's own `default_agent` config field (name of a primary agent), used as a
-    // fallback when our own settingsDefaultAgent is unset. Sourced from sync config.
     opencodeDefaultAgent: string | undefined;
-    // OpenCode server's own global `model` config field ("provider/model"), used as a fallback
-    // when neither our settingsDefaultModel nor the resolved agent pins a model.
     opencodeDefaultModel: string | undefined;
     settingsAutoCreateWorktree: boolean;
     settingsGitmojiEnabled: boolean;
     settingsDefaultFileViewerPreview: boolean;
     settingsZenModel: string | undefined;
     settingsMessageStreamTransport: 'auto' | 'ws' | 'sse';
-    // Voice provider preference ('browser', 'openai', 'openai-compatible', or 'say' for macOS)
     voiceProvider: 'browser' | 'local' | 'openai' | 'openai-compatible' | 'say';
     setVoiceProvider: (provider: 'browser' | 'local' | 'openai' | 'openai-compatible' | 'say') => void;
-    // TTS settings
     speechRate: number;
     speechPitch: number;
     speechVolume: number;
     sayVoice: string;
     browserVoice: string;
     localTtsVoiceId: number;
-    /** Local TTS model the chosen voice belongs to (catalog id). */
     localTtsModelId: string;
-    /** Local and macOS voices follow the language of the text being read. */
     ttsFollowTextLanguage: boolean;
     openaiVoice: string;
-    /** Which voice API keys the server holds; the keys never reach the browser. */
     voiceApiKeys: VoiceApiKeyState;
     openaiCompatibleUrl: string;
     openaiCompatibleVoice: string;
     openaiCompatibleTtsModel: string;
-    /** Optional resource path for the OpenAI-compatible speech endpoint. */
     openaiCompatibleTtsEndpointPath: string;
-    // STT (dictation) settings
     dictationEnabled: boolean;
     dictationAutoSend: boolean;
     sttProvider: 'local' | 'openai-compatible';
     sttServerUrl: string;
     sttModel: string;
-    /** Optional resource path for the OpenAI-compatible transcription endpoint. */
     sttEndpointPath: string;
     sttLocalModel: string;
     sttLanguage: string;
@@ -1801,7 +1574,6 @@ interface ConfigStore {
     autoReadAloudEnabled: boolean;
     ttsInputMode: 'sanitized' | 'raw' | 'summarized';
     ttsChunkedMode: boolean;
-    // Summarization settings
     summarizeMessageTTS: boolean;
     summarizeVoiceConversation: boolean;
     summarizeCharacterThreshold: number;
@@ -1815,12 +1587,7 @@ interface ConfigStore {
     setLocalTtsModelId: (modelId: string) => void;
     setTtsFollowTextLanguage: (enabled: boolean) => void;
     setOpenaiVoice: (voice: string) => void;
-    /** Store (string) or remove (null) one voice key on the server. Resolves false when the server refused. */
     setVoiceApiKey: (kind: VoiceApiKeyKind, apiKey: string | null) => Promise<boolean>;
-    /**
-     * Read which keys the server holds, moving any a previous build left in
-     * the browser first. Once per runtime unless `force` (the Settings page).
-     */
     refreshVoiceApiKeys: (options?: { force?: boolean }) => Promise<void>;
     setOpenaiCompatibleUrl: (url: string) => void;
     setOpenaiCompatibleVoice: (voice: string) => void;
@@ -1846,10 +1613,8 @@ interface ConfigStore {
 
     activateDirectory: (directory: string | null | undefined, options?: { preserveManualModel?: boolean }) => Promise<void>;
 
-    /** `fresh`: a request already in flight started before the caller's reason to reload, so it cannot answer it. */
     loadProviders: (options?: { directory?: string | null; source?: string; fresh?: boolean }) => Promise<void>;
     loadSessionDefaults: () => Promise<boolean>;
-    /** `fresh`: a request already in flight started before the caller's reason to reload, so it cannot answer it. */
     loadAgents: (options?: { directory?: string | null; source?: string; fresh?: boolean }) => Promise<boolean>;
     invalidateModelMetadataCache: () => void;
     invalidateProviderCache: (directory?: string | null) => void;
@@ -1859,24 +1624,10 @@ interface ConfigStore {
     setCurrentVariantOverride: (override: string | null | undefined, inherited: string | null | undefined) => void;
     cycleCurrentVariant: () => string | undefined;
     getCurrentModelVariants: () => string[];
-    /** The effort the project of `directory` (the active one when omitted) or Settings configures for this model; `undefined` for any model that is not a configured default. */
     getDefaultVariantForModel: (providerId: string, modelId: string, directory?: string | null) => string | undefined;
-    /**
-     * `keepModel` switches the agent alone. It is for following a switch the
-     * session already made: OpenCode keeps a session on its own model when the
-     * agent changes, so resolving the agent's model would show one the session
-     * does not run on (and would replace Auto).
-     */
     setAgent: (agentName: string | undefined, options?: { keepModel?: boolean }) => void;
     applyDefaultModelAgentSelection: (options?: { projectDefaultAgent?: string; projectDefaultModel?: string; projectDefaultVariant?: string }) => void;
-    /**
-     * What a new session in `directory` starts on, from that directory's own
-     * catalogs and defaults. The composer's pick and the active directory play
-     * no part, and nothing in the store's selection changes. `null` when no
-     * model resolves or the runtime changed meanwhile.
-     */
     resolveDirectoryDefaultSelection: (directory: string) => Promise<DirectoryDefaultSelection | null>;
-    /** Replaces an `openchamber/auto` selection this server cannot honour with the default model. */
     dropStaleAutoSelection: () => void;
     applyOpenCodeConfigDefaults: (directory?: string | null, source?: string, config?: Config) => void;
     setSelectedProvider: (providerId: string) => void;
@@ -1898,7 +1649,6 @@ interface ConfigStore {
     getCurrentModel: () => ProviderModel | undefined;
     getCurrentAgent: () => Agent | undefined;
     getModelMetadata: (providerId: string, modelId: string) => ModelMetadata | undefined;
-    // Returns only visible agents (excludes hidden internal agents like title, compaction, summary)
     getVisibleAgents: () => Agent[];
 }
 
@@ -1908,13 +1658,11 @@ declare global {
     }
 }
 
-/** The startup step that failed, with the underlying error text when one exists. */
 export type InitFailure = {
     step: 'serverUnreachable' | 'openCodeUnavailable' | 'loadAgents' | 'unexpected';
     message: string | null;
 };
 
-// In-flight dedup: prevent concurrent duplicate loadProviders/loadAgents calls for the same directory
 const _inFlightProviders = new Map<string, Promise<void>>();
 const _inFlightAgents = new Map<string, Promise<boolean>>();
 const _agentsLoadGeneration = new Map<string, number>();
@@ -1922,7 +1670,6 @@ let _initializeAppInFlight: Promise<void> | null = null;
 
 export const invalidateConfigAgentsLoad = (directory?: string | null): void => {
     const runtimeContext = captureConfigRuntimeContext();
-    // Same default as loadAgents: no directory means the active one, not global.
     const directoryKey = toConfigDirectoryKey(directory ?? fromDirectoryKey(useConfigStore.getState().activeDirectoryKey));
     const inFlightKey = getConfigLoadKey(runtimeContext, directoryKey);
     _agentsLoadedAt.delete(directoryKey);
@@ -1931,15 +1678,6 @@ export const invalidateConfigAgentsLoad = (directory?: string | null): void => {
     opencodeClient.invalidateAgentList(fromDirectoryKey(directoryKey));
 };
 
-/**
- * Providers of one project. Returns a stored array, so components can select it
- * directly and re-render only when that project's list is replaced.
- *
- * Settings pages browse a project the app is not on; everything else wants the
- * active one, which is what a missing directory resolves to, as in
- * `loadProviders`. Settings has none when no project is added, and nothing
- * loads a catalog without a directory.
- */
 export const selectProvidersForDirectory = (
     state: Pick<ConfigStore, "providers" | "directoryScoped" | "activeDirectoryKey">,
     directory?: string | null,
@@ -1955,12 +1693,6 @@ export const selectProvidersForDirectory = (
 const EMPTY_PROVIDERS: ProviderWithModelList[] = [];
 const EMPTY_AGENTS: Agent[] = [];
 
-/**
- * Whether `provider/model` is gone from this directory: its live catalog has
- * loaded and does not list it. The same test the default cascade applies, so
- * Settings can say why new sessions skip a configured model and the composer
- * can mark a picked one a send would fail on.
- */
 export const selectIsModelMissingFromCatalog = (
     state: Pick<ConfigStore, "providers" | "directoryScoped" | "activeDirectoryKey">,
     directory: string | null | undefined,
@@ -1977,10 +1709,6 @@ export const selectIsModelMissingFromCatalog = (
     );
 };
 
-/**
- * Providers of one project that offer no chat model. Settings → Providers
- * lists them next to `selectProvidersForDirectory`; no chat picker reads them.
- */
 export const selectSettingsOnlyProvidersForDirectory = (
     state: Pick<ConfigStore, "settingsOnlyProviders" | "activeDirectoryKey">,
     directory?: string | null,
@@ -1998,13 +1726,6 @@ export const selectConfigAgentsForDirectory = (
     return key === state.activeDirectoryKey ? state.agents : state.directoryScoped[key]?.agents ?? EMPTY_AGENTS;
 };
 
-/**
- * A model as any loaded catalog lists it: the active directory's first, then
- * the snapshots of the others. For display only. While a directory's catalog
- * has not loaded yet, the composer keeps the name it already knows instead of
- * a raw id.
- * Selection, variants and validation stay on the active catalog.
- */
 export const selectKnownCatalogModel = (
     state: Pick<ConfigStore, 'providers' | 'directoryScoped'>,
     providerId: string,
@@ -2022,7 +1743,6 @@ export const selectKnownCatalogModel = (
     return undefined;
 };
 
-/** An agent as any loaded catalog lists it; the display counterpart of `selectKnownCatalogModel`. */
 export const selectKnownAgent = (
     state: Pick<ConfigStore, 'agents' | 'directoryScoped'>,
     name: string,
@@ -2048,12 +1768,6 @@ export const selectCatalogLoadedForDirectory = (
     return key === state.activeDirectoryKey ? state[field] : state.directoryScoped[key]?.[field] === true;
 };
 
-/**
- * Whether a freshly fetched catalog carries the same providers and models as
- * the one already in the store. The comparison is structural (a serialized
- * form of every provider and model): the catalog is a few hundred records at
- * most and this runs once per re-read, never per render.
- */
 const isSameProviderCatalog = (previous: ProviderWithModelList[], next: ProviderWithModelList[]): boolean => {
     if (previous === next) return true;
     if (previous.length !== next.length) return false;
@@ -2067,7 +1781,6 @@ const isSameDefaults = (previous: { [key: string]: string }, next: { [key: strin
     return previousKeys.every((key) => previous[key] === next[key]);
 };
 
-/** The last read of which voice keys the server holds, per runtime (see refreshVoiceApiKeys). */
 let voiceApiKeysLoad: { runtimeKey: string; promise: Promise<void> } | null = null;
 
 export const useConfigStore = create<ConfigStore>()(
@@ -2114,7 +1827,6 @@ export const useConfigStore = create<ConfigStore>()(
                 settingsDefaultFileViewerPreview: true,
                 settingsZenModel: undefined,
                 settingsMessageStreamTransport: 'auto',
-                // Voice provider preference - load from localStorage or default to 'browser'
                 voiceProvider: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('voiceProvider');
@@ -2122,7 +1834,6 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     return 'browser';
                 })(),
-                // TTS settings - load from localStorage with defaults
                 speechRate: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('speechRate');
@@ -2153,7 +1864,6 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     return 1;
                 })(),
-                // macOS Say voice - load from localStorage or default to 'Samantha'
                 sayVoice: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('sayVoice');
@@ -2161,7 +1871,6 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     return 'Samantha';
                 })(),
-                // Local (Kokoro) TTS speaker id - load from localStorage or default to 0
                 localTtsVoiceId: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('localTtsVoiceId');
@@ -2187,7 +1896,6 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     return true;
                 })(),
-                // Browser voice - load from localStorage or default to empty (auto-select)
                 browserVoice: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('browserVoice');
@@ -2195,7 +1903,6 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     return '';
                 })(),
-                // OpenAI voice - load from localStorage or default to 'nova'
                 openaiVoice: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('openaiVoice');
@@ -2204,7 +1911,6 @@ export const useConfigStore = create<ConfigStore>()(
                     return 'nova';
                 })(),
                 voiceApiKeys: EMPTY_VOICE_API_KEYS,
-                // OpenAI-compatible custom server URL
                 openaiCompatibleUrl: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('openaiCompatibleUrl');
@@ -2212,7 +1918,6 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     return '';
                 })(),
-                // OpenAI-compatible custom server voice
                 openaiCompatibleVoice: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('openaiCompatibleVoice');
@@ -2220,7 +1925,6 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     return 'af_sky';
                 })(),
-                // OpenAI-compatible custom server TTS model
                 openaiCompatibleTtsModel: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('openaiCompatibleTtsModel');
@@ -2229,7 +1933,6 @@ export const useConfigStore = create<ConfigStore>()(
                     return 'kokoro';
                 })(),
                 openaiCompatibleTtsEndpointPath: getSafeStorage().getItem('openaiCompatibleTtsEndpointPath') ?? '',
-                // Voice input (dictation) master toggle - default enabled
                 dictationEnabled: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('dictationEnabled');
@@ -2238,13 +1941,10 @@ export const useConfigStore = create<ConfigStore>()(
                     return true;
                 })(),
                 dictationAutoSend: getSafeStorage().getItem('dictationAutoSend') === 'true',
-                // STT provider: 'local' (server-side sherpa-onnx) or 'openai-compatible'
                 sttProvider: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('sttProvider');
                         if (saved === 'local' || saved === 'openai-compatible') return saved;
-                        // Migrate legacy providers: 'server' used an OpenAI-compatible
-                        // endpoint; 'browser' and 'wasm' map to the local default.
                         if (saved === 'server') return 'openai-compatible' as const;
                     }
                     return 'local' as const;
@@ -2269,8 +1969,6 @@ export const useConfigStore = create<ConfigStore>()(
                         const saved = localStorage.getItem('sttLocalModel');
                         if (saved) return saved;
                     }
-                    // Not picked yet: the server chooses the model, see the
-                    // dictation service's resolveLocalModelId.
                     return '';
                 })(),
                 sttLanguage: (() => {
@@ -2280,9 +1978,7 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     return '';
                 })(),
-                // Fix misheard words with the Small Model after dictation - off by default
                 sttCorrectTranscript: globalThis.localStorage?.getItem('sttCorrectTranscript') === 'true',
-                // Show TTS buttons on messages - disabled by default until user enables it
                 showMessageTTSButtons: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('showMessageTTSButtons');
@@ -2290,7 +1986,6 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     return false;
                 })(),
-                // Read the final reply automatically when a turn ends - disabled by default
                 autoReadAloudEnabled: (() => {
                     const saved = globalThis.window?.localStorage?.getItem('autoReadAloudEnabled');
                     return saved === 'true';
@@ -2303,7 +1998,6 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     return 'sanitized' as const;
                 })(),
-                // Sentence-by-sentence server TTS synthesis - disabled by default
                 ttsChunkedMode: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('ttsChunkedMode');
@@ -2311,7 +2005,6 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     return false;
                 })(),
-                // Summarization settings
                 summarizeMessageTTS: (() => {
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('summarizeMessageTTS');
@@ -2348,8 +2041,6 @@ export const useConfigStore = create<ConfigStore>()(
                 })(),
                 activateDirectory: async (directory, options) => {
                     const runtimeContext = captureConfigRuntimeContext();
-                    // Keep the active catalog and snapshot scoped to the actual
-                    // directory, including worktrees with their own opencode.json.
                     const configDirectory = resolveConfigDirectory(directory);
                     if (!configDirectory) {
                         markStartupTrace('activateDirectory:skippedUnknownDirectory', { directory });
@@ -2370,8 +2061,6 @@ export const useConfigStore = create<ConfigStore>()(
                             currentVariantSelection: state.currentVariantSelection,
                             selectionSource: 'manual' as const,
                         } : null;
-                        // An effort picked in the draft travels with it the same way,
-                        // also when the model itself is still the automatic one.
                         const carriedOverride = !manualModel && options?.preserveManualModel
                             && state.activeDirectoryKey !== directoryKey
                             ? state.currentVariantSelection.override
@@ -2447,10 +2136,6 @@ export const useConfigStore = create<ConfigStore>()(
                         return;
                     }
 
-                    // Stale-while-revalidate: when a cached snapshot already
-                    // populated the pickers, refresh in the background so the UI
-                    // stays instant but never shows stale provider/agent data for
-                    // longer than one fetch. Only block when there is nothing to show.
                     const requiredLoads: Promise<void | boolean>[] = [];
                     if (snapshotHadProviders) {
                         if (isConfigFresh(_providersLoadedAt, directoryKey)) {
@@ -2552,9 +2237,6 @@ export const useConfigStore = create<ConfigStore>()(
                     const source = options?.source ?? 'unknown';
                     markStartupTrace('loadProviders:called', { directoryKey, source, requestedDirectory, effectiveDirectory });
 
-                    // Dedup: if a load is already in-flight for this directory, reuse it.
-                    // A fresh call waits out any read started before it. Calls
-                    // waiting together share the replacement started afterward.
                     let existing = _inFlightProviders.get(inFlightKey);
                     if (existing && options?.fresh) {
                         await existing.catch(() => undefined);
@@ -2565,8 +2247,6 @@ export const useConfigStore = create<ConfigStore>()(
                         return existing;
                     }
 
-                    // Captured after waiting out an older read: a reload that
-                    // landed meanwhile belongs to the load this call starts.
                     const catalogEpoch = _configCatalogLoadEpoch;
                     const isCurrentProviderLoad = () => (
                         isConfigRuntimeContextCurrent(runtimeContext)
@@ -2601,15 +2281,10 @@ export const useConfigStore = create<ConfigStore>()(
                             if (!isCurrentProviderLoad()) return;
                             const providers = Array.isArray(apiResult?.providers) ? apiResult.providers : [];
                             const catalogModels = Array.isArray(apiResult?.models) ? apiResult.models : [];
-                            // v2 has no `default` map any more: the server resolves one
-                            // model for the directory. Keep the store's provider-keyed
-                            // shape so the rest of the store is unchanged.
                             const defaults: { [key: string]: string } = apiResult?.default
                                 ? { [apiResult.default.providerID]: apiResult.default.id }
                                 : {};
 
-                            // The catalog carries chat and image models. Only chat models
-                            // (an unset type is chat) reach `providers` and the pickers.
                             const modelsByProvider = new Map<string, ProviderModel[]>();
                             const imageModelsByProvider = new Map<string, ProviderModel[]>();
                             for (const model of catalogModels) {
@@ -2619,17 +2294,12 @@ export const useConfigStore = create<ConfigStore>()(
                                 if (bucket) bucket.push(model);
                                 else byProvider.set(model.providerID, [model]);
                             }
-                            // A provider the user switched off, or one with no usable
-                            // model, is not offerable — v2 replaced the `connected` list
-                            // with these two facts.
                             const processedProviders: ProviderWithModelList[] = providers
                                 .filter((provider) => provider.activation !== "disabled" && modelsByProvider.has(provider.id))
                                 .map((provider) => ({
                                     ...provider,
                                     models: modelsByProvider.get(provider.id) ?? [],
                                 }));
-                            // A provider with no chat model is still configured and
-                            // manageable, so Settings lists it; chat never offers it.
                             const settingsOnlyProviders: ProviderWithModelList[] = providers
                                 .filter((provider) => provider.activation !== "disabled"
                                     && !modelsByProvider.has(provider.id))
@@ -2645,8 +2315,6 @@ export const useConfigStore = create<ConfigStore>()(
                                     ? state
                                     : { settingsOnlyProviders: { ...state.settingsOnlyProviders, [directoryKey]: settingsOnlyProviders } };
                             });
-                            // A re-read that returns the same catalog keeps the arrays the
-                            // store already holds, so nothing subscribed to them re-renders.
                             const nextProviders = isSameProviderCatalog(previousProviders, processedProviders)
                                 ? previousProviders
                                 : processedProviders;
@@ -2697,12 +2365,6 @@ export const useConfigStore = create<ConfigStore>()(
                                 const currentSelectedProviderId = state.activeDirectoryKey === directoryKey
                                     ? state.selectedProviderId
                                     : baseSnapshot.selectedProviderId;
-                                // The Providers settings selection belongs to the user, not to this
-                                // loader. A refresh may report a different provider set (one was
-                                // connected or removed meanwhile),
-                                // and re-deriving a selection here yanked the open provider away
-                                // mid-edit. Keep whatever is selected; only fill in an empty one.
-                                // The add-provider sentinel is kept for the same reason (issue #1765).
                                 const selectedProviderId = currentSelectedProviderId
                                     ? currentSelectedProviderId
                                     : (resolvedModel?.providerId ?? nextProviders[0]?.id ?? "");
@@ -2859,8 +2521,6 @@ export const useConfigStore = create<ConfigStore>()(
                                         nextSnapshot.currentModelId = parsed.modelId;
                                         nextSnapshot.currentVariant = currentVariant;
 
-                                        // Only adopt this as the settings selection when the user has
-                                        // none; a failed refresh must not move an existing one.
                                         if (!state.selectedProviderId) {
                                             nextState.selectedProviderId = parsed.providerId;
                                             nextSnapshot.selectedProviderId = parsed.providerId;
@@ -2873,10 +2533,6 @@ export const useConfigStore = create<ConfigStore>()(
                         return nextState;
                     });
 
-                    // Nothing else re-reads a directory whose providers never loaded: the
-                    // composer would wait on the missing catalog until something unrelated,
-                    // such as Settings → Providers, asked again. One delayed retry covers a
-                    // server that was still starting this directory.
                     if (source !== PROVIDERS_RETRY_SOURCE && !get().directoryScoped[directoryKey]?.providersLoaded) {
                         setTimeout(() => {
                             if (!isCurrentProviderLoad()) return;
@@ -3060,8 +2716,6 @@ export const useConfigStore = create<ConfigStore>()(
                     const nextOverride = nextThinkingVariant(variantKeys, currentVariant);
 
                     get().setCurrentVariantOverride(nextOverride, inheritedVariant);
-                    // Cycling is a picker choice too: it becomes the model's
-                    // remembered level without waiting for a send.
                     rememberEffort(state.currentProviderId, state.currentModelId, nextOverride ?? null);
                     return nextOverride ?? undefined;
                 },
@@ -3174,8 +2828,6 @@ export const useConfigStore = create<ConfigStore>()(
                     });
                     const state = get();
                     const projectDefaults = getProjectDefaultsForConfigDirectory(fromDirectoryKey(state.activeDirectoryKey));
-                    // An effort picked while the settings document was still loading
-                    // is a choice too; re-applying the defaults would clear it.
                     if (!useSessionUIStore.getState().currentSessionId && state.selectionSource === 'auto' && state.agentSelectionSource === 'auto'
                         && state.currentVariantSelection.override === undefined
                         && (projectDefaults.projectDefaultModel || state.settingsDefaultModel)) {
@@ -3200,9 +2852,6 @@ export const useConfigStore = create<ConfigStore>()(
                     const entryCatalogEpoch = _configCatalogLoadEpoch;
                     markStartupTrace('loadAgents:called', { directoryKey, source, requestedDirectory, effectiveDirectory });
 
-                    // Dedup: if a load is already in-flight for this directory, reuse it.
-                    // A fresh call waits out any read started before it. Calls
-                    // waiting together share the replacement started afterward.
                     let existing = _inFlightAgents.get(inFlightKey);
                     if (existing && options?.fresh) {
                         await existing.catch(() => false);
@@ -3210,13 +2859,8 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     if (existing) {
                         markStartupTrace('loadAgents:deduped', { directoryKey, source, requestedDirectory, effectiveDirectory });
-                        // Invalidation drops the in-flight entry, so a joined
-                        // read always belongs to the current generation.
                         const joinedGeneration = _agentsLoadGeneration.get(inFlightKey) ?? 0;
                         const loaded = await existing;
-                        // A runtime switch fails the joiner whatever else
-                        // retired the read: a replacement would run this
-                        // runtime's directory against the next server.
                         if (!isConfigRuntimeContextCurrent(runtimeContext)) return false;
                         if (_configCatalogLoadEpoch !== entryCatalogEpoch
                             || (_agentsLoadGeneration.get(inFlightKey) ?? 0) !== joinedGeneration) {
@@ -3225,8 +2869,6 @@ export const useConfigStore = create<ConfigStore>()(
                         return loaded;
                     }
 
-                    // Captured after waiting out an older read: a reload that
-                    // landed meanwhile belongs to the load this call starts.
                     const catalogEpoch = _configCatalogLoadEpoch;
                     const loadGeneration = _agentsLoadGeneration.get(inFlightKey) ?? 0;
                     const isCurrentAgentLoad = () => (
@@ -3245,9 +2887,6 @@ export const useConfigStore = create<ConfigStore>()(
 
                     for (let attempt = 0; attempt < 3; attempt++) {
                         try {
-                            // Fetch agents and OpenChamber settings in parallel. OpenCode config
-                            // comes from sync state if it is already available; it must not block
-                            // the agent refresh path.
                             const configDirectoryPath = fromDirectoryKey(directoryKey);
                             const initialSyncedOpencodeConfig = getSyncConfig(requestedDirectory ?? undefined)
                                 ?? getSyncConfig(configDirectoryPath ?? undefined);
@@ -3349,7 +2988,6 @@ export const useConfigStore = create<ConfigStore>()(
                                 updateDesktopSettings({
                                     zenModel: resolvedZenModel,
                                 }).catch(() => {
-                                    // Ignore errors - best effort cleanup
                                 });
                             }
 
@@ -3416,9 +3054,6 @@ export const useConfigStore = create<ConfigStore>()(
                                 return true;
                             }
 
-                            // Resolve agent + model via the shared cascade:
-                            //   project.defaultAgent → settings.defaultAgent → opencode default_agent → build → first primary → first
-                            //   project.defaultModel → settings.defaultModel → resolved agent's model+variant → opencode config.model → last chat pick → opencode/big-pickle → first (skipping hidden models)
                             const resolvedDefault = resolveDefaultAgentModelSelection({
                                 agents: safeAgents,
                                 providers,
@@ -3538,8 +3173,6 @@ export const useConfigStore = create<ConfigStore>()(
                                 attempt: attempt + 1,
                                 error: error instanceof Error ? error.message : String(error),
                             });
-                            // A rejected project config fails the same way until the
-                            // user edits the file; retrying only delays the message.
                             if (readProjectConfigError(error) || (error instanceof Error && isLocationNotFoundError(error))) break;
                             const waitMs = 200 * (attempt + 1);
                             await new Promise((resolve) => setTimeout(resolve, waitMs));
@@ -3634,13 +3267,8 @@ export const useConfigStore = create<ConfigStore>()(
                         currentAgentName,
                     } = get();
                     const hadManualSelection = get().selectionSource === "manual";
-                    // The agent is a choice even when its model is inherited, so
-                    // it is recorded apart from `selectionSource`. Without it a
-                    // config reload resolves the default agent over this one.
                     const agentSelectionSource = agentName ? "manual" as const : "auto" as const;
 
-                    // Only the write is skipped: the session memory and model
-                    // resolution below still run for an unchanged agent.
                     if (!isUnchangedSelection(get(), { currentAgentName: agentName, agentSelectionSource })) {
                         set((state) => {
                             const directoryKey = state.activeDirectoryKey;
@@ -3691,9 +3319,6 @@ export const useConfigStore = create<ConfigStore>()(
                     if (agentName && !options?.keepModel) {
                         const { currentSessionId } = useSessionUIStore.getState();
 
-                        // Writes the effort alongside the model, because the two are one
-                        // selection: leaving `currentVariantSelection` behind would let the
-                        // picker show one effort while sends carry another.
                         const applyResolvedModelSelection = (
                             providerId: string,
                             modelId: string,
@@ -3701,8 +3326,6 @@ export const useConfigStore = create<ConfigStore>()(
                             source: "auto" | "manual" = "manual",
                         ) => {
                             const variant = resolveVariantFromSelection(variantSelection);
-                            // Checked before `set()`: persist writes after every
-                            // `set()`, even one that returns the same state.
                             const current = get();
                             if (
                                 current.currentProviderId === providerId
@@ -3762,18 +3385,12 @@ export const useConfigStore = create<ConfigStore>()(
                             const variantOptions = model ? modelVariantNames(model) : undefined;
                             if (variantOptions && variantOptions.length === 0) return { override: undefined, inherited: undefined };
 
-                            // A model the catalog does not list (Auto, or a stale
-                            // selection) cannot rule a variant out, so inherited
-                            // choices stand until a real model contradicts them.
                             const isAvailable = (candidate: string | null | undefined): candidate is string => (
                                 candidate !== null
                                 && candidate !== undefined
                                 && (!model || modelHasVariant(model, candidate))
                             );
 
-                            // Like a configured default, the agent's effort belongs to
-                            // the model it is configured with. A level this model was
-                            // last sent with fills in when neither names one.
                             const agentVariant = agent?.model?.providerID === providerId && agent.model.id === modelId
                                 ? agent.model.variant
                                 : undefined;
@@ -3793,16 +3410,10 @@ export const useConfigStore = create<ConfigStore>()(
                                     modelId,
                                 )
                                 : undefined;
-                            // `null` is this session's explicit "Default"; it outranks
-                            // the agent and settings defaults just like a named effort.
                             if (savedVariant === null || isAvailable(savedVariant)) {
                                 return { override: savedVariant, inherited };
                             }
 
-                            // While drafting there is no session record to read the choice
-                            // back from, and switching agent is not a change of effort:
-                            // keep the picker's choice for this same model, "Default"
-                            // (an explicit `null`) included.
                             const liveSelection = get().currentVariantSelection;
                             const sameModel = get().currentProviderId === providerId && get().currentModelId === modelId;
                             if (!currentSessionId && sameModel && (liveSelection.override === null || isAvailable(liveSelection.override))) {
@@ -3812,8 +3423,6 @@ export const useConfigStore = create<ConfigStore>()(
                             return { override: undefined, inherited };
                         };
 
-                        // Only a live unsent pick overrides both an older per-agent
-                        // choice and a pinned model, including discovery gaps.
                         const livePick = currentSessionId
                             ? useSelectionStore.getState().getSessionModelPick(currentSessionId)
                             : null;
@@ -3829,10 +3438,6 @@ export const useConfigStore = create<ConfigStore>()(
                             return;
                         }
 
-                        // Prefer a session-level manual override for this agent over the
-                        // agent's configured default. Re-applying setAgent after subtask
-                        // completion / rematerialization must not clobber the override
-                        // (issue #2404).
                         if (currentSessionId) {
                             const existingAgentModel = useSelectionStore.getState().getAgentModelForSession(currentSessionId, agentName);
                             if (existingAgentModel) {
@@ -3846,7 +3451,6 @@ export const useConfigStore = create<ConfigStore>()(
                             }
                         }
 
-                        // No session override — use the agent's configured/pinned model.
                         const agentModelSelection = agent?.model;
                         if (agentModelSelection?.providerID && agentModelSelection?.id) {
                             const { providerID, id: modelID } = agentModelSelection;
@@ -3873,10 +3477,6 @@ export const useConfigStore = create<ConfigStore>()(
                         );
                         const targetHasPinnedModel = Boolean(agent?.model?.providerID && agent?.model?.id);
 
-                        // The user has a live manual model selection and the target
-                        // agent configures no model of its own. Switching modes or
-                        // agents must not reset the selection to the settings default
-                        // (issue #2531) — mode switches are not model changes.
                         if (
                             !targetHasPinnedModel
                             && !prevAgentHasPinnedModel
@@ -3884,9 +3484,6 @@ export const useConfigStore = create<ConfigStore>()(
                             && currentProviderId
                             && currentModelId
                         ) {
-                            // Keeping the pair in memory is not enough: without a write
-                            // the settings default wins again after a reload. The removed
-                            // ModelControls path persisted here, so this must too.
                             if (currentSessionId) {
                                 const selection = useSelectionStore.getState();
                                 selection.saveSessionModelSelection(currentSessionId, currentProviderId, currentModelId);
@@ -3895,7 +3492,6 @@ export const useConfigStore = create<ConfigStore>()(
                             return;
                         }
 
-                        // If the agent has no preferred model, use settings default.
                         if (settingsDefaultModel) {
                             const parsed = parseModelString(settingsDefaultModel);
                             if (parsed) {
@@ -3912,15 +3508,9 @@ export const useConfigStore = create<ConfigStore>()(
                             }
                         }
 
-                        // Otherwise keep the current valid model selection unchanged.
                     }
                 },
 
-                // Re-applies the same priority cascade used at app startup (see loadAgents):
-                //   agent: settings.defaultAgent → build → first primary → first agent
-                //   model: project.defaultModel → settings.defaultModel → agent's preferred model → opencode config.model → last chat pick → opencode/big-pickle → first (skipping hidden models)
-                // Used when entering a fresh draft session so model/agent reset to defaults
-                // instead of sticking to the previously open session's selection.
                 dropStaleAutoSelection: () => {
                     const current = get();
                     if (!isStaleAutoSelection(current.currentProviderId, current.currentModelId)) return;
@@ -3967,8 +3557,6 @@ export const useConfigStore = create<ConfigStore>()(
                             directoryScoped: { ...state.directoryScoped, [directoryKey]: nextSnapshot },
                         };
                     });
-                    // The session remembers its own pick; overwrite the stale one so the
-                    // next restore does not bring Auto back.
                     const sessionId = useSessionUIStore.getState().currentSessionId;
                     if (sessionId) {
                         const selection = useSelectionStore.getState();
@@ -4061,7 +3649,6 @@ export const useConfigStore = create<ConfigStore>()(
                     const [, , config] = await Promise.all([
                         get().loadProviders({ directory: configDirectory, source }).catch(() => undefined),
                         get().loadAgents({ directory: configDirectory, source }).catch(() => false),
-                        // A directory nothing has synced yet, such as a new worktree, has no config event to read.
                         getSyncConfig(configDirectory) ?? opencodeClient.getConfig(configDirectory).catch(() => undefined),
                     ]);
                     if (!isConfigRuntimeContextCurrent(runtimeContext)) return null;
@@ -4379,8 +3966,6 @@ export const useConfigStore = create<ConfigStore>()(
                 },
 
                 refreshVoiceApiKeys: (options) => {
-                    // Every message's read-aloud button asks; one read per
-                    // runtime answers them all.
                     const runtimeKey = getRuntimeKey();
                     if (!options?.force && voiceApiKeysLoad?.runtimeKey === runtimeKey) {
                         return voiceApiKeysLoad.promise;
@@ -4391,8 +3976,6 @@ export const useConfigStore = create<ConfigStore>()(
                             const voiceApiKeys = migrated ?? await fetchVoiceApiKeys();
                             if (getRuntimeKey() === runtimeKey) set({ voiceApiKeys });
                         } catch (error) {
-                            // A runtime without the route (VS Code) or an offline
-                            // server: keys read as unset, which offers setting one.
                             if (getRuntimeKey() === runtimeKey) set({ voiceApiKeys: EMPTY_VOICE_API_KEYS });
                             console.warn('Failed to read voice API keys:', error);
                         }
@@ -4599,9 +4182,6 @@ export const useConfigStore = create<ConfigStore>()(
                                     lastDisconnectReason: 'health_check_unhealthy',
                                 });
                                 attempt += 1;
-                                // A host that held the answer has already waited; one that
-                                // answered at once (an older host, the VS Code bridge, an
-                                // unreachable server) keeps the old pacing.
                                 await sleep(Math.max(0, 400 * attempt - (Date.now() - probeStarted)));
                                 continue;
                             }
@@ -4652,8 +4232,6 @@ export const useConfigStore = create<ConfigStore>()(
                             const debug = streamDebugEnabled();
                             if (debug) console.log("Starting app initialization...");
 
-                            // OpenChamber preferences do not depend on OpenCode health
-                            // or project discovery. Publish a known choice immediately.
                             void get().loadSessionDefaults();
                             const isConnected = await get().checkConnection();
                             if (!isConfigRuntimeContextCurrent(runtimeContext)) return;
@@ -4661,7 +4239,6 @@ export const useConfigStore = create<ConfigStore>()(
 
                             if (!isConnected) {
                                 if (debug) console.log("Server not connected");
-                                // checkConnection already set lastDisconnectReason; do not overwrite.
                                 set({
                                     isConnected: false,
                                     connectionPhase: get().hasEverConnected ? "reconnecting" : "connecting",
@@ -4676,20 +4253,10 @@ export const useConfigStore = create<ConfigStore>()(
                             if (debug) console.log("Initializing app...");
                             markStartupTrace('initApp:skipped', { reason: 'checkConnection already verified health' });
 
-                            // Stale-while-revalidate: do NOT invalidate the hydrated
-                            // provider snapshot here. The pickers keep showing the
-                            // last-known providers/agents while loadProviders/loadAgents
-                            // below fetch fresh data and overwrite on success. Clearing
-                            // first would blank the UI for the duration of the fetch.
 
-                            // Config (providers/agents/defaults) lives at the PROJECT level. If the
-                            // app starts on a worktree directory, load config under the owning
-                            // initial directory's key so its draft finds a ready snapshot
-                            // instead of triggering a second provider/agent load.
                             const initialDirectory = opencodeClient.getDirectory()
                                 ?? useDirectoryStore.getState().currentDirectory
                                 ?? fromDirectoryKey(get().activeDirectoryKey);
-                            // A space's directory loads no project config of the host (see resolveProjectDirectory).
                             const resolvedProject = isSpaceDirectory(initialDirectory) ? null : resolveProjectForSessionDirectory(
                                 useProjectsStore.getState().projects,
                                 useSessionUIStore.getState().availableWorktreesByProject,
@@ -4698,16 +4265,9 @@ export const useConfigStore = create<ConfigStore>()(
                             const resolvedInitialDirectory = (resolvedProject || resolveProjectDirectory(initialDirectory))
                                 ? resolveConfigDirectory(initialDirectory)
                                 : null;
-                            // A chat draft reads the managed Chats root, so it does not start on the
-                            // agents and defaults of the project the app is on. The user can leave
-                            // the draft during this wait, so the session state is read after it.
                             const chatsRoot = isChatDraftOpen() ? await resolveChatsRootDirectory().catch(() => null) : null;
                             if (!isConfigRuntimeContextCurrent(runtimeContext)) return;
                             const chatDraftDirectory = isChatDraftOpen() ? resolveConfigDirectory(chatsRoot) : null;
-                            // An open session offers its own folder's agents and models,
-                            // the catalog activateDirectory loads when it is opened. A
-                            // folder outside every project (a chat) must not borrow the
-                            // active project's, whose agents the session cannot run.
                             const sessionState = useSessionUIStore.getState();
                             const openSessionDirectory = sessionState.currentSessionId
                                 ? resolveConfigDirectory(sessionState.currentSessionDirectory)
@@ -4740,13 +4300,6 @@ export const useConfigStore = create<ConfigStore>()(
 
                             if (!isConfigRuntimeContextCurrent(runtimeContext)) return;
                             if (!agentsLoaded) {
-                                // A broken config belongs to this one project. Finish startup
-                                // so the user can read the error and move to another project;
-                                // any other failure keeps the startup retry loop going.
-                                // A project whose folder is gone (an unplugged drive) is the
-                                // same: the app opens and the other projects stay reachable.
-                                // So is a folder the user has not trusted ("Not this time"):
-                                // its files stay browsable, and a new message asks again.
                                 const configError = get().projectConfigErrors[configDirectoryKey];
                                 const agentsError = _agentsLoadErrors.get(configDirectoryKey);
                                 const awaitsTrust = !configError && agentsError instanceof OpencodeApiError && agentsError.status === 403
@@ -4766,8 +4319,6 @@ export const useConfigStore = create<ConfigStore>()(
                                 }
                             }
                             set({ isInitialized: true, isConnected: true, hasEverConnected: true, connectionPhase: "connected", lastInitFailure: null });
-                            // A plugin registers its agents while the server is already serving, so
-                            // the load above can race it. Re-check once, after startup has settled.
                             setTimeout(() => {
                                 if (instanceGeneration !== configInstanceGeneration) return;
                                 void get().loadAgents({ directory: configDirectory, source: 'startupAgentRecheck' });
@@ -4830,9 +4381,6 @@ export const useConfigStore = create<ConfigStore>()(
             {
                 name: "config-store",
                 storage: createDeferredSafeJSONStorage(),
-                // Version 1 is the slim format below. Builds without it read
-                // `snapshot.agents` unguarded; the version bump makes them skip
-                // this blob (they have no migrate) instead of crashing on it.
                 version: 1,
                 // SAFETY: a version-0 blob is the same shape plus catalogs, and
                 // merge() is the one place that validates any persisted state.
@@ -4851,9 +4399,6 @@ export const useConfigStore = create<ConfigStore>()(
                         if (!isRecord(snapshot)) {
                             delete directoryScoped[directory];
                         } else if (snapshot.providers === undefined) {
-                            // Version 1 persists selections without catalogs; give the
-                            // snapshot the empty lists the store expects. With no
-                            // `*Loaded` flag persisted, an empty list reads as not loaded.
                             directoryScoped[directory] = { ...snapshot, providers: [], agents: snapshot.agents ?? [] };
                         } else if (!hasCompatibleCachedVariants(snapshot.providers)) {
                             directoryScoped[directory] = {
@@ -4871,13 +4416,6 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                     return hydrateActiveDirectorySnapshot(merged);
                 },
-                // Selections only. The provider and agent catalogs are not
-                // persisted: VS Code gives every OpenChamber webview one origin,
-                // so each write reaches every webview in every window as a
-                // StorageEvent carrying the old and the new value, and with the
-                // catalogs a write was tens of megabytes. On a cold start the
-                // pickers wait for initializeApp() / activateDirectory() to load
-                // the catalogs. Older blobs that still carry them hydrate as before.
                 partialize: (state) => ({
                     configRuntimeKey: state.configRuntimeKey,
                     activeDirectoryKey: state.activeDirectoryKey,
@@ -4918,21 +4456,12 @@ if (typeof window !== "undefined") {
     window.__zustand_config_store__ = useConfigStore;
 }
 
-// Show the last known catalogs of the active directory while OpenCode starts.
-// After persist hydration, which restores the active directory key.
 if (typeof window !== "undefined") {
     const hydrateActiveCatalog = () => void hydrateConfigCatalogFromCache(useConfigStore.getState().activeDirectoryKey);
     if (useConfigStore.persist.hasHydrated()) hydrateActiveCatalog();
     else useConfigStore.persist.onFinishHydration(hydrateActiveCatalog);
 }
 
-/**
- * A configuration reload can replace every directory's provider and agent
- * catalog. Retire reads that began before it, and take every directory out of
- * the freshness window so it re-reads when the user next activates it. Loaded
- * snapshots stay in place: a background project keeps showing its last catalog
- * instead of booting its OpenCode location during the reload (#6815).
- */
 export const invalidateConfigCatalogsForReload = (
     kinds: readonly ("provider" | "agent")[],
 ): void => {
@@ -5021,16 +4550,12 @@ if (typeof window !== "undefined" && !unsubscribeConfigStoreDirectoryChanges) {
         }
 
         markStartupTrace('directoryStore:changed', { previous: prevKey, next: nextKey });
-        // A chat draft stays on the Chats root's catalog while the app moves between projects.
         if (isChatDraftOpen()) return;
         void hydrateConfigCatalogFromCache(toConfigDirectoryKey(state.currentDirectory));
         void useConfigStore.getState().activateDirectory(state.currentDirectory);
     });
 }
 
-// Auto is only a model while the server says so. Whenever that answer changes
-// (routing state loaded or updated, the feature flag learned from settings,
-// settings defaults loaded), a selection this server cannot honour is replaced.
 let unsubscribeConfigStoreRoutingChanges: (() => void) | null = null;
 
 if (typeof window !== "undefined" && !unsubscribeConfigStoreRoutingChanges) {

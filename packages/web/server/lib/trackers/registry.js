@@ -15,7 +15,6 @@ import { EXTENSION_PROVIDER_PREFIX, isExtensionProviderId, isProviderId, isReser
  */
 export const BUILT_IN_TRACKERS = Object.freeze([linearTracker, localTracker]);
 
-// Descriptors are plain JSON: objects, arrays and primitives.
 const deepFreeze = (value) => {
   if (Array.isArray(value) || isPlainObject(value)) {
     for (const child of Object.values(value)) deepFreeze(child);
@@ -26,10 +25,7 @@ const deepFreeze = (value) => {
 
 const invalidEntry = (id, reason) => new Error(`Tracker registration is invalid (${String(id)}): ${reason}`);
 
-/** One registry slot: the frozen plain-JSON copy of the descriptor and the lazy loader. */
 const slotOf = (entry) => ({
-  // A copy, so the plain JSON a client reads cannot be changed through a
-  // module's own descriptor object.
   descriptor: deepFreeze(structuredClone(entry.descriptor)),
   load: entry.load,
   loading: null,
@@ -70,7 +66,6 @@ export function createTrackerRegistry(
     if (!(entry.load instanceof Function)) throw invalidEntry(id, 'missing loader');
     builtIn.set(id, slotOf(entry));
   }
-  /** Extension trackers, in attach order; a re-attach keeps the slot's place. */
   const attached = new Map();
 
   const slots = () => [...builtIn.values(), ...attached.values()];
@@ -85,7 +80,6 @@ export function createTrackerRegistry(
       const current = slot(id);
       if (!current) return null;
       if (!current.loading) {
-        // A failed load is not cached, so the next request tries again.
         current.loading = Promise.resolve().then(() => current.load()).catch((error) => {
           current.loading = null;
           throw error;
@@ -93,11 +87,6 @@ export function createTrackerRegistry(
       }
       return current.loading;
     },
-    /**
-     * An installed extension's tracker, named `ext-<guestId>` by the host.
-     * Attaching an id again replaces its descriptor and loader (a new version,
-     * a connected server), and a load already cached is dropped with it.
-     */
     attachExtension: (entry) => {
       const id = entry?.descriptor?.id;
       if (!isExtensionProviderId(id)) throw invalidEntry(id, 'an extension tracker is named ext-<guestId>');
@@ -105,7 +94,6 @@ export function createTrackerRegistry(
       if (!(entry.load instanceof Function)) throw invalidEntry(id, 'missing loader');
       attached.set(id, slotOf(entry));
     },
-    /** True when an extension tracker was registered under the id. Built-ins never detach. */
     detachExtension: (id) => attached.delete(id),
   });
 }

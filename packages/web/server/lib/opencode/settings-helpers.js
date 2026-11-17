@@ -9,17 +9,9 @@ import { idleStopSchema } from '../spaces/idle-stop.js';
 import { sshHostSchema } from '../spaces/places/ssh-host.js';
 import { PROVIDER_LOGO_MIMES } from './provider-logo-routes.js';
 
-// Generated from packages/ui/src/lib/settings/registry.ts by
-// `bun run settings-registry:generate`; `registry.test.ts` fails when stale.
-// The server is plain ESM without a bundler, so the snapshot is read with
-// `createRequire` (import attributes differ across the Node versions we run on).
 const settingsRegistry = createRequire(import.meta.url)('./settings-registry.json');
 
-// The sidebar's sections and pin lists, the same shapes the UI keeps
-// (packages/ui/src/lib/sidebarSections.ts, which also restores missing built-in
-// sections on read). The server keeps what is well formed and drops the rest.
 const SIDEBAR_BUILTIN_SECTION_IDS = ['pages', 'chats', 'pinned', 'work', 'projects'];
-// The user's sections (SIDEBAR_SECTIONS_MAX in the UI) and every built-in one.
 const SIDEBAR_SECTIONS_STORED_MAX = 24 + SIDEBAR_BUILTIN_SECTION_IDS.length;
 const sidebarSectionIdSchema = z.string().trim().min(1).max(64);
 const sidebarSectionNameSchema = z.string().trim().min(1).transform((value) => value.slice(0, 60));
@@ -36,7 +28,6 @@ const sidebarIdList = (schema) => z.array(z.unknown()).transform((entries) => (
   }))]
 ));
 const sidebarIds = sidebarIdList(sidebarSectionIdSchema);
-// A project's id names its folder (`path_` and the path encoded), so it grows with the path.
 const sidebarProjectIds = sidebarIdList(z.string().trim().min(1).max(4096));
 const sidebarSectionSchema = z.union([
   z.object({ kind: z.literal('builtin'), id: z.enum(SIDEBAR_BUILTIN_SECTION_IDS) }),
@@ -54,7 +45,6 @@ const sidebarSectionSchema = z.union([
       projectIds: sidebarProjectIds.catch([]),
       folders: sidebarIds.catch([]),
       activity: z.enum(['any', 'today', 'two-days', 'week', 'stalled']).catch('any'),
-      // A list of phrases; a build before lists kept one phrase as a string.
       text: z.union([z.string().transform((value) => [value]), z.array(z.unknown())]).transform((entries) => (
         [...new Set(entries.flatMap((entry) => {
           const phrase = z.string().trim().transform((value) => value.slice(0, 100)).safeParse(entry);
@@ -80,11 +70,6 @@ const sanitizeSidebarSections = (entries) => {
   return result;
 };
 
-// A client saves the whole sections order, and one older than a built-in
-// section does not list it. Its save keeps the stored entry of each built-in
-// it omits, after the stored neighbour it followed (first when none did), so
-// the user's placement survives a save from an older client. A client that
-// lists the built-in decides where it goes.
 const keepOmittedBuiltinSections = (stored, incoming) => {
   const result = [...incoming];
   const has = (id) => result.some((entry) => entry.id === id);
@@ -109,11 +94,6 @@ const sanitizeSidebarPinLists = (entries) => {
   return result;
 };
 
-/**
- * Whether a client may persist this key through PUT /api/config/settings:
- * it must be a registry key, not a server-computed flag, not a device field
- * that only lives in the browser, and not one the desktop shell writes itself.
- */
 const isPersistableSettingsKey = (key) => {
   const field = settingsRegistry.fields[key];
   if (!field) return false;
@@ -122,7 +102,6 @@ const isPersistableSettingsKey = (key) => {
   return true;
 };
 
-/** Keys accepted on write but never returned by a read. */
 const SECRET_SETTINGS_KEYS = Object.freeze(
   Object.entries(settingsRegistry.fields)
     .filter(([, field]) => field.secret === true)
@@ -136,20 +115,21 @@ import {
   isInputHistoryScope,
 } from './input-history-scope.js';
 
-/** `provider/model` dreaming runs on, or empty for the default model. */
+const AGENT_TOOL_BOOLEAN_KEYS = [
+  'agentControlToolEnabled', 'agentScheduleToolEnabled', 'agentMemoryToolEnabled', 'agentMemoryDreamingEnabled',
+  'agentKnowledgeToolEnabled', 'agentWorkflowToolEnabled', 'agentWorkflowAutoApprove', 'agentNotifyToolEnabled',
+  'agentRenderToolEnabled', 'agentImageToolEnabled', 'agentSecretToolEnabled', 'agentUsageToolEnabled', 'agentTerminalToolEnabled',
+];
+
 const dreamingModelSchema = z.string().trim().refine((value) => value === '' || /^[^/\s]+\/\S+$/.test(value));
 
-// Icons a custom provider may show instead of its logo; mirrors
-// CUSTOM_PROVIDER_ICONS in packages/ui/src/lib/customProviderIcons.ts.
 const customProviderIconsSchema = z.record(
   z.string().trim().min(1).max(128),
   z.enum(['server', 'cloud', 'database', 'terminal', 'code', 'ai']),
 );
 const CUSTOM_PROVIDER_ICONS_MAX = 256;
-// `provider/model` last picked in a chat composer.
 const lastSelectedModelSchema = z.string().trim().min(1).max(512);
 
-/** Provider id -> icon id; unknown icons and malformed entries are dropped one by one. */
 const sanitizeCustomProviderIcons = (value) => {
   const record = z.record(z.string(), z.unknown()).safeParse(value);
   if (!record.success) return undefined;
@@ -161,7 +141,6 @@ const sanitizeCustomProviderIcons = (value) => {
   return result;
 };
 
-// What `provider-logo-routes.js` stores for an uploaded logo; the bytes stay in its folder.
 const customProviderLogosSchema = z.record(
   z.string().trim().min(1).max(128),
   z.object({
@@ -170,7 +149,6 @@ const customProviderLogosSchema = z.record(
   }),
 );
 
-/** Provider id -> `{ mime, updatedAt }`; malformed entries are dropped one by one. */
 const sanitizeCustomProviderLogos = (value) => {
   const record = z.record(z.string(), z.unknown()).safeParse(value);
   if (!record.success) return undefined;
@@ -182,11 +160,6 @@ const sanitizeCustomProviderLogos = (value) => {
   return result;
 };
 
-/**
- * Message search is on unless the user turned it off. A settings file that
- * never mentions it is a user who never chose, and gets the default; an
- * explicit `false` is a choice and stays.
- */
 export const isMessageSearchEnabled = (settings) => settings?.messageSearchEnabled !== false;
 
 export const createSettingsHelpers = (dependencies) => {
@@ -222,8 +195,6 @@ export const createSettingsHelpers = (dependencies) => {
   const SIDEBAR_PROJECT_DISPLAY_MODE_VALUES = new Set(['all', 'single']);
   const SIDEBAR_VIEW_MODE_VALUES = new Set(['projects', 'timeline']);
   const SIDEBAR_LIST_SESSION_GROUPING_VALUES = new Set(['project', 'time']);
-  // The interface languages (`LOCALES` in packages/ui/src/lib/i18n/runtime.ts);
-  // settings-helpers.test.js fails when the two lists drift apart.
   const UI_LOCALE_VALUES = new Set(['en', 'de', 'fr', 'nl', 'zh-CN', 'zh-TW', 'uk', 'es', 'pt-BR', 'ko', 'pl', 'ja', 'tr', 'ar', 'he']);
   const SIDEBAR_PROJECT_SORT_ORDER_VALUES = new Set(['manual', 'a-z', 'z-a', 'date-added', 'recent']);
   const HIDDEN_MODELS_MAX = 1024;
@@ -292,8 +263,6 @@ export const createSettingsHelpers = (dependencies) => {
     return count > 0 ? result : null;
   };
 
-  // One explicit Default (`null`) or variant name per model. A missing entry is
-  // "never sent", which is not the same as Default.
   const sanitizeLastUsedEfforts = (value) => {
     const parsed = lastUsedEffortsSchema.safeParse(value);
     if (!parsed.success) return null;
@@ -346,7 +315,6 @@ export const createSettingsHelpers = (dependencies) => {
   };
 
   const normalizeFollowUpBehavior = (value, legacyQueueModeEnabled = null) => {
-    // "immediate" was removed (it was wire-identical to "steer"); collapse it.
     if (value === 'immediate') {
       return 'steer';
     }
@@ -403,9 +371,6 @@ export const createSettingsHelpers = (dependencies) => {
     if (typeof candidate.splashFgDark === 'string' && candidate.splashFgDark.trim().length > 0) {
       result.splashFgDark = candidate.splashFgDark.trim();
     }
-    // An empty string forgets the last directory (the last project was
-    // removed). Every reader treats it as unset, so nothing is warmed at start
-    // or turned back into a project.
     if (candidate.lastDirectory === '') {
       result.lastDirectory = '';
     } else if (typeof candidate.lastDirectory === 'string') {
@@ -421,9 +386,6 @@ export const createSettingsHelpers = (dependencies) => {
       }
     }
 
-    // Absolute path to the opencode CLI binary (optional override).
-    // Accept empty-string to clear (we persist an empty string sentinel so the running
-    // process can reliably drop a previously applied OPENCODE_BINARY override).
     if (typeof candidate.opencodeBinary === 'string') {
       const normalized = normalizeDirectoryPath(candidate.opencodeBinary).trim();
       result.opencodeBinary = normalized;
@@ -432,8 +394,6 @@ export const createSettingsHelpers = (dependencies) => {
       result.workStatusPanelEnabled = candidate.workStatusPanelEnabled;
     }
     if (Array.isArray(candidate.workStatusHiddenSections)) {
-      // Ids are validated on the client, which owns the section list; here we
-      // only guarantee the shape, so a malformed payload cannot land on disk.
       result.workStatusHiddenSections = [
         ...new Set(candidate.workStatusHiddenSections.filter((entry) => typeof entry === 'string' && entry.length > 0)),
       ];
@@ -469,7 +429,6 @@ export const createSettingsHelpers = (dependencies) => {
     }
     if (typeof candidate.desktopWindowControlsPosition === 'string') {
       const mode = candidate.desktopWindowControlsPosition.trim();
-      // Legacy "auto" never read OS chrome config; persist as the right default.
       if (mode === 'auto' || mode === 'right') {
         result.desktopWindowControlsPosition = 'right';
       } else if (mode === 'left') {
@@ -486,8 +445,6 @@ export const createSettingsHelpers = (dependencies) => {
       const sessions = {};
       const sourceSessions = candidate.permissionAutoAccept.sessions;
       if (sourceSessions && typeof sourceSessions === 'object' && !Array.isArray(sourceSessions)) {
-        // A mode, or a boolean from a policy written before the modes existed;
-        // the permission runtime converts those on its first read.
         for (const [sessionId, mode] of Object.entries(sourceSessions)) {
           if (sessionId && (typeof mode === 'boolean' || isPermissionMode(mode))) sessions[sessionId] = mode;
         }
@@ -540,7 +497,6 @@ export const createSettingsHelpers = (dependencies) => {
       result.sidebarKeepPinnedInPlace = candidate.sidebarKeepPinnedInPlace;
     }
     if (Number.isFinite(candidate.sidebarSessionBatchSize)) {
-      // The range of `SIDEBAR_SESSION_BATCH_MIN`/`MAX` in the UI's sidebarSections.ts.
       result.sidebarSessionBatchSize = Math.max(3, Math.min(50, Math.round(candidate.sidebarSessionBatchSize)));
     }
     if (SIDEBAR_PROJECT_SORT_ORDER_VALUES.has(candidate.sidebarProjectSortOrder)) {
@@ -616,7 +572,6 @@ export const createSettingsHelpers = (dependencies) => {
     if (typeof candidate.monoFont === 'string' && candidate.monoFont.length > 0) {
       result.monoFont = candidate.monoFont;
     }
-    // Family names for the "custom" font choice; empty clears them.
     if (typeof candidate.customUiFont === 'string') {
       result.customUiFont = candidate.customUiFont.slice(0, 100);
     }
@@ -988,51 +943,16 @@ export const createSettingsHelpers = (dependencies) => {
     if (typeof candidate.browserProvider === 'string' && candidate.browserProvider.trim()) {
       result.browserProvider = candidate.browserProvider.trim();
     }
-    if (typeof candidate.agentControlToolEnabled === 'boolean') {
-      result.agentControlToolEnabled = candidate.agentControlToolEnabled;
+    for (const key of AGENT_TOOL_BOOLEAN_KEYS) {
+      if (typeof candidate[key] === 'boolean') result[key] = candidate[key];
     }
-    if (candidate.agentScheduleToolEnabled === true || candidate.agentScheduleToolEnabled === false) {
-      result.agentScheduleToolEnabled = candidate.agentScheduleToolEnabled;
-    }
-    if (typeof candidate.agentMemoryToolEnabled === 'boolean') {
-      result.agentMemoryToolEnabled = candidate.agentMemoryToolEnabled;
-    }
-    if (candidate.agentMemoryDreamingEnabled === true || candidate.agentMemoryDreamingEnabled === false) {
-      result.agentMemoryDreamingEnabled = candidate.agentMemoryDreamingEnabled;
-    }
-    // Empty is a choice: dreaming then runs on the default model, so it is kept, not dropped.
     const dreamingModel = dreamingModelSchema.safeParse(candidate.agentMemoryDreamingModel);
     if (dreamingModel.success) result.agentMemoryDreamingModel = dreamingModel.data;
     const dreamingVariant = z.string().trim().safeParse(candidate.agentMemoryDreamingVariant);
     if (dreamingVariant.success) result.agentMemoryDreamingVariant = dreamingVariant.data;
-    if (candidate.agentKnowledgeToolEnabled === true || candidate.agentKnowledgeToolEnabled === false) {
-      result.agentKnowledgeToolEnabled = candidate.agentKnowledgeToolEnabled;
-    }
-    if (candidate.agentWorkflowToolEnabled === true || candidate.agentWorkflowToolEnabled === false) {
-      result.agentWorkflowToolEnabled = candidate.agentWorkflowToolEnabled;
-    }
-    if (typeof candidate.agentNotifyToolEnabled === 'boolean') {
-      result.agentNotifyToolEnabled = candidate.agentNotifyToolEnabled;
-    }
-    if (candidate.agentRenderToolEnabled === true || candidate.agentRenderToolEnabled === false) {
-      result.agentRenderToolEnabled = candidate.agentRenderToolEnabled;
-    }
-    if (candidate.agentImageToolEnabled === true || candidate.agentImageToolEnabled === false) {
-      result.agentImageToolEnabled = candidate.agentImageToolEnabled;
-    }
-    // `provider/model`; the model id may hold slashes of its own (OpenRouter's `openai/gpt-image-2`).
     const agentImageModel = asNonEmptyString(candidate.agentImageModel);
     if (agentImageModel && /^[^/\s]+\/\S+$/.test(agentImageModel)) {
       result.agentImageModel = agentImageModel;
-    }
-    if (candidate.agentSecretToolEnabled === true || candidate.agentSecretToolEnabled === false) {
-      result.agentSecretToolEnabled = candidate.agentSecretToolEnabled;
-    }
-    if (candidate.agentUsageToolEnabled === true || candidate.agentUsageToolEnabled === false) {
-      result.agentUsageToolEnabled = candidate.agentUsageToolEnabled;
-    }
-    if (candidate.agentTerminalToolEnabled === true || candidate.agentTerminalToolEnabled === false) {
-      result.agentTerminalToolEnabled = candidate.agentTerminalToolEnabled;
     }
     if (typeof candidate.isolatedSpacesEnabled === 'boolean') {
       result.isolatedSpacesEnabled = candidate.isolatedSpacesEnabled;
@@ -1040,7 +960,6 @@ export const createSettingsHelpers = (dependencies) => {
     if (idleStopSchema.safeParse(candidate.isolatedSpacesIdleStop).success) {
       result.isolatedSpacesIdleStop = { ...candidate.isolatedSpacesIdleStop };
     }
-    // The machine of the Docker over SSH place; the empty string takes that place away.
     const sshHost = sshHostSchema.safeParse(candidate.isolatedSpacesSshHost);
     if (sshHost.success) result.isolatedSpacesSshHost = sshHost.data;
     if (typeof candidate.openCodeUpdateToastDismissedVersion === 'string') {
@@ -1107,7 +1026,6 @@ export const createSettingsHelpers = (dependencies) => {
     if (candidate.chatWidth === 'default' || candidate.chatWidth === 'wider' || candidate.chatWidth === 'full') {
       result.chatWidth = candidate.chatWidth;
     }
-    // Legacy: older clients still write the boolean; the UI reads it as chatWidth.
     if (typeof candidate.wideChatLayoutEnabled === 'boolean') {
       result.wideChatLayoutEnabled = candidate.wideChatLayoutEnabled;
     }
@@ -1161,10 +1079,6 @@ export const createSettingsHelpers = (dependencies) => {
       result.recentModels = recentModels;
     }
 
-    // Cap at 1024: users with several providers (anthropic, openai, google,
-    // bedrock, azure, etc.) each exposing dozens-to-hundreds of models can
-    // exceed 256 hidden entries quickly. 1024 covers dense multi-provider
-    // setups while still bounding persistence/memory.
     const hiddenModels = sanitizeModelRefs(candidate.hiddenModels, HIDDEN_MODELS_MAX);
     if (hiddenModels) {
       result.hiddenModels = hiddenModels;
@@ -1236,7 +1150,6 @@ export const createSettingsHelpers = (dependencies) => {
       result.skillCatalogs = skillCatalogs;
     }
 
-    // Usage model selections - which models appear in dropdown
     if (candidate.usageSelectedModels && typeof candidate.usageSelectedModels === 'object') {
       const sanitized = {};
       for (const [providerId, models] of Object.entries(candidate.usageSelectedModels)) {
@@ -1252,7 +1165,6 @@ export const createSettingsHelpers = (dependencies) => {
       }
     }
 
-    // Usage page collapsed families - for "Other Models" section
     if (candidate.usageCollapsedFamilies && typeof candidate.usageCollapsedFamilies === 'object') {
       const sanitized = {};
       for (const [providerId, families] of Object.entries(candidate.usageCollapsedFamilies)) {
@@ -1268,7 +1180,6 @@ export const createSettingsHelpers = (dependencies) => {
       }
     }
 
-    // Header dropdown expanded families (inverted - stores EXPANDED, default all collapsed)
     if (candidate.usageExpandedFamilies && typeof candidate.usageExpandedFamilies === 'object') {
       const sanitized = {};
       for (const [providerId, families] of Object.entries(candidate.usageExpandedFamilies)) {
@@ -1284,7 +1195,6 @@ export const createSettingsHelpers = (dependencies) => {
       }
     }
 
-    // Custom model groups configuration
     if (candidate.usageModelGroups && typeof candidate.usageModelGroups === 'object') {
       const sanitized = {};
       for (const [providerId, config] of Object.entries(candidate.usageModelGroups)) {
@@ -1292,7 +1202,6 @@ export const createSettingsHelpers = (dependencies) => {
 
         const providerConfig = {};
 
-        // customGroups: array of {id, label, models, order}
         if (Array.isArray(config.customGroups)) {
           const validGroups = config.customGroups
             .filter((g) => g && typeof g.id === 'string' && typeof g.label === 'string')
@@ -1309,7 +1218,6 @@ export const createSettingsHelpers = (dependencies) => {
           }
         }
 
-        // modelAssignments: Record<modelName, groupId>
         if (config.modelAssignments && typeof config.modelAssignments === 'object') {
           const assignments = {};
           for (const [model, groupId] of Object.entries(config.modelAssignments)) {
@@ -1322,7 +1230,6 @@ export const createSettingsHelpers = (dependencies) => {
           }
         }
 
-        // renamedGroups: Record<groupId, label>
         if (config.renamedGroups && typeof config.renamedGroups === 'object') {
           const renamed = {};
           for (const [groupId, label] of Object.entries(config.renamedGroups)) {
@@ -1344,12 +1251,10 @@ export const createSettingsHelpers = (dependencies) => {
       }
     }
 
-    // Usage reporting opt-out (default: true/enabled)
     if (typeof candidate.reportUsage === 'boolean') {
       result.reportUsage = candidate.reportUsage;
     }
 
-    // Global behavior prompt — synced to ~/.config/opencode/AGENTS.md
     if (typeof candidate.globalBehaviorPrompt === 'string') {
       const value = candidate.globalBehaviorPrompt;
       if (value.length <= 1024 * 1024) {
@@ -1385,7 +1290,6 @@ export const createSettingsHelpers = (dependencies) => {
       if (provider === 'local' || provider === 'openai-compatible') {
         result.sttProvider = provider;
       } else if (provider === 'server') {
-        // Legacy provider migration: 'server' was the OpenAI-compatible endpoint.
         result.sttProvider = 'openai-compatible';
       } else if (provider === 'browser' || provider === 'wasm') {
         result.sttProvider = 'local';
@@ -1423,10 +1327,6 @@ export const createSettingsHelpers = (dependencies) => {
       result.sttCorrectTranscript = candidate.sttCorrectTranscript;
     }
 
-    // The registry is the last word on what a client may persist: a key the
-    // code above still names but the registry no longer lists is dropped here,
-    // so the two cannot drift apart silently (settings-helpers.test.js checks
-    // the other direction).
     for (const key of Object.keys(result)) {
       if (!isPersistableSettingsKey(key)) {
         delete result[key];
@@ -1478,21 +1378,15 @@ export const createSettingsHelpers = (dependencies) => {
       ...sanitized,
       hasManagedRemoteTunnelToken,
       hasDesktopUiPassword,
-      // Agent memory needs the OpenChamber server, like routing below.
       agentMemoryFeatureAvailable: true,
-      // The same for agent workflows.
       agentWorkflowFeatureAvailable: true,
-      // The overview page ships dark until `OPENCHAMBER_OVERVIEW_ENABLED` is set.
       overviewFeatureAvailable: isOverviewFeatureAvailable(),
-      // Jev routing needs the OpenChamber server, so it is present here and
-      // absent wherever this payload does not come from one (VS Code).
       routingFeatureAvailable: true,
       ...(pwaAppName ? { pwaAppName } : {}),
       pwaOrientation,
       mobileKeyboardMode,
       inputHistoryScope,
       inputHistoryLimit,
-      // Always sent, resolved: the client holds its own copy of this switch and must follow the server's.
       messageSearchEnabled: isMessageSearchEnabled(sanitized),
       securityScopedBookmarks: bookmarks,
       pinnedDirectories: normalizeStringArray(settings.pinnedDirectories),
