@@ -179,6 +179,11 @@ const GitlabIssueTemplatesEditor: React.FC<{ project: ProjectEntry }> = ({ proje
   const updateProjectMeta = useProjectsStore((state) => state.updateProjectMeta);
   const stored = project.gitlabIssueTemplates;
   const nameOf = React.useCallback((key: BuiltinIssueTemplateNameKey) => t(key), [t]);
+  const kindLabelOf = React.useCallback((kind: GitlabIssueTemplateKind | null): string => {
+    if (kind === 'bug') return t('gitlabIssue.kind.bug');
+    if (kind === 'feature') return t('gitlabIssue.kind.feature');
+    return t('settings.projects.page.field.gitlabTemplateKindNone');
+  }, [t]);
   const resolved = React.useMemo(() => resolveIssueTemplates(stored, nameOf), [stored, nameOf]);
   const [drafts, setDrafts] = React.useState<ResolvedIssueTemplate[]>(resolved);
 
@@ -224,7 +229,8 @@ const GitlabIssueTemplatesEditor: React.FC<{ project: ProjectEntry }> = ({ proje
                 onBlur={() => commit(drafts)}
                 onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
                 aria-label={t('settings.projects.page.field.gitlabTemplateName')}
-                className="h-8 w-full max-w-[16rem] rounded-md px-3 text-xs"
+                inputSize="compact"
+                className="w-full max-w-[16rem] rounded-md px-3"
               />
               <Select
                 value={template.kind ?? NO_TEMPLATE_KIND_VALUE}
@@ -235,10 +241,10 @@ const GitlabIssueTemplatesEditor: React.FC<{ project: ProjectEntry }> = ({ proje
                 }))}
               >
                 <SelectTrigger
-                  className="h-8 w-fit text-xs"
+                  className={SETTINGS_SELECT_ROW_TRIGGER_CLASS}
                   aria-label={t('settings.projects.page.field.gitlabTemplateKind')}
                 >
-                  <SelectValue />
+                  <SelectValue>{kindLabelOf(template.kind)}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="bug">{t('gitlabIssue.kind.bug')}</SelectItem>
@@ -271,7 +277,7 @@ const GitlabIssueTemplatesEditor: React.FC<{ project: ProjectEntry }> = ({ proje
               value={template.body}
               onChange={(event) => setDrafts(replaceTemplateAt(drafts, index, { body: event.target.value }))}
               onBlur={() => commit(drafts)}
-              rows={6}
+              rows={Math.min(12, Math.max(3, template.body.split('\n').length + 1))}
               aria-label={t('settings.projects.page.field.gitlabTemplateBody')}
               className="max-w-[40rem] resize-y font-mono text-xs"
             />
