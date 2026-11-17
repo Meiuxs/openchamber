@@ -741,6 +741,17 @@ stores an entry that reuses its id, and its reset action drops that entry again.
 Text fields commit on blur as one whole list, and a blur that changed nothing
 writes nothing.
 
+The review model is a `ModelSelector` over the project's directory catalog, the
+same picker as the project model, with a "use project model" entry that clears
+the override. A thinking-level row appears only while an override is set and
+there is something to choose: the model's catalog variants, plus a stored value
+that is not among them, so a value typed into the old free-text field stays
+visible and clearable. Changing the model clears the variant, matching the
+dispatcher, which reads the variant only beside an explicit review model. A
+model absent from the live catalog keeps its value and shows a visible warning
+instead of silently resetting; the warning waits for a live catalog so a slow
+first load never flags a valid choice.
+
 The Settings page keeps its tab in `projects/projectSettingsTabs.ts` so a search
 result can open the tab that holds its target (`prepareSettingsSearchTarget`).
 The dialog keeps its own tab and starts on General every time.

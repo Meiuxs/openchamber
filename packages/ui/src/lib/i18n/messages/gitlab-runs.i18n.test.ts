@@ -7,7 +7,6 @@ const locales = ['en', 'de', 'fr', 'nl', 'es', 'ja', 'pt-BR', 'uk', 'ko', 'pl', 
 // A model reference is one technical string everywhere; everything else is translated.
 // The label-chip summaries are symbol strings, not prose, so they repeat too.
 const SHARED_VALUES = new Set([
-  'settings.projects.page.field.gitlabReviewModelPlaceholder',
   'gitlabRuns.confirm.add',
   'gitlabRuns.confirm.remove',
 ]);

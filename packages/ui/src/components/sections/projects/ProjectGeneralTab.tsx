@@ -350,23 +350,30 @@ const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =
     setPrefixError(Boolean(configuredPrefix) && !isValidBranchPrefix(configuredPrefix ?? ''));
   }, [project.id, project.gitlabIssueBranchPrefix]);
 
-  const [reviewModelDraft, setReviewModelDraft] = React.useState(project.gitlabIssueReviewModel ?? '');
-  const [reviewVariantDraft, setReviewVariantDraft] = React.useState(project.gitlabIssueReviewVariant ?? '');
-  React.useEffect(() => {
-    setReviewModelDraft(project.gitlabIssueReviewModel ?? '');
-    setReviewVariantDraft(project.gitlabIssueReviewVariant ?? '');
-  }, [project.id, project.gitlabIssueReviewModel, project.gitlabIssueReviewVariant]);
+  const parsedReviewModel = React.useMemo(
+    () => parseModelIdentifier(project.gitlabIssueReviewModel) ?? { providerId: '', modelId: '' },
+    [project.gitlabIssueReviewModel],
+  );
+  const reviewProviders = useConfigStore((state) => selectProvidersForDirectory(state, project.path));
+  const reviewVariants = React.useMemo(() => {
+    const { providerId, modelId } = parsedReviewModel;
+    if (!providerId || !modelId) return [];
+    const model = reviewProviders
+      .find((provider) => provider.id === providerId)
+      ?.models.find((entry) => entry.id === modelId);
+    return modelVariantNames(model);
+  }, [parsedReviewModel, reviewProviders]);
+  const storedReviewVariant = project.gitlabIssueReviewVariant ?? '';
+  const reviewVariantOptions = storedReviewVariant && !reviewVariants.includes(storedReviewVariant)
+    ? [...reviewVariants, storedReviewVariant]
+    : reviewVariants;
+  const reviewModelMissing = useConfigStore((state) =>
+    selectIsModelMissingFromCatalog(state, project.path, parsedReviewModel.providerId, parsedReviewModel.modelId));
 
-  const commitReviewModel = () => {
-    const trimmed = reviewModelDraft.trim();
-    if (trimmed === (project.gitlabIssueReviewModel ?? '')) return;
-    updateProjectMeta(project.id, { gitlabIssueReviewModel: trimmed });
-  };
-
-  const commitReviewVariant = () => {
-    const trimmed = reviewVariantDraft.trim();
-    if (trimmed === (project.gitlabIssueReviewVariant ?? '')) return;
-    updateProjectMeta(project.id, { gitlabIssueReviewVariant: trimmed });
+  const handleReviewModelChange = (providerId: string, modelId: string) => {
+    const next = providerId && modelId ? `${providerId}/${modelId}` : '';
+    if (next === (project.gitlabIssueReviewModel ?? '')) return;
+    updateProjectMeta(project.id, { gitlabIssueReviewModel: next, gitlabIssueReviewVariant: '' });
   };
 
   const storedTimeout = project.gitlabIssueTimeoutMinutes;
@@ -386,7 +393,7 @@ const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =
   return (
     <SettingsSection
       title={t('settings.projects.page.section.gitlabIssues')}
-      contentClassName="space-y-0"
+      contentClassName="space-y-3"
     >
       <SettingsCheckboxRow
         settingsItem="projects.gitlab-auto-dispatch"
@@ -396,7 +403,7 @@ const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =
         info={t('settings.projects.page.field.gitlabAutoDispatchInfo')}
       />
       {project.autoDispatchGitlabIssues === true ? (
-        <>
+        <div>
           <SettingsFieldRow
             settingsItem="projects.gitlab-branch-prefix"
             label={t('settings.projects.page.field.gitlabBranchPrefix')}
@@ -450,30 +457,44 @@ const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =
             settingsItem="projects.gitlab-review-model"
             label={t('settings.projects.page.field.gitlabReviewModel')}
             info={t('settings.projects.page.field.gitlabReviewModelInfo')}
+            description={reviewModelMissing
+              ? <span className="text-[var(--status-warning)]">{t('settings.projects.page.field.gitlabReviewModelUnavailable')}</span>
+              : undefined}
           >
-            <div className="flex flex-col gap-2">
-              <Input
-                value={reviewModelDraft}
-                onChange={(event) => setReviewModelDraft(event.target.value)}
-                onBlur={commitReviewModel}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') event.currentTarget.blur();
-                }}
-                placeholder={t('settings.projects.page.field.gitlabReviewModelPlaceholder')}
-                aria-label={t('settings.projects.page.field.gitlabReviewModel')}
-              />
-              <Input
-                value={reviewVariantDraft}
-                onChange={(event) => setReviewVariantDraft(event.target.value)}
-                onBlur={commitReviewVariant}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') event.currentTarget.blur();
-                }}
-                placeholder={t('settings.projects.page.field.gitlabReviewVariantPlaceholder')}
-                aria-label={t('settings.projects.page.field.gitlabReviewVariant')}
-              />
-            </div>
+            <ModelSelector
+              directory={project.path}
+              providerId={parsedReviewModel.providerId}
+              modelId={parsedReviewModel.modelId}
+              onChange={handleReviewModelChange}
+              placeholder={t('settings.projects.page.field.gitlabReviewModelUseProject')}
+              className={SETTINGS_CUSTOM_TRIGGER_CLASS}
+            />
           </SettingsFieldRow>
+          {parsedReviewModel.providerId && parsedReviewModel.modelId && reviewVariantOptions.length > 0 ? (
+            <SettingsFieldRow
+              settingsItem="projects.gitlab-review-variant"
+              label={t('settings.projects.page.field.gitlabReviewVariant')}
+            >
+              <Select
+                value={storedReviewVariant || NO_VARIANT_VALUE}
+                onValueChange={(value) => updateProjectMeta(project.id, {
+                  gitlabIssueReviewVariant: value === NO_VARIANT_VALUE ? '' : value,
+                })}
+              >
+                <SelectTrigger className={SETTINGS_SELECT_ROW_TRIGGER_CLASS} aria-label={t('settings.projects.page.field.gitlabReviewVariant')}>
+                  <SelectValue>
+                    {storedReviewVariant ? formatVariantLabel(storedReviewVariant) : t('settings.projects.page.option.gitlabReviewVariantDefault')}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_VARIANT_VALUE}>{t('settings.projects.page.option.gitlabReviewVariantDefault')}</SelectItem>
+                  {reviewVariantOptions.map((variant) => (
+                    <SelectItem key={variant} value={variant}>{formatVariantLabel(variant)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </SettingsFieldRow>
+          ) : null}
           <SettingsFieldRow
             settingsItem="projects.gitlab-bot-account"
             label={t('settings.projects.page.field.gitlabBotAccount')}
@@ -500,7 +521,7 @@ const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =
               </SelectContent>
             </Select>
           </SettingsFieldRow>
-        </>
+        </div>
       ) : null}
       <GitlabIssueTemplatesEditor project={project} />
     </SettingsSection>

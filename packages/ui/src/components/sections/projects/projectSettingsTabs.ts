@@ -19,6 +19,7 @@ const SEARCH_TARGET_TABS = new Map<string, ProjectSettingsTab>([
   ['projects.gitlab-branch-prefix', 'general'],
   ['projects.gitlab-timeout', 'general'],
   ['projects.gitlab-review-model', 'general'],
+  ['projects.gitlab-review-variant', 'general'],
   ['projects.gitlab-templates', 'general'],
   ['projects.gitlab-bot-account', 'general'],
   ['projects.notes-todos.repository', 'general'],
