@@ -183,3 +183,5 @@ export const useOpenWithMenu = (root: string) => {
 
   return { canOpenWith, renderOpenWithItems, openWithDialog };
 };
+
+export type OpenWithMenu = ReturnType<typeof useOpenWithMenu>;
