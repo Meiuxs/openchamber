@@ -6,10 +6,27 @@ import { mapGitLabCI, mapGitLabCommit, mapGitLabDiff, mapGitLabIssue, mapGitLabM
 import { resolveGitLabProjectsFromDirectory } from './repo.js';
 import { isPlainObject, isString } from './validation.js';
 
-const DRAFT_TITLE_PREFIX = /^\s*(?:\[draft\]|\(draft\)|draft:)\s*/i;
-const asDraftTitle = (title) => (DRAFT_TITLE_PREFIX.test(title) ? title : `Draft: ${title}`);
+const DRAFT_TITLE_PREFIX = /^\s*(?:\[draft\]|\(draft\)|\[wip\]|\(wip\)|draft:|wip:)\s*/i;
+const asDraftTitle = (title, prefix = 'Draft: ') => (DRAFT_TITLE_PREFIX.test(title) ? title : `${prefix}${title}`);
 const asReadyTitle = (title) => title.replace(DRAFT_TITLE_PREFIX, '');
 const text = (value) => (isString(value) && value ? value : '');
+
+const instanceVersions = new WeakMap();
+const instanceVersion = (client) => {
+  const requester = client?.MergeRequests?.requester;
+  if (!requester?.get) return Promise.resolve(null);
+  if (!instanceVersions.has(client)) {
+    instanceVersions.set(client, requester.get('version')
+      .then((response) => {
+        const match = /^(\d+)\.(\d+)/.exec(String(response?.body?.version ?? ''));
+        return match ? { major: Number(match[1]), minor: Number(match[2]) } : null;
+      })
+      .catch(() => null));
+  }
+  return instanceVersions.get(client);
+};
+const atLeast = (version, major, minor) => version !== null
+  && (version.major > major || (version.major === major && version.minor >= minor));
 
 const PER_PAGE = 20;
 const COLLECTION_PER_PAGE = 100;
@@ -135,7 +152,8 @@ function liveMergeRequestSummary(ref, raw) {
   if (!isPlainObject(raw) || !Number.isInteger(raw.iid)) return null;
   const state = raw.state === 'opened' ? 'open' : raw.state === 'merged' ? 'merged' : 'closed';
   const conflicts = raw.has_conflicts === true;
-  const ready = raw.detailed_merge_status === 'mergeable';
+  const mergeState = text(raw.detailed_merge_status || raw.merge_status);
+  const ready = mergeState === 'mergeable' || mergeState === 'can_be_merged';
   const pipeline = text(raw.head_pipeline?.status);
   let checks = null;
   if (state === 'open' && pipeline) {
@@ -186,6 +204,15 @@ export function createGitLabResourceService({ origin, client, download, resolveP
   const noteCapabilities = (note) => {
     const mine = accountUserId !== null && note?.author?.id === accountUserId;
     return { canUpdate: mine, canDelete: mine };
+  };
+
+  const supportsDraftReview = async () => {
+    const version = await instanceVersion(client);
+    return version === null || atLeast(version, 13, 2);
+  };
+  const supportsChangeRequestVerdict = async () => {
+    const version = await instanceVersion(client);
+    return version === null || atLeast(version, 15, 0);
   };
 
   const showProject = async (path, remoteName) => {
@@ -563,6 +590,9 @@ export function createGitLabResourceService({ origin, client, download, resolveP
   }
 }`;
   const requestChanges = async (project, number) => {
+    if (!(await supportsChangeRequestVerdict())) {
+      throw Object.assign(new Error('This GitLab version does not support a request-changes verdict'), { status: 422 });
+    }
     const response = await client.MergeRequests.requester.post('../graphql', {
       body: { query: REQUEST_CHANGES_MUTATION, variables: { path: `${project.owner}/${project.name}`, iid: String(number) } },
     });
@@ -630,6 +660,15 @@ export function createGitLabResourceService({ origin, client, download, resolveP
       throw new Error('GitLab returned invalid draft notes');
     }
     return value;
+  };
+  const readDraftComments = async (projectId, number) => {
+    if (!(await supportsDraftReview())) return [];
+    try {
+      return readDraftNotes(await client.MergeRequestDraftNotes.all(projectId, number));
+    } catch (error) {
+      if (requestStatus(error) === 404) return [];
+      throw error;
+    }
   };
   const toReviewPerson = (user) => (isString(user?.username) ? { login: user.username, avatarUrl: isString(user.avatar_url) ? user.avatar_url : undefined } : null);
   const positionOfNote = (position) => {
@@ -835,7 +874,7 @@ export function createGitLabResourceService({ origin, client, download, resolveP
       const request = requireMutationMergeRequest(raw, target.project);
       const headSha = raw?.diff_refs?.head_sha ?? request.headSha;
       const [drafts, discussions, viewer, permissions] = await Promise.all([
-        client.MergeRequestDraftNotes.all(target.project.id, number).then(readDraftNotes),
+        readDraftComments(target.project.id, number),
         readCollection((page) => client.MergeRequestDiscussions.all(target.project.id, number, page), 'GitLab merge request has more threads than OpenChamber reads'),
         client.Users.showCurrentUser(),
         readThreadPermissions(target.project, number),
@@ -886,10 +925,18 @@ export function createGitLabResourceService({ origin, client, download, resolveP
       const diffs = await readMergeRequestDiffs(client, origin, projectId, number);
       const diff = diffs.find((entry) => entry?.new_path === position.path || entry?.old_path === position.path);
       if (!diff) throw Object.assign(new Error('This file is not in the merge request'), { status: 422 });
-      const created = await client.MergeRequestDraftNotes.create(projectId, number, body, {
-        position: draftPosition(position, diff, refs),
-      });
-      if (!isPlainObject(created) || !Number.isInteger(created.id)) throw new Error('GitLab returned an invalid draft note');
+      const notePosition = draftPosition(position, diff, refs);
+      if (await supportsDraftReview()) {
+        try {
+          const created = await client.MergeRequestDraftNotes.create(projectId, number, body, { position: notePosition });
+          if (!isPlainObject(created) || !Number.isInteger(created.id)) throw new Error('GitLab returned an invalid draft note');
+          return {};
+        } catch (error) {
+          if (requestStatus(error) !== 404) throw error;
+        }
+      }
+      const created = await client.MergeRequestNotes.create(projectId, number, body, { position: notePosition });
+      if (!isPlainObject(created) || !Number.isInteger(created.id)) throw new Error('GitLab returned an invalid positioned note');
       return {};
     },
 
@@ -907,7 +954,7 @@ export function createGitLabResourceService({ origin, client, download, resolveP
 
     async discardReview({ providerTarget }) {
       const { projectId, number } = providerTarget;
-      for (const note of readDraftNotes(await client.MergeRequestDraftNotes.all(projectId, number))) {
+      for (const note of await readDraftComments(projectId, number)) {
         await client.MergeRequestDraftNotes.remove(projectId, number, note.id);
       }
       return {};
@@ -933,6 +980,9 @@ export function createGitLabResourceService({ origin, client, download, resolveP
       const { projectId, number } = payload.providerTarget;
       const raw = await client.MergeRequests.edit(projectId, number, { reviewerIds: payload.reviewers.map(Number) });
       requireMutationResponse(raw, payload.targetProject, payload.providerTarget, payload.expectedTarget);
+      if (!Array.isArray(raw?.reviewers)) {
+        throw Object.assign(new Error('This GitLab version does not support merge request reviewers'), { status: 409 });
+      }
       return {};
     },
 
@@ -944,6 +994,9 @@ export function createGitLabResourceService({ origin, client, download, resolveP
       const current = kind === 'change-request-reviewers'
         ? (Array.isArray(raw?.reviewers) ? raw.reviewers.map((user) => String(user?.id)) : null)
         : (Array.isArray(raw?.labels) ? raw.labels.map((label) => (isString(label) ? label : label?.name)) : null);
+      if (kind === 'change-request-reviewers' && !current) {
+        return { state: 'failed', result: { failureStatus: 409, failureCode: 'SOURCE_CONTROL_MUTATION_NOT_APPLIED' } };
+      }
       if (!current || current.length !== names.length || !current.every((entry) => names.includes(entry))) return { state: 'outcome-unknown' };
       return { state: 'succeeded', result: {} };
     },
@@ -1021,7 +1074,7 @@ export function createGitLabResourceService({ origin, client, download, resolveP
 
     async reviewChangeRequest(payload) {
       const { projectId, number } = payload.providerTarget;
-      const drafts = readDraftNotes(await client.MergeRequestDraftNotes.all(projectId, number));
+      const drafts = await readDraftComments(projectId, number);
       if (payload.verdict === 'comment' && drafts.length === 0 && payload.body === undefined) {
         throw Object.assign(new Error('A review with no comments needs text'), { status: 422 });
       }
@@ -1140,7 +1193,7 @@ export function createGitLabResourceService({ origin, client, download, resolveP
     },
 
     async createChangeRequest(payload) {
-      const title = payload.draft ? asDraftTitle(payload.title) : payload.title;
+      const title = payload.draft ? asDraftTitle(payload.title, (await supportsDraftReview()) ? 'Draft: ' : 'WIP: ') : payload.title;
       if (payload.providerTarget) {
         const raw = await client.MergeRequests.create(payload.providerTarget.sourceProjectId, payload.head, payload.base, title, {
           description: payload.body,
@@ -1221,7 +1274,9 @@ export function createGitLabResourceService({ origin, client, download, resolveP
         : requireMapped(mapGitLabMergeRequest(raw, identity, target.project), 'GitLab returned an invalid merge request'));
       const current = validate(await client.MergeRequests.show(projectId, number));
       if (current.draft) return { draft: true };
-      const request = validate(await client.MergeRequests.edit(projectId, number, { title: asDraftTitle(current.title) }));
+      const request = validate(await client.MergeRequests.edit(projectId, number, {
+        title: asDraftTitle(current.title, (await supportsDraftReview()) ? 'Draft: ' : 'WIP: '),
+      }));
       return { draft: request.draft };
     },
 

@@ -821,6 +821,141 @@ describe('GitLab comments and reviews', () => {
     });
   });
 
+  describe('on an instance before 13.2 (12.7, the intranet deployment)', () => {
+    const providerTarget = { projectId: '2', number: 5 };
+    const notFound = () => Object.assign(new Error('404 Not Found'), { cause: { response: { status: 404 } } });
+    const version = (value = '12.7.6-ee') => ({
+      requester: {
+        get: vi.fn(async (path) => (path === 'version' ? { body: { version: value } } : undefined)),
+        post: vi.fn(async () => undefined),
+      },
+    });
+    const mergeRequests = (overrides = {}, legacy = version()) => ({
+      ...setup().client.MergeRequests,
+      show: vi.fn(async () => ({ ...openMR, diff_refs: { base_sha: 'b', start_sha: 's', head_sha: 'h' } })),
+      allDiffs: list([{ old_path: 'a.ts', new_path: 'a.ts', diff: '@@ -10,3 +10,4 @@\n ctx\n-old\n+new\n+more\n ctx2\n' }]),
+      ...legacy,
+      ...overrides,
+    });
+
+    it('reads the review without touching draft notes and keeps threads', async () => {
+      const draftNotes = { all: vi.fn(async () => { throw notFound(); }) };
+      const { service } = setup({
+        MergeRequests: mergeRequests(),
+        MergeRequestDraftNotes: draftNotes,
+        MergeRequestDiscussions: { all: list([
+          { id: 'thread-one', notes: [
+            { id: 9, type: 'DiffNote', system: false, body: 'Question', author: { id: 3, username: 'sam' },
+              position: { position_type: 'text', new_path: 'a.ts', old_path: 'a.ts', head_sha: 'h', new_line: 10, old_line: 10 } },
+          ] },
+        ]) },
+        Users: { showCurrentUser: vi.fn(async () => ({ id: 3, username: 'sam' })) },
+      });
+      const state = await service.reviewState('/repo', 5);
+      expect(state).toMatchObject({ connected: true, headSha: 'h', draft: null });
+      expect(state.threads).toHaveLength(1);
+      expect(state.threads[0]).toMatchObject({ path: 'a.ts', side: 'new', line: 10 });
+      expect(draftNotes.all).not.toHaveBeenCalled();
+    });
+
+    it('publishes a review file comment immediately as a positioned note', async () => {
+      const noteCreate = vi.fn(async () => ({ id: 12 }));
+      const draftNotes = { all: vi.fn(async () => { throw notFound(); }), create: vi.fn(async () => { throw notFound(); }) };
+      const { service } = setup({
+        MergeRequests: mergeRequests(),
+        MergeRequestDraftNotes: draftNotes,
+        MergeRequestNotes: { all: list([]), create: noteCreate },
+      });
+      await expect(service.addReviewComment({ providerTarget, position: { path: 'a.ts', side: 'new', line: 10 }, body: 'Here' }))
+        .resolves.toEqual({});
+      expect(draftNotes.create).not.toHaveBeenCalled();
+      expect(noteCreate).toHaveBeenCalledWith('2', 5, 'Here', expect.objectContaining({
+        position: expect.objectContaining({ positionType: 'text', newLine: 10 }),
+      }));
+    });
+
+    it('falls back to a positioned note when draft notes answer 404 on an instance of unknown version', async () => {
+      const noteCreate = vi.fn(async () => ({ id: 12 }));
+      const draftNotes = { all: vi.fn(async () => { throw notFound(); }), create: vi.fn(async () => { throw notFound(); }) };
+      const { service } = setup({
+        MergeRequests: mergeRequests({}, null),
+        MergeRequestDraftNotes: draftNotes,
+        MergeRequestNotes: { all: list([]), create: noteCreate },
+      });
+      await expect(service.addReviewComment({ providerTarget, position: { path: 'a.ts', side: 'new', line: 10 }, body: 'Here' }))
+        .resolves.toEqual({});
+      expect(draftNotes.create).toHaveBeenCalledOnce();
+      expect(noteCreate).toHaveBeenCalledOnce();
+    });
+
+    it('discards nothing when there are no drafts to discard', async () => {
+      const draftNotes = { all: vi.fn(async () => { throw notFound(); }), remove: vi.fn(async () => ({})) };
+      const { service } = setup({ MergeRequests: mergeRequests(), MergeRequestDraftNotes: draftNotes });
+      await expect(service.discardReview({ providerTarget })).resolves.toEqual({});
+      expect(draftNotes.all).not.toHaveBeenCalled();
+      expect(draftNotes.remove).not.toHaveBeenCalled();
+    });
+
+    it('approves without publishing drafts, and refuses a request-changes verdict outright', async () => {
+      const approve = vi.fn(async () => ({}));
+      const draftNotes = { all: vi.fn(async () => { throw notFound(); }), publishBulk: vi.fn(async () => ({})) };
+      const { service, client } = setup({
+        MergeRequests: mergeRequests(),
+        MergeRequestDraftNotes: draftNotes,
+        MergeRequestApprovals: { approve },
+      });
+      await expect(service.reviewChangeRequest(review())).resolves.toEqual({ commented: false });
+      expect(draftNotes.publishBulk).not.toHaveBeenCalled();
+      expect(approve).toHaveBeenCalledWith('2', 5, { sha: 'abc' });
+      await expect(service.reviewChangeRequest(review({ verdict: 'request-changes' })))
+        .rejects.toMatchObject({ message: 'This GitLab version does not support a request-changes verdict', status: 422 });
+      expect(client.MergeRequests.requester.post).not.toHaveBeenCalled();
+    });
+
+    it('drafts a merge request with the WIP prefix the old instance recognises', async () => {
+      const { service, client } = setup({
+        MergeRequests: mergeRequests({
+          show: vi.fn(async () => ({ ...openMR, draft: false, title: 'Feature' })),
+          edit: vi.fn(async (_id, _iid, options) => ({ ...openMR, draft: true, title: options.title })),
+        }),
+      }, { canonicalReads: true });
+      await service.createChangeRequest({
+        providerTarget: { sourceProjectId: '1', targetProjectId: '2' },
+        targetProject: { id: '2', owner: 'team', name: 'repo' },
+        expectedTarget: { project: { id: '2', owner: 'team', name: 'repo' }, head: 'feature', base: 'main' },
+        head: 'feature', base: 'main', title: 'Feature', body: 'Body', draft: true,
+      });
+      expect(client.MergeRequests.create).toHaveBeenCalledWith('1', 'feature', 'main', 'WIP: Feature', { description: 'Body', targetProjectId: '2' });
+
+      const payload = {
+        providerTarget,
+        targetProject: { id: '2', owner: 'team', name: 'repo' },
+        expectedTarget: { project: { id: '2', owner: 'team', name: 'repo' }, number: 5, head: 'feature', base: 'main' },
+      };
+      await expect(service.draftChangeRequest(payload)).resolves.toEqual({ draft: true });
+      expect(client.MergeRequests.edit).toHaveBeenCalledWith('2', 5, { title: 'WIP: Feature' });
+
+      const draft = { ...openMR, draft: true, title: 'WIP: Feature' };
+      client.MergeRequests.show.mockResolvedValue(draft);
+      client.MergeRequests.edit.mockClear();
+      client.MergeRequests.edit.mockResolvedValue({ ...openMR, draft: false, title: 'Feature' });
+      await expect(service.readyChangeRequest(payload)).resolves.toEqual({ ready: true });
+      expect(client.MergeRequests.edit).toHaveBeenCalledWith('2', 5, { title: 'Feature' });
+    });
+
+    it('refuses reviewers an old instance cannot record instead of looping', async () => {
+      const { service } = setup({
+        MergeRequests: mergeRequests({ edit: vi.fn(async () => ({ ...openMR })) }),
+      });
+      const project = { id: '2', owner: 'team', name: 'repo' };
+      await expect(service.setReviewers({
+        reviewers: ['7'], providerTarget, targetProject: project, expectedTarget: { project, number: 5 },
+      })).rejects.toMatchObject({ status: 409 });
+      await expect(service.reconcileSetMutation(providerTarget, 'change-request-reviewers', ['7']))
+        .resolves.toEqual({ state: 'failed', result: { failureStatus: 409, failureCode: 'SOURCE_CONTROL_MUTATION_NOT_APPLIED' } });
+    });
+  });
+
   it('approves the commit the user read, then posts the text as a note', async () => {
     const approve = vi.fn(async () => ({}));
     const create = vi.fn(async () => ({ id: 7 }));
@@ -867,7 +1002,11 @@ describe('GitLab comments and reviews', () => {
   });
 
   it('reads labels and active members, and sets labels and reviewers as whole sets', async () => {
-    const editMR = vi.fn(async (_id, _iid, update) => ({ ...openMR, labels: update.labels?.split(',') ?? [] }));
+    const editMR = vi.fn(async (_id, _iid, update) => ({
+      ...openMR,
+      labels: update.labels?.split(',') ?? [],
+      reviewers: update.reviewerIds?.map((id) => ({ id, username: `user-${id}` })) ?? openMR.reviewers ?? [],
+    }));
     const editIssue = vi.fn(async () => ({ iid: 3, title: 'Bug', web_url: `${origin}/me/repo/-/issues/3`, state: 'opened' }));
     const { service } = setup({
       MergeRequests: { ...setup().client.MergeRequests, edit: editMR, show: vi.fn(async () => ({ ...openMR, labels: ['bug'], reviewers: [{ id: 7, username: 'ann' }] })) },
@@ -1304,6 +1443,13 @@ describe('GitLab live summaries', () => {
     expect(issueSummaries.map((s) => [s.number, s.state])).toEqual([[7, 'open'], [8, 'completed']]);
     expect(client.MergeRequests.show).toHaveBeenCalledWith('group/sub/app', 1);
     expect(client.Issues.show).toHaveBeenCalledWith(7, { projectId: 'group/sub/app' });
+  });
+
+  it('reads mergeability from merge_status when detailed_merge_status is absent', async () => {
+    const mr = { ...openMR, iid: 2, detailed_merge_status: undefined, merge_status: 'can_be_merged' };
+    const { service } = setup({ MergeRequests: { ...setup().client.MergeRequests, show: vi.fn(async () => mr) } });
+    const { summaries: [summary] } = await service.liveSummaries({ refs: [{ owner: 'group', repo: 'app', number: 2 }] });
+    expect(summary).toMatchObject({ mergeable: true, mergeableState: 'clean' });
   });
 
   it('details add the failed jobs and the newest notes people wrote, read only when asked', async () => {
