@@ -1520,7 +1520,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabTimeoutInfo': "Minutes before an implementing session is stopped and the issue is blocked.",
   'settings.projects.page.field.gitlabTimeoutError': 'Enter a whole number of minutes between 1 and 1440.',
   'settings.projects.page.field.gitlabBotAccount': "Bot account",
-  'settings.projects.page.field.gitlabBotAccountInfo': "GitLab account used for comments and labels. It needs at least the Reporter role.",
+  'settings.projects.page.field.gitlabBotAccountInfo': "GitLab account used for comments and labels. It needs at least the Reporter role. Without a dedicated bot account, your own account works.",
   'settings.projects.page.field.gitlabBotAccountPlaceholder': "Select an account",
   'settings.projects.page.field.gitlabTemplates': "Issue templates",
   'settings.projects.page.field.gitlabTemplatesInfo': "Description outlines offered when filing an issue. Leave out the type and target branch: the form writes both into the issue.",

@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGitlabIssueDispatcher } from './dispatcher.js';
+import { isBotNoteBody } from './gitlab.js';
 import { createGitlabIssueLedger, ledgerKey } from './ledger.js';
 
 const INSTANCE = 'https://gitlab.example.com';
@@ -155,9 +156,9 @@ async function harness({
         if (state.labelEventsFail) throw new Error('resource label events are not available');
         return { userId: 7 };
       },
-      latestCommand: async (_projectId, _iid, { sinceIso, botUserId, commands }) => {
+      latestCommand: async (_projectId, _iid, { sinceIso, commands }) => {
         const since = Date.parse(sinceIso ?? 0) || 0;
-        const matches = state.notes.filter((note) => note.author?.id !== botUserId
+        const matches = state.notes.filter((note) => !isBotNoteBody(note.body)
           && (Date.parse(note.created_at) || 0) >= since
           && commands.includes(String(note.body).trim().split('\n')[0].trim()));
         const newest = matches.sort((left, right) => right.id - left.id)[0];
@@ -1219,6 +1220,36 @@ describe('GitLab issue dispatcher feedback rounds', () => {
       phase: 'mr-open', feedbackRounds: 0, noteWatermarks: { issue: 200, mergeRequest: 100 },
     });
     expect(state.notes.some((note) => note.body.includes('要开始新一轮修复'))).toBe(true);
+  });
+
+  it('answers a shared-account trigger comment and never reacts to its own replies', async () => {
+    // The intranet bot account is often the triggerer's own, so the bot's
+    // user id authors human comments too. Separation is by the hidden marker
+    // on the automation's own notes, never by author id.
+    const wt = await fs.mkdtemp(path.join(os.tmpdir(), 'gitlab-wt-'));
+    dirs.push(wt);
+    const { dispatcher, ledger, state } = await harness();
+    state.issue.labels = ['ai-ready', 'ai-working', 'ai-review'];
+    state.mrs = [{ iid: 5, state: 'opened', web_url: `${INSTANCE}/mr/5` }];
+    state.notes.push(commentNote(200, '@bot 修复: 样式塌了', { id: 9, username: 'bot' }));
+    state.members = [{ id: 7, access_level: 30 }, { id: 9, access_level: 30 }];
+    await ledger.put(mrOpenRun({ worktreePath: wt }));
+
+    await dispatcher.tick();
+    let run = (await ledger.list())[0];
+    expect(run).toMatchObject({
+      phase: 'addressing', feedbackRounds: 1,
+      feedbackItems: [{ author: 'bot', text: '样式塌了' }],
+    });
+    // The round announcement carries the marker, so the next poll skips it
+    // instead of looping on its own words.
+    const announcement = state.notes.find((note) => note.body.includes('开始第 1 轮修复'));
+    expect(isBotNoteBody(announcement.body)).toBe(true);
+
+    await dispatcher.tick();
+    run = (await ledger.list())[0];
+    expect(run.feedbackRounds).toBe(1);
+    expect(state.calls.sessionCreates).toBe(1);
   });
 
   it('ignores comments from people below Developer access', async () => {

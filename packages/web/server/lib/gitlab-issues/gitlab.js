@@ -166,6 +166,10 @@ export const labelNamesOf = (issue) => (Array.isArray(issue?.labels) ? issue.lab
   .filter(Boolean);
 const labelList = (labels) => [].concat(labels).map((label) => String(label)).filter(Boolean);
 
+export const BOT_NOTE_MARKER = '<!-- openchamber-automation -->';
+export const isBotNoteBody = (body) => String(body ?? '').startsWith(BOT_NOTE_MARKER);
+export const withBotMarker = (body) => `${BOT_NOTE_MARKER}\n${String(body ?? '')}`;
+
 export function createGitlabIssueApi({ client }) {
   // GitLab before 12.10 has no `add_labels`/`remove_labels` on the issue update
   // and answers 400 when the body carries only those, so the bot reads the
@@ -256,11 +260,11 @@ export function createGitlabIssueApi({ client }) {
     getMergeRequest: (projectId, iid) => client.MergeRequests.show(projectId, iid),
   };
 
-  api.latestTriggerer = async (projectId, iid, botUserId) => {
+  api.latestTriggerer = async (projectId, iid) => {
     const events = await api.listLabelEvents(projectId, iid);
     const newest = events
       .filter((event) => event?.action === 'add' && event?.label?.name === 'ai-ready'
-        && Number.isInteger(event?.user?.id) && event.user.id !== botUserId)
+        && Number.isInteger(event?.user?.id))
       .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
     return newest ? { userId: newest.user.id } : null;
   };
@@ -271,14 +275,14 @@ export function createGitlabIssueApi({ client }) {
     return Number.isInteger(member?.access_level) ? member.access_level : 0;
   };
 
-  api.latestCommand = async (projectId, iid, { sinceIso, botUserId, commands, minAccessLevel = null }) => {
+  api.latestCommand = async (projectId, iid, { sinceIso, commands, minAccessLevel = null }) => {
     const notes = await api.listNotes(projectId, iid);
     const accessByUser = minAccessLevel === null
       ? null
       : new Map((await api.listMembers(projectId)).map((member) => [Number(member?.id), Number(member?.access_level)]));
     const since = Date.parse(sinceIso ?? 0) || 0;
     const matches = notes.filter((note) => {
-      if (!Number.isInteger(note?.id) || note?.author?.id === botUserId) return false;
+      if (!Number.isInteger(note?.id) || isBotNoteBody(note?.body)) return false;
       if ((Date.parse(note?.created_at ?? 0) || 0) < since) return false;
       if (accessByUser && (accessByUser.get(Number(note?.author?.id)) ?? 0) < minAccessLevel) return false;
       const first = String(note?.body ?? '').trim().split(/\r?\n/, 1)[0].trim();

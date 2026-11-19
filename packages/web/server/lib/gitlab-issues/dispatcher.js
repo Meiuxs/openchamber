@@ -6,9 +6,10 @@ import {
   BLOCKED_REASONS, PHASES, canTransition, isActivePhase,
 } from './machine.js';
 import {
-  TemplateError, assistantText, buildIssueBranch, findAccountForUser, isBareBotMention, labelNamesOf, matchReusableBranch,
-  parseFeedbackCommand, parseIssueTemplate, resolveAccount, resolveProjectConfig,
+  TemplateError, assistantText, buildIssueBranch, findAccountForUser, isBareBotMention, isBotNoteBody, labelNamesOf,
+  matchReusableBranch, parseFeedbackCommand, parseIssueTemplate, resolveAccount, resolveProjectConfig,
 } from './gitlab.js';
+import { withBotNoteMarker } from './bot-notes.js';
 import { createGitlabIssueLedger, ledgerKey } from './ledger.js';
 import {
   AgentOutputError, buildFeedbackPrompt, buildImplementPrompt, buildPlanPrompt, buildReviewPrompt,
@@ -19,6 +20,7 @@ import {
 } from './prompts.js';
 
 const BUSY_LABELS = ['ai-working', 'ai-plan-review', 'ai-review', 'ai-blocked', 'ai-done'];
+
 const DEFAULT_STARTUP_DELAY_MS = 30_000;
 const DEFAULT_TICK_INTERVAL_MS = 10_000;
 const DEFAULT_LEASE_MS = 5 * 60 * 1000;
@@ -253,7 +255,7 @@ export function createGitlabIssueDispatcher(dependencies) {
       logger.warn?.(`[gitlab-issues] bot account unusable for project ${project.id}`);
       return null;
     }
-    const api = apiFactory({ origin: provider.instance, account: botAccount });
+    const api = withBotNoteMarker(apiFactory({ origin: provider.instance, account: botAccount }));
     let botUser;
     let projectInfo;
     try {
@@ -274,7 +276,6 @@ export function createGitlabIssueDispatcher(dependencies) {
       projectId: projectInfo.id,
       defaultBranch: projectInfo.default_branch,
       botAccount,
-      botUserId: botUser.id,
       // Mention commands are written against the bot's real username, never a
       // hard-coded one: the same flow works on any instance.
       botUsername: botUser.username,
@@ -676,7 +677,7 @@ export function createGitlabIssueDispatcher(dependencies) {
 
     let triggerer;
     try {
-      triggerer = await context.api.latestTriggerer(context.projectId, fresh.iid, context.botUserId);
+      triggerer = await context.api.latestTriggerer(context.projectId, fresh.iid);
     } catch (error) {
       if (unauthorized(error)) throw error;
       // Older GitLab versions have no resource label events endpoint. Leaving
@@ -877,7 +878,6 @@ export function createGitlabIssueDispatcher(dependencies) {
   const handleWaitingApproval = async (run, context) => {
     const command = await context.api.latestCommand(run.projectId, run.iid, {
       sinceIso: run.since,
-      botUserId: context.botUserId,
       commands: ['/ai-approve', '/ai-reject'],
       minAccessLevel: 30,
     });
@@ -938,7 +938,6 @@ export function createGitlabIssueDispatcher(dependencies) {
     if (run.blockedReason === BLOCKED_REASONS.MISSING_CREDENTIAL) {
       const command = await context.api.latestCommand(run.projectId, run.iid, {
         sinceIso: run.since,
-        botUserId: context.botUserId,
         commands: ['/ai-take'],
         minAccessLevel: 30,
       });
@@ -1093,7 +1092,7 @@ export function createGitlabIssueDispatcher(dependencies) {
       const fresh = channel.notes.filter((note) => Number.isInteger(note?.id) && note.id > since);
       if (!fresh.length) continue;
       for (const note of fresh) {
-        if (note.system || note.author?.id === context.botUserId) continue;
+        if (note.system || isBotNoteBody(note.body)) continue;
         if ((accessLevels.get(Number(note.author?.id)) ?? 0) < FEEDBACK_MIN_ACCESS_LEVEL) continue;
         const command = parseFeedbackCommand(note.body, context.botUsername);
         if (command) {

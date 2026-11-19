@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_BRANCH_PREFIX, TemplateError, buildIssueBranch, createGitlabIssueApi,
-  findAccountForUser, isBareBotMention, isValidBranchPrefix, isValidGitRefName, matchReusableBranch,
+  BOT_NOTE_MARKER, DEFAULT_BRANCH_PREFIX, TemplateError, buildIssueBranch, createGitlabIssueApi,
+  findAccountForUser, isBareBotMention, isBotNoteBody, isValidBranchPrefix, isValidGitRefName, matchReusableBranch,
   parseFeedbackCommand, parseIssueTemplate, resolveAccount, resolveProjectConfig, slugifyIssueTitle,
+  withBotMarker,
 } from './gitlab.js';
 
 const issue = (description) => ({ description });
@@ -163,29 +164,33 @@ describe('GitLab issue API service', () => {
     ]);
   });
 
-  it('reads the newest non-bot ai-ready label event and the triggerer access level', async () => {
+  it('reads the newest ai-ready add event whoever added it, and the triggerer access level', async () => {
     const { client, api } = apiFixture();
     client.IssueLabelEvents.all = paged([
-      { label: { name: 'ai-ready' }, action: 'add', user: { id: 9 }, created_at: '2026-11-12T10:00:00Z' },
-      { label: { name: 'ai-ready' }, action: 'remove', user: { id: 7 }, created_at: '2026-11-12T11:00:00Z' },
       { label: { name: 'ai-ready' }, action: 'add', user: { id: 7 }, created_at: '2026-11-12T09:00:00Z' },
+      { label: { name: 'ai-ready' }, action: 'remove', user: { id: 7 }, created_at: '2026-11-12T11:00:00Z' },
+      { label: { name: 'ai-ready' }, action: 'add', user: { id: 9 }, created_at: '2026-11-12T10:00:00Z' },
     ]);
-    await expect(api.latestTriggerer(42, 17, 9)).resolves.toEqual({ userId: 7 });
-    await expect(api.accessLevelOf(42, 7)).resolves.toBe(30);
+    client.ProjectMembers.all = paged([{ id: 9, access_level: 30 }]);
+    await expect(api.latestTriggerer(42, 17)).resolves.toEqual({ userId: 9 });
+    await expect(api.accessLevelOf(42, 9)).resolves.toBe(30);
   });
 
-  it('reads only the newest explicit command after the phase started', async () => {
+  it('reads the newest explicit command after the phase started, ignoring marked notes', async () => {
     const { client, api } = apiFixture();
+    // A note by the bot user is a command when it is not the automation's
+    // own: the intranet bot account is often the triggerer's own account.
     client.IssueNotes.all = paged([
       { id: 21, body: '/ai-approve', created_at: '2026-11-12T09:00:00Z', author: { id: 7 } },
       { id: 22, body: 'ordinary comment', created_at: '2026-11-12T10:00:00Z', author: { id: 7 } },
       { id: 23, body: '/ai-reject', created_at: '2026-11-12T10:30:00Z', author: { id: 7 } },
       { id: 24, body: '/ai-approve', created_at: '2026-11-12T11:00:00Z', author: { id: 9 } },
+      { id: 25, body: `${BOT_NOTE_MARKER}\n/ai-approve`, created_at: '2026-11-12T11:30:00Z', author: { id: 9 } },
     ]);
     await expect(api.latestCommand(42, 17, {
-      sinceIso: '2026-11-12T10:00:00Z', botUserId: 9,
+      sinceIso: '2026-11-12T10:00:00Z',
       commands: ['/ai-approve', '/ai-reject'],
-    })).resolves.toEqual({ command: '/ai-reject', userId: 7, noteId: 23 });
+    })).resolves.toEqual({ command: '/ai-approve', userId: 9, noteId: 24 });
   });
 
   it('ignores the newest command when its author is below Developer', async () => {
@@ -197,7 +202,6 @@ describe('GitLab issue API service', () => {
     ]);
     await expect(api.latestCommand(42, 17, {
       sinceIso: '2026-11-12T09:00:00Z',
-      botUserId: 9,
       commands: ['/ai-approve', '/ai-reject'],
       minAccessLevel: 30,
     })).resolves.toEqual({ command: '/ai-approve', userId: 7, noteId: 40 });
