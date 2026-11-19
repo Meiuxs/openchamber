@@ -174,7 +174,7 @@ const main = async () => {
     process.stdout.write(`${JSON.stringify({
       instance,
       create: { method: 'POST', path: createPath, payload: createPayload },
-      addAiReady: args.aiReady ? { method: 'PUT', path: `${createPath}/<iid>`, payload: { add_labels: 'ai-ready' } } : null,
+      addAiReady: args.aiReady ? { method: 'PUT', path: `${createPath}/<iid>`, payload: { labels: [...new Set([...labels, 'ai-ready'])].join(',') } } : null,
     }, null, 2)}\n`);
     return;
   }
@@ -188,12 +188,20 @@ const main = async () => {
   let aiReady = false;
   if (args.aiReady) {
     try {
+      // GitLab before 12.10 (12.7 on the intranet) has no add_labels/remove_labels
+      // and answers them with 400: read the whole set and write it back with
+      // ai-ready appended, like the server's editLabels does.
+      const current = await request({ api, token, path: `${createPath}/${issue.iid}`, method: 'GET' });
+      const currentLabels = (Array.isArray(current?.labels) ? current.labels : [])
+        .map((label) => (typeof label === 'string' ? label : label?.name))
+        .filter((label) => typeof label === 'string' && label);
+      const merged = [...new Set([...currentLabels, 'ai-ready'])];
       await request({
         api,
         token,
         path: `${createPath}/${issue.iid}`,
         method: 'PUT',
-        payload: { add_labels: 'ai-ready' },
+        payload: { labels: merged.join(',') },
       });
       aiReady = true;
     } catch {
