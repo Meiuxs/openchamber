@@ -1,4 +1,5 @@
 import { spaceIdOfDirectory } from '@/lib/spaces/space-route';
+import { getNestedRepositoryScanDepth, usesWebNestedRepositoryScan } from './nestedRepositoryScanDepth';
 import { readGitStatus } from './git-status/batch';
 import { z } from 'zod';
 import type {
@@ -1003,7 +1004,11 @@ export class GitDirectoriesUnsupportedError extends Error {
 }
 
 export async function listGitDirectories(root: string): Promise<string[]> {
-  const response = await runtimeFetch('/api/fs/git-dirs', { query: { path: root, directory: root } });
+  const query: Record<string, string> = { path: root, directory: root };
+  if (usesWebNestedRepositoryScan()) {
+    query.depth = getNestedRepositoryScanDepth();
+  }
+  const response = await runtimeFetch('/api/fs/git-dirs', { query });
   if (response.status === 501) {
     throw new GitDirectoriesUnsupportedError();
   }

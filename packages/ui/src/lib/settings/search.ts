@@ -970,6 +970,14 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     keywords: ['changes', 'flat list', 'tree view'],
   },
   {
+    id: 'git.scan-depth',
+    page: 'git',
+    titleKey: 'settings.openchamber.git.scanDepthLabel',
+    descriptionKey: 'settings.openchamber.git.scanDepthInfo',
+    keywords: ['nested', 'subdirectory', 'repository', 'issues', 'pull requests'],
+    isAvailable: (ctx) => ctx.isWeb && !ctx.isDesktop && !ctx.isMobile,
+  },
+  {
     id: 'git.gitmoji',
     page: 'git',
     titleKey: 'settings.openchamber.git.enableGitmoji',

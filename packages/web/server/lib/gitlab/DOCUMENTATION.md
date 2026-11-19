@@ -43,7 +43,7 @@ This module owns GitLab instance validation, authentication, remote resolution, 
 - The four merge-request mutation routes are canonical only. They require the complete repository binding context and durable idempotency executor; missing validation or execution support returns `501`. Validation runs before credential lookup, client creation, project resolution, or provider access, and mutation authentication uses only the validated account.
 - Canonical mutation target resolution starts only from the trusted primary remote and that project's declared fork parent. The expected target project must match one of those projects. Parent lookup failures fail the request. Create accepts `remote` only when it equals the primary remote. `headRemote` defaults to the primary remote; an explicit value resolves that exact remote without ranking or fallback and must map to the already established primary/parent network.
 - Update, merge, ready, and draft preflight the expected project, merge-request number, head, base, and head SHA against strictly mapped provider state immediately before execution. Mutation preflight, mutation responses, and restart reconciliation also require an authoritative boolean `draft` or `work_in_progress` field. Broader resource reads retain compatibility with older payloads that omit those fields. Durable targets contain the repository and binding revisions, primary remote, server project identity, and actual merge-request coordinates. Digests cover the exact credential account ID and revision, resolved target, and every normalized operation input. Durable records never contain titles, descriptions, provider payloads, tokens, or remote URLs.
-- The shared mutation executor claims the idempotency key durably before one provider write. After binding validation and exact local credential lookup, terminal durable records replay without provider project or merge-request preflight. Their stored credential actor and resolved target must match the trusted request, and the route recomputes the digest from that stored target, the resolved credential revision, and normalized operation input. Changed input conflicts. The route derives `providerUserId` from the resolved credential and passes it separately as receipt actor `providerAccountId` and audit identity; request payloads cannot inject it. Two credentials for one GitLab user therefore retain distinct replay authority while sharing provider actor identity. Only authoritative provider `4xx` rejections are definite failures. Provider `5xx` and transport, socket, network, or timeout failures after dispatch are outcome-unknown and never trigger a retry. A mutation `401` invalidates only the validated acting account.
+- The shared mutation executor claims the idempotency key durably before one provider write. After binding validation and exact local credential lookup, terminal durable records replay without provider project or merge-request preflight. Their stored credential actor and resolved target must match the trusted request, and the route recomputes the digest from that stored target, the resolved credential revision, and normalized operation input. Changed input conflicts. The route derives `providerUserId` from the resolved credential and passes it separately as receipt actor `providerAccountId` and audit identity; request payloads cannot inject it. One GitLab user has one stored credential, so its credential ID and revision carry that replay authority. Only authoritative provider `4xx` rejections are definite failures. Provider `5xx` and transport, socket, network, or timeout failures after dispatch are outcome-unknown and never trigger a retry. A mutation `401` invalidates only the validated acting account.
 - Restart reconciliation reads GitLab and never repeats a mutation. Running records resolve provider coordinates only when reconciliation needs them. Create succeeds only when one merge request exactly matches source project and branch plus target project and base. Update remains outcome-unknown because its private title and description are not persisted. Merge succeeds when GitLab reports merged, ready succeeds when GitLab reports non-draft, and draft succeeds when GitLab reports draft; authoritative unchanged states become definite failures where safe. Ambiguous or malformed results remain outcome-unknown.
 - Cross-process execution exclusion, lock errors, and stopped-writer orphan recovery follow the [source-control lock contract](../source-control/DOCUMENTATION.md#cross-process-locks-and-recovery). A live or crashed owner's execution lock blocks reconciliation; restarting alone does not remove it.
 - `GET /pr/status` keeps a last-known answer per trusted read context (`source-control/status-cache.js`, 90 s TTL, credential revision in the key). A fresh repeat is answered from it unless `force` is set; a provider round trip is bounded to 12 s; a transient failure (unreachable, 429, 5xx, timeout) answers with the last-known status, or 503 when there is none, so a badge keeps its state through an outage. A refused credential (401) is never answered from it. A successful mutation drops the repository's entries; an invalidated account drops its own. Context, list, and history reads have no caches, and failed mutations do not alter unrelated server state.
@@ -96,6 +96,76 @@ GitLab reads a personal access token from `Authorization: Bearer` on current rel
 
 Draft notes, the `Draft:` title prefix, and the request-changes GraphQL verdict were all added after GitLab 12.7 (the intranet deployment), where every one of them fails: the draft-notes endpoints answer 404, a `Draft:` title is not recognised as a draft, and `mergeRequestRequestChanges` is no field in that schema. One version read per client (`GET /api/v4/version`) decides which abilities an instance has; an unreadable version keeps every ability, and a 404 from a draft-notes read on a merge request that was just read successfully degrades the same way, so the panel never fails because of a missing endpoint. There, a review file comment is published immediately as a positioned note (the pending review it would belong to cannot exist), `discardReview` has nothing to discard, and a request-changes verdict is refused as a definite `422` instead of surfacing a raw GraphQL field error. A `WIP:` title prefixes drafts. Reviewers predate none of this cleanly (13.x), so their absence is detected from the response instead: see the reviewers invariant above.
 
+### Why validation retains the shared predicates
+
+`validation.ts` re-exports the original functions from `shared/guards.js`; consumers
+rely on their identity. The shared owner supplies the record predicate.
+The shared `object-guards.ts` owner supplies a primitive-string predicate, so
+boxed strings and objects with a string tag do not pass validation.
+
+Token verification returns the parser's checked numeric user ID, trimmed login
+and optional string profile fields. Fetch rejections
+may contain an arbitrary `message`. The verifier's nullish predicate permits
+reading an optional, unchecked message only; it promises no Error instance or
+string value. Inherited properties, getter receivers, falsy-message fallback
+and Error's message coercion retain the optional property access behavior.
+
+### Why OAuth payload and process-failure fields stay unchecked
+
+OAuth JSON and rejected process calls can carry arbitrary field values. Their
+nullish predicates permit property reads only. Device authorization validates
+its required strings and finite numbers before returning them; optional fields
+such as `verification_uri_complete` remain unchecked until their consumer tests
+them. Renewal keeps only a nonempty string token and a positive finite expiry.
+Process output becomes text only after the shared string predicate accepts it.
+Numeric process exit codes and transport failure codes remain separate checks.
+
+### Why resource orchestration remains JavaScript
+
+GitBeaker's `ProjectSchema.forked_from_project`,
+`MergeRequestSchema.head_pipeline`, `MergeRequestSchema.pipeline` and
+`MergeRequestSchema.user` are unchecked extension fields. Legacy resource paths
+read their properties and can pass a truthy, unchecked fork ID into
+`Projects.show`. Its declared project-ID parameter accepts only strings and
+numbers. Converting this boundary requires retaining the unchecked values and
+GitBeaker's runtime coercion, rather than declaring validated project metadata.
+The requester also exposes GraphQL bodies as a broad response union. The
+resource and provider implementations retain their JavaScript boundary.
+
+### Why repository string checks remain at the input boundary
+
+Remote URLs, tracking values and remote names come from Git configuration or
+unconverted callers. They retain the primitive-string check, including rejection
+of boxed strings. Exact-remote results always carry `remoteName`, even when its
+value is explicitly undefined. The SSH parser checks capture occupancy before
+using the two required regular-expression groups.
+
 ## Review drafts
 
 A review is the viewer's draft notes (`MergeRequestDraftNotes`). `/pr/review` publishes them first, then gives the verdict, so what it answers is on the merge request when it lands. GitLab refuses an unchanged line named by one side, so `/pr/review/comment` reads the file's hunks for both numbers (`pairedDiffLine`), and a range goes as its two ends with GitLab's `line_code`. A thread whose position has another `head_sha` belongs to an older push: it stays on the board. Discarding removes notes one by one, because GitLab has no call for the whole draft.
+
+## Fork decisions from the JS→TS merge
+
+The fork carried explanatory comments through the upstream JS→TS migration,
+where upstream moved them into this document. They are recorded here so the
+product `.ts` files stay comment-free. Decisions already described above are
+named but not repeated; the reasons unique to the fork are stated in full.
+
+### verify.ts — Bearer → `PRIVATE-TOKEN` fallback
+
+A personal access token travels as a bearer token on current GitLab releases. Self-managed instances that predate that accept it only in the `PRIVATE-TOKEN` header and answer `401` to the bearer form (12.7 among them), so a refused first attempt is repeated once with the older header before the token is called invalid. See *Why a refused personal access token is retried with `PRIVATE-TOKEN`*.
+
+### device-flow.ts — response shapes on older instances
+
+- Error/version responses from GitLab's API responder can carry an RFC-style `message` (for example the 401/403 auth challenge). That is distinct from the OAuth payload shape, so it is narrowed at the read site instead of widening that type.
+- Older private instances send no `X-GitLab-Meta`; a tokenless version request then answers with the JSON challenge GitLab's API responder emits.
+
+### descriptor.ts — legacy link shapes
+
+- Both merge-request link shapes are recognized because both are in the wild: GitLab 12.7 links a merge request as `/group/repo/merge_requests/2`, while 13.x and later emit `/group/repo/-/merge_requests/2`. Recognizing only one leaves the other unthreaded in agent text.
+- `/-/user_settings/...` is the page a newer GitLab redirects to; older ones (12.7, the intranet deployment) serve it at `/profile/...` only.
+- Every URL list leads with the path without the `/-/` scope separator: that is the form GitLab 12.7 serves, and a newer instance redirects it to the `/-/` one, so the first pattern is what links are built from everywhere. The `/-/` shapes stay behind for parsing links GitLab itself emits. See the 12.7 link-building invariant above.
+
+### instance.ts
+
+No fork-local decisions were carried in this module's comments.

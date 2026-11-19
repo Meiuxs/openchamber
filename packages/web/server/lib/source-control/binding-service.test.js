@@ -1729,3 +1729,65 @@ describe('binding readiness summary', () => {
     expect(resolveBindingReadiness(binding, repository([])).state).toBe('needs-attention');
   });
 });
+
+describe('automatic account binding', () => {
+  const endpoint = (url) => ({ rawUrl: url, displayUrl: redactRemoteUrl(url), fingerprint: fingerprintRemoteUrl(url) });
+  const account = { provider: 'github', instance: 'github.com', accountId: 'credential-auto' };
+  const resolvedAccount = {
+    accountId: account.accountId, credentialId: account.accountId, credentialRevision: 4,
+    providerUserId: 'github.com#42', status: 'valid', secret: 'canary-auto-binding-secret',
+    source: 'pat', user: { id: 42, login: 'safe-user' },
+  };
+  const credentialId = createHttpsCredentialReference({
+    provider: account.provider, instance: account.instance, credentialId: account.accountId,
+    credentialRevision: resolvedAccount.credentialRevision, providerUserId: resolvedAccount.providerUserId,
+  });
+  const setup = async (remotes) => {
+    const { files, fsImpl } = createMemoryBindingFs();
+    const repository = {
+      supported: true, repositoryId: 'repo_auto', configRevision: 'config_auto', bare: false,
+      remotes, transportRevision: 'private_auto',
+    };
+    const store = createBindingStore({ filePath: '/bindings.json', fsImpl });
+    const service = createBindingService({
+      store,
+      resolveRepository: async () => ({
+        ...structuredClone(repository),
+        remotes: repository.remotes.map((remote) => ({ name: remote.name,
+          fetch: { displayUrl: remote.fetch.displayUrl, fingerprint: remote.fetch.fingerprint },
+          push: { displayUrl: remote.push.displayUrl, fingerprint: remote.push.fingerprint },
+        })),
+      }),
+      resolveTransportRepository: async () => structuredClone(repository),
+      readTransportAccount: vi.fn(async () => resolvedAccount),
+    });
+    return { service, store, files };
+  };
+
+  it('binds a matching project once and leaves its revision alone on reconnect', async () => {
+    const shared = endpoint('https://github.com/team/repo.git');
+    const { service } = await setup([{ name: 'origin', fetch: shared, push: shared }]);
+    const first = await service.bindAccountToProject({ directory: '/repo', ...account });
+
+    expect(first.status).toBe('bound');
+    expect(first.providerResult.binding).toMatchObject({
+      providers: [{ provider: 'github', instance: 'github.com', accountId: account.accountId, primaryRemote: 'origin' }],
+    });
+    expect(first.transportResult.binding.remotes[0]).toMatchObject({ name: 'origin', mode: 'managed', credentialId });
+    expect(JSON.stringify(first.transportResult)).not.toContain('canary-auto-binding-secret');
+
+    const repeat = await service.bindAccountToProject({ directory: '/repo', ...account });
+    expect(repeat.status).toBe('provider-bound');
+    expect(repeat.providerResult.revision).toBe(first.transportResult.revision);
+  });
+
+  it('skips projects whose remotes belong to another provider instance', async () => {
+    const shared = endpoint('https://gitlab.com/team/repo.git');
+    const { service, files } = await setup([{ name: 'origin', fetch: shared, push: shared }]);
+
+    await expect(service.bindAccountToProject({ directory: '/repo', ...account })).resolves.toMatchObject({
+      status: 'no-matching-remote', directory: '/repo', repositoryId: 'repo_auto',
+    });
+    expect(files.has('/bindings.json')).toBe(false);
+  });
+});

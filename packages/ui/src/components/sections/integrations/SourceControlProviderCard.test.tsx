@@ -15,6 +15,7 @@ import type { SourceControlProviderDescriptor } from '@/lib/source-control/provi
 import { acmeDescriptor, githubLikeDescriptor, gitlabLikeDescriptor } from '@/lib/source-control/providers/descriptor.fixture';
 import { useSourceControlProviderRegistry } from '@/lib/source-control/providers/registry';
 import { useSourceControlAuthStore } from '@/stores/useSourceControlAuthStore';
+import { useEnterprisePolicyStore } from '@/stores/useEnterprisePolicyStore';
 import { normalizeInstanceInput } from '@/components/sections/openchamber/sourceControlProviderSettings';
 
 const unexpected = (): never => { throw new Error('Unexpected runtime API access'); };
@@ -111,6 +112,9 @@ describe('SourceControlProviderCard', () => {
   let listedDefault: SourceControlIdentity[] = [];
   // The provider the mounted card is for: the server lists instances per provider.
   let mountedProvider = 'gitlab';
+  // A server that stops answering status after an account was removed.
+  let statusFails = false;
+  const disconnected: string[] = [];
 
   const statusFor = (identity: SourceControlIdentity): SourceControlAuthStatus => {
     const current = savedInstances.has(identity.instance);
@@ -121,7 +125,7 @@ describe('SourceControlProviderCard', () => {
     if (cliUnanswered) {
       return { ...identity, status: 'disconnected', connected: false, accounts: [], cli: { available: false, disabled: false, active: true } };
     }
-    const accounts = !withCliLogin || identity.instance === 'https://gitlab.com' ? [] : [{
+    const accounts = !withCliLogin || (identity.instance === 'https://gitlab.com' && accountSource === 'cli') ? [] : [{
       id: `${identity.instance}#cli:user-one`,
       credentialId: `${identity.instance}#cli:user-one`,
       credentialRevision: 1,
@@ -154,7 +158,10 @@ describe('SourceControlProviderCard', () => {
       ];
     },
     capabilities: async (identity) => capabilitiesFor(identity, available),
-    authStatus: async (identity) => statusFor(identity),
+    authStatus: async (identity) => {
+      if (statusFails) throw new Error('Auth status unavailable');
+      return statusFor(identity);
+    },
     authActivate: async (identity) => {
       await beforeActivation();
       if (activationFails) throw new Error('CLI activation failed');
@@ -181,7 +188,11 @@ describe('SourceControlProviderCard', () => {
     },
     providers: unexpected, repositoryContext: unexpected, repositoryBinding: unexpected, resetRepositoryBinding: unexpected,
     repositoryProviderBindingMutate: unexpected, authStart: unexpected, authComplete: unexpected,
-    authDisconnect: unexpected,
+    authDisconnect: async (identity, accountId) => {
+      disconnected.push(accountId);
+      savedInstances.delete(identity.instance);
+      return { removed: true };
+    },
     authSetCliDisabled: async (_identity, disabled) => {
       cliDisabled = disabled;
       return { disabled };
@@ -252,7 +263,10 @@ describe('SourceControlProviderCard', () => {
     accountSource = 'cli';
     cliDisabled = false;
     cliUnanswered = false;
+    statusFails = false;
+    disconnected.length = 0;
     listedDefault = [{ provider: 'gitlab', instance: 'https://gitlab.com' }];
+    useEnterprisePolicyStore.setState({ enterpriseMode: false });
     useSourceControlAuthStore.getState().resetForRuntimeSwitch();
     registerRuntimeAPIs(apis);
     container = document.createElement('div');
@@ -710,5 +724,34 @@ describe('SourceControlProviderCard', () => {
     await clickInDialog('Clear SSH URL');
     expect(savedSshUrls).toEqual([[instance, null]]);
     expect(useSourceControlAuthStore.getState().identities).toEqual([{ provider: 'gitlab', instance }]);
+  });
+
+  test('hides an unconfigured default instance in enterprise mode and keeps a configured one', async () => {
+    useEnterprisePolicyStore.setState({ enterpriseMode: true });
+    // The server leaves an unused default out of its instance list; the card
+    // must not put it back from the descriptor.
+    listedDefault = [];
+    await mount(gitlab);
+    expect(container.textContent).not.toContain('gitlab.com');
+    expect(buttonLabels()).toContain('Add instance');
+
+    await act(async () => { root?.unmount(); });
+    useSourceControlAuthStore.getState().resetForRuntimeSwitch();
+    savedInstances.add('https://gitlab.com');
+    await mount(gitlab);
+    expect(container.textContent).toContain('gitlab.com');
+  });
+
+  test('keeps a removed account gone when the status refresh fails', async () => {
+    savedInstances.add('https://gitlab.com');
+    accountSource = 'pat';
+    await mount(gitlab);
+    expect(container.textContent).toContain('cli-user');
+    expect(disconnected).toEqual([]);
+
+    statusFails = true;
+    await click('Remove');
+    expect(disconnected).toHaveLength(1);
+    expect(container.textContent).not.toContain('cli-user');
   });
 });

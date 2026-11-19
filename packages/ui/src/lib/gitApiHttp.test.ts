@@ -58,6 +58,8 @@ import {
   type GitNetworkOperationStep,
 } from './api/types';
 import { switchRuntimeEndpoint } from './runtime-switch';
+import { getRegisteredRuntimeAPIs, registerRuntimeAPIs } from '../contexts/runtimeAPIRegistry';
+import { setNestedRepositoryScanDepth } from './nestedRepositoryScanDepth';
 
 const diffsRequestSchema = z.object({ paths: z.array(z.string()), staged: z.boolean(), context: z.number().optional() });
 
@@ -436,6 +438,31 @@ test('nested repository discovery scopes the workspace to the requested root', a
   try {
     expect(await listGitDirectories(root)).toEqual(repositories);
   } finally {
+    restoreMocks();
+  }
+});
+
+test('nested repository discovery sends the scan depth only on the web surface', async () => {
+  installWindowMock();
+  const previousApis = getRegisteredRuntimeAPIs();
+  const depths: Array<string | null> = [];
+  globalThis.fetch = Object.assign(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost');
+    depths.push(url.searchParams.get('depth'));
+    return Response.json({ repositories: [] });
+  }, previousFetch);
+  try {
+    registerRuntimeAPIs({ runtime: { platform: 'web' } } as never);
+    setNestedRepositoryScanDepth('deep');
+    await listGitDirectories('/projects/app');
+
+    registerRuntimeAPIs({ runtime: { platform: 'desktop' } } as never);
+    await listGitDirectories('/projects/app');
+
+    expect(depths).toEqual(['deep', null]);
+  } finally {
+    setNestedRepositoryScanDepth('shallow');
+    registerRuntimeAPIs(previousApis);
     restoreMocks();
   }
 });

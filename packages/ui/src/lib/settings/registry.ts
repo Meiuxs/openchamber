@@ -9,6 +9,7 @@ import { useI18nStore } from '@/lib/i18n/store';
 import { isInputHistoryLimit, isInputHistoryScope, type InputHistoryScope } from '@/lib/inputHistoryScope';
 import { LIVE_BROWSER_TABS_MAX, LIVE_BROWSER_TABS_MIN } from '@/lib/browser/liveTabs';
 import { normalizeMobileKeyboardMode } from '@/lib/mobileKeyboardMode';
+import { getNestedRepositoryScanDepth, setNestedRepositoryScanDepth } from '@/lib/nestedRepositoryScanDepth';
 import { isTerminalShell } from '@/lib/terminalShell';
 import { sanitizeWorkStatusHiddenSections, sanitizeWorkStatusSectionOrder } from '@/components/chat/work-status/sections';
 import { useInputHistoryStore } from '@/stores/useInputHistoryStore';
@@ -401,6 +402,12 @@ export const SETTINGS_REGISTRY = {
   diffWrapLines: field({ scope: 'profile', parse: parseBoolean, ui: uiStore('diffWrapLines', (v) => useUIStore.getState().setDiffWrapLines(v)) }),
   diffHideWhitespace: field({ scope: 'profile', parse: parseBoolean, ui: uiStore('diffHideWhitespace', (v) => useUIStore.getState().setDiffHideWhitespace(v)) }),
   gitChangesViewMode: field({ scope: 'profile', parse: parseOneOf(['flat', 'tree']), ui: uiStore('gitChangesViewMode', (v) => useUIStore.getState().setGitChangesViewMode(v)) }),
+  nestedRepositoryScanDepth: field({
+    scope: 'profile',
+    surfaces: ['web'],
+    parse: parseOneOf(['shallow', 'deep', 'all']),
+    ui: { read: getNestedRepositoryScanDepth, write: setNestedRepositoryScanDepth, autoSave: false },
+  }),
   gitmojiEnabled: field({ scope: 'profile', parse: parseBoolean }),
   // Merged with the policy file's list of the same name at the server's check
   // point, and ignored entirely once enterprise mode is on. The store keeps

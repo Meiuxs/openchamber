@@ -4,12 +4,12 @@
 Own filesystem API behavior for the web server runtime, including workspace-bound file operations, directory listing, reveal, and background command execution jobs.
 
 ## Entrypoints and structure
-- `packages/web/server/lib/fs/routes.js`: route registration and runtime-owned state for `/api/fs/*` endpoints.
-- `packages/web/server/lib/fs/search.js`: fuzzy filesystem search for workspace supplements and project icon discovery.
-- `canonical-path.js` resolves existing path aliases and missing descendants without creating folders. Filesystem authorization and chat-directory cleanup share it so a missing child cannot hide its existing ancestor's identity. Permission, symlink-loop and non-directory failures propagate.
-- `packages/web/server/lib/fs/content-search.js`: find in files, run by ripgrep (`GET /api/fs/find-in-files`).
-- `packages/web/server/lib/fs/ripgrep.js`: where the ripgrep binary comes from.
-- `folder-change-watch.js` owns signal-driven fingerprint/settle scheduling for extension packages and custom themes. Each root has one watcher, one 30-second safety interval and at most one pending fast check. Its first fingerprint starts at creation; stop closes the watcher, cancels timers and suppresses in-flight results.
+- `packages/web/server/lib/fs/routes.ts`: route registration and runtime-owned state for `/api/fs/*` endpoints.
+- `packages/web/server/lib/fs/search.ts`: fuzzy filesystem search for workspace supplements and project icon discovery.
+- `canonical-path.ts` resolves existing path aliases and missing descendants without creating folders. Filesystem authorization and chat-directory cleanup share it so a missing child cannot hide its existing ancestor's identity. Permission, symlink-loop and non-directory failures propagate.
+- `packages/web/server/lib/fs/content-search.ts`: find in files, run by ripgrep (`GET /api/fs/find-in-files`).
+- `packages/web/server/lib/fs/ripgrep.ts`: where the ripgrep binary comes from.
+- `folder-change-watch.ts` owns signal-driven fingerprint/settle scheduling for extension packages and custom themes. Each root has one watcher, one 30-second safety interval and at most one pending fast check. Its first fingerprint starts at creation; stop closes the watcher, cancels timers and suppresses in-flight results.
 
 ### Why folder change checks retain a safety interval
 
@@ -66,16 +66,18 @@ The interval reopens the watcher before checking, so Linux/Windows folder deleti
        `includeHidden=true` and `respectGitignore=false`. Paths stay under the
        requested root, including symlink aliases.
     - `GET /api/fs/find-in-files` — find in files, see below.
-    - `GET /api/fs/git-dirs` — shallow nested git repository discovery for the
-      Git tab (breadth-first readdir walk, capped at depth 3 and 100 visited
-      directories so shallow repositories are checked before deeper folders;
-      `.git` directory, file, or
-      symlink marks a repository boundary, except the root's own `.git`,
-      which the walk goes past: a root repository's submodules and nested
-      checkouts are reported too, and the client decides whether the root or
-      a discovered repository is the one a surface works in; junk directories are skipped;
-      symlinked directories are followed, each real directory walked once,
-      and repositories are reported under the link path)
+    - `GET /api/fs/git-dirs` — nested git repository discovery for the Git tab
+      and source board (breadth-first readdir walk; `depth=deep` and
+      `depth=all` raise the cap to 8 levels/1,000 directories and 32/10,000,
+      while an absent or unknown value keeps 3/100 so shallow repositories
+      are checked before deeper folders. Only the web client sends the
+      parameter. `.git` directory, file, or symlink marks a repository
+      boundary, except the root's own `.git`, which the walk goes past: a
+      root repository's submodules and nested checkouts are reported too, and
+      the client decides whether the root or a discovered repository is the
+      one a surface works in; junk directories are skipped; symlinked
+      directories are followed, each real directory walked once, and
+      repositories are reported under the link path)
   - Owns exec job queue state (`execJobs`) and lifecycle/TTL pruning.
   - Exec commands run with the terminal's PATH plus the user's and the project's environment variables for their directory (`environmentRuntime`, see `../environment`).
   - Enforces workspace boundary checks with active project + worktree fallback support.
@@ -200,6 +202,47 @@ twelve children. Workspace search applies the same timeout and fallback to its
 
 ## Decisions
 
+### Why route inputs retain property and string guards
+
+HTTP bodies and thrown values expose only optional unchecked properties until
+their existing tests succeed. Property-access guards accept non-null primitives
+as JavaScript does; object-only error checks still exclude primitives and functions.
+Directory normalization preserves non-string inputs, so its generic overload
+does not promise that an unchecked preview path becomes a string. Exec commands
+remain unchecked array elements until each command passes its string test.
+The optional file-miss predicate retains the exact four accepted error codes.
+
+`FsRouteDependencies` owns the composition contract. Search accepts a nullable
+`resultRoot` because the project resolver can return null and the search already
+falls back with `options.resultRoot || rootPath`. Source imports retain `.js`
+specifiers, including the converted `../path-realpath-cache.ts` helper.
+
+### Why download filenames retain an ASCII fallback
+
+RFC 5987 clients receive the encoded full name through `filename*`; older clients
+receive the same name with every non-ASCII character removed through `filename`.
+The ASCII Unicode property expresses the original byte-range filter without a
+control-character regular expression.
+
+### Why folder watchers share a timer contract with their test clock
+
+Native timers and the deterministic clock have different handles. The watcher
+keeps the handle type supplied by its clock so cancellation uses that same type.
+The harness supplies clock advancement and watch signals without OS waits.
+
+### Why search checks pipe and ignore-read occupancy
+
+The spawn options request stdout and, for `check-ignore`, stdin. Missing pipes
+follow the existing failed-read fallback. Each workspace ignore map entry holds
+the query's pending read before the walk consumes it; an absent entry is an
+invariant failure.
+
+### Why the bare Node import test strips types from copied helpers
+
+The test copies helpers as JavaScript into a directory without dependencies or
+the source resolver. Removing type syntax from those copies preserves its check
+of the packaged JavaScript import graph.
+
 ### Why project discovery uses JavaScript realpath and not native realpath
 
 Project probes use the same JavaScript `fs.realpath` as settings. Native realpath also resolves Windows `subst` and mapped drives, changing the identity settings retain and preventing recognition of an already-added project.
@@ -270,3 +313,11 @@ The Git service validates a selected commit identity before planning or spawning
 - `routes.js` and the sibling modules it imports (`byte-range.js`, `workspace-file-names.js`, `content-search.js`, `../shared/guards.js`, `../git/redaction.js`, `../path-realpath-cache.js`) load with Node built-ins only: `routes.test.js` imports a copy of them in a bare Node process without `node_modules`, the way a packaged desktop build once failed to load them. A new sibling module goes into that test's copy list and takes its value guards from `../shared/guards.js` rather than from a dependency.
 - `GET /api/fs/list` may resolve symlinks with `realpath` to read directory contents, but the response `path` and each entry `path` must stay in the caller's requested path space (`path.join(requestedPath, name)`). Returning real paths breaks file-tree expansion for directories reached through workspace symlinks.
 - `POST /api/fs/upload` accepts one `application/octet-stream` body with `path` and optional `overwrite=true` query parameters. The body streams into a same-directory temp file with a 100 MiB default cap configurable through `OPENCHAMBER_FS_UPLOAD_MAX_BYTES`; failed and oversized uploads clean up that temp file. An oversized body is rejected with `413` carrying `reason: 'too-large'` and the effective `maxBytes`, so a client can name the limit it hit. A path that resolves outside the workspace is rejected with `403` carrying `reason: 'outside-workspace'`. New files commit through an atomic no-replace link, existing files return `409` unless overwrite is explicit, directory targets are rejected, and the destination parent resolves before writing so uploads cannot escape through workspace symlinks.
+
+### Why desktop launches wait for a non-zero exit code
+
+On macOS `open -a` and on Windows the launcher started by the open/reveal route
+spawn through a helper process that reports failure as a non-zero exit code, so
+success needs that code, not a successful `spawn` call. See the `/api/fs/open`
+entry above and *Why Windows folder reveal uses the default handler and not
+Explorer selection*.

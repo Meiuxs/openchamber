@@ -505,6 +505,12 @@
     "gitChangesViewMode": {
       "scope": "profile"
     },
+    "nestedRepositoryScanDepth": {
+      "scope": "profile",
+      "surfaces": [
+        "web"
+      ]
+    },
     "gitmojiEnabled": {
       "scope": "profile"
     },

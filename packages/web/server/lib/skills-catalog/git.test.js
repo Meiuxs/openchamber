@@ -2,8 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { runGit } from './git.js';
 
 const NULL_DEVICE = process.platform === 'win32' ? 'NUL' : '/dev/null';
-// A shell alias makes Git print the environment it runs under.
-const PRINT_HOME = ['-c', 'alias.print-home=!printf %s "$HOME"', 'print-home'];
+const PRINT_HOME = ['-c', 'test.home=~', 'config', '--path', '--get', 'test.home'];
 
 const httpsResolver = (password = 'catalog-private-token') => ({
   resolve: vi.fn(async ({ endpoint }) => ({
@@ -59,14 +58,14 @@ describe('skills catalog runGit', () => {
     const result = await runGit(PRINT_HOME, { identity: httpsIdentity, credentialResolver: httpsResolver() });
 
     expect(result.ok).toBe(true);
-    expect(result.stdout.endsWith(NULL_DEVICE)).toBe(true);
+    expect(result.stdout.trim().endsWith(NULL_DEVICE)).toBe(true);
   });
 
   it('hides the home directory from anonymous Git', async () => {
     const result = await runGit(PRINT_HOME, { identity: { anonymous: true, transport: 'anonymous' } });
 
     expect(result.ok).toBe(true);
-    expect(result.stdout.endsWith(NULL_DEVICE)).toBe(true);
+    expect(result.stdout.trim().endsWith(NULL_DEVICE)).toBe(true);
   });
 
   it('keeps HOME for managed SSH so host keys still verify', async () => {
@@ -87,7 +86,7 @@ describe('skills catalog runGit', () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.stdout).not.toBe(NULL_DEVICE);
+    expect(result.stdout.trim()).not.toBe(NULL_DEVICE);
   });
 
   it('refuses a selected identity without a credential instead of using System Git', async () => {

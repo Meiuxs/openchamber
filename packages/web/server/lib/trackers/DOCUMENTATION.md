@@ -6,7 +6,7 @@ This module owns the provider-neutral contract for work item trackers: the track
 
 Repository issues (GitHub, GitLab, Gitea) are not trackers. They belong to the source-control registry (`../source-control/`), because they are read through a project's binding and share lists, caches, live state and mutations with pull requests. A tracker item belongs to a server-wide account and has no directory.
 
-`server/index.js` builds the one registry (with the source-control ids as `foreignIds`, so an overlap fails at startup) and hands every session event to `session-status.js`, which creates one session-status runtime per tracker whose implementation has `sessionStatus.createRuntime`. The first event loads the tracker and creates its runtime; events that arrive during the load are kept and handed over, and a failed load is retried on a later event (no sooner than 30 s after the failure), so a transient import failure never silences a tracker's session comments until restart. `opencode/feature-routes-runtime.js` hands the registry to:
+`server/index.js` builds the one registry (with the source-control ids as `foreignIds`, so an overlap fails at startup) and hands every session event to `session-status.js`, which creates one session-status runtime per tracker whose implementation has `sessionStatus.createRuntime`. The first event loads the tracker and creates its runtime; events that arrive during the load are kept and handed over, and a failed load is retried on a later event (no sooner than 30 s after the failure), so a transient import failure never silences a tracker's session comments until restart. `server-frame/feature-routes-runtime.js` hands the registry to:
 
 - these routes, registered before the legacy `registerLinearRoutes`;
 - the read cache (`provider-read-cache`), which keys `/api/tracker/<id>/` and the `/api/linear` alias as the same provider and answers `POST /api/tracker/<id>/read-cache/refresh`;
@@ -27,11 +27,27 @@ Older bundled UIs know only `kind: 'linear'`. They leave every other kind out of
 - An implementation is loaded on first use and kept. A failed load is not cached.
 - Implementations are JSON in, JSON out, with every Linear (or other provider) shape mapped to the neutral one inside the provider's module.
 
+### Type boundaries
+
+`tracker-contract.d.ts` is a declaration-only contract and remains in place. Descriptor lists, auth methods, URL patterns and state filters are readonly, matching the frozen arrays the registry and descriptor builders return. Persisted account types come from the account-store schemas. Optional schema fields retain the schema's inferred types.
+
+The extension adapter is TypeScript. Its per-method results retain the SDK schemas' inferred types. `withProvider` preserves each input item's schema shape and adds the provider id; its recursive calls decorate parent and child items. The outbound handle contract supplies the shared request records, including nullable status. Its origin also permits null because the account-store schema admits accounts with a null instance; the outbound URL join refuses that origin.
+
+The SDK's `trackerProviderSchemasV1.data` item schemas infer optional fields with explicit `undefined`, while the neutral contract requires absent optional fields. The adapter spreads those schema results. The registry's `RegisteredTrackerImplementation` retains the union of built-in implementations and the adapter's inferred result. The neutral item contract stays unchanged.
+
+Reconciliation and the registry preserve the adapter's actual type through loading and route dispatch. Extension adapters have no `hostAccess`; the union records its absence so host-session readers retain their optional access. Route handlers infer the complete callback result, including unions of promises. Public account views can use absent optional fields because their builder copies each optional value only after a truthy string check.
+
+`TrackerMappingRequest` describes the route's checked object container and unchecked path values. Mapping routes bound string lengths and forward non-string paths unchanged. Linear's `../linear/mapping.js` and the extension adapter sanitize the paths themselves. Stored mapping data retains its string-only schema.
+
+Token and OAuth client fields also retain unchecked input types. The route's shared `isString` check recognizes string-branded objects as well as primitive strings; the extension adapter's primitive-string check decides whether to accept them. Declaring primitive strings at the route would promise more than its check establishes. List query, cursor, instance and username fields allow explicit undefined because the routes supply it when a value is empty.
+
+Service exceptions have unchecked fields. The adapter checks their container before reading them, and route errors retain an unchecked code and native Error message coercion. A removed token-auth declaration still causes the same TypeError when a stored token credential needs its header. Primitive-string checks stay at instance, search, token, client and mapping boundaries; boxed strings keep their previous rejection or fallback.
+
 ## Routes
 
 - `GET /api/tracker/providers` → `{ providers: TrackerDescriptor[] }`.
 - `GET :provider/auth/status` (the request origin goes to the implementation, for the redirect URI), `POST :provider/auth/start` `{ origin, instance? }`, `POST :provider/auth/activate` `{ accountId }`, `DELETE :provider/auth`.
-- Extension trackers only, 404 `UNSUPPORTED` elsewhere: `POST :provider/auth/token` `{ token, username?, instance? }`, `PUT :provider/auth/oauth-client` `{ clientId, clientSecret?, instance? }`, and the public `GET :provider/oauth/callback` the tracker redirects the browser to (`opencode/core-routes.js` lets it past UI auth). Their failures carry the status and code the extension layer assigned (a `TrackerRouteError`, `route-error.js`): 400 `INSTANCE_REQUIRED` / `UNSUPPORTED_INSTANCE` / `TOKEN_REQUIRED` / `USERNAME_REQUIRED` / `USERNAME_INVALID` / `CLIENT_MISSING` / `STATE_MISMATCH` / `TARGET_CHANGED` / `OAUTH_DENIED`, 401 `TOKEN_REFUSED`, 404 `UNKNOWN_TRACKER` for a tracker detached meanwhile, 409 `CONNECT_SUPERSEDED` / `INSTANCE_MISMATCH`, 502 `MALFORMED_PROVIDER_RESPONSE`, 503 `TRACKER_UNAVAILABLE`.
+- Extension trackers only, 404 `UNSUPPORTED` elsewhere: `POST :provider/auth/token` `{ token, username?, instance? }`, `PUT :provider/auth/oauth-client` `{ clientId, clientSecret?, instance? }`, and the public `GET :provider/oauth/callback` the tracker redirects the browser to (`server-frame/core-routes.js` lets it past UI auth). Their failures carry the status and code the extension layer assigned (a `TrackerRouteError`, `route-error.js`): 400 `INSTANCE_REQUIRED` / `UNSUPPORTED_INSTANCE` / `TOKEN_REQUIRED` / `USERNAME_REQUIRED` / `USERNAME_INVALID` / `CLIENT_MISSING` / `STATE_MISMATCH` / `TARGET_CHANGED` / `OAUTH_DENIED`, 401 `TOKEN_REFUSED`, 404 `UNKNOWN_TRACKER` for a tracker detached meanwhile, 409 `CONNECT_SUPERSEDED` / `INSTANCE_MISMATCH`, 502 `MALFORMED_PROVIDER_RESPONSE`, 503 `TRACKER_UNAVAILABLE`.
 - `GET :provider/items/list?query=&cursor=&state=&people=&priority=&containerId=`, `GET :provider/items/get?id=`, `POST :provider/items/update` `{ id, stateId }`, `GET :provider/states?containerId=`.
 - `GET|PUT :provider/mapping` (`{ defaultProjectPath, containerProjectPaths }`), `GET|PUT :provider/preferences` (`{ sessionComments }`), `POST :provider/session-status` `{ kind, sessionId, identifier?, sessionOrigin? }`.
 
@@ -96,6 +112,28 @@ The SDK role (`packages/sdk/GUEST_SERVICES.md`, *Tracker*) and these modules tog
 
 ## Decisions
 
+### Why registration preserves the adapter's inferred result
+
+Extension schema results can contain explicit undefined, and mapping responses infer a boolean connection flag. The registry returns these values unchanged. Its extension loader and public implementation lookup retain those inferred types alongside the built-in contract, so consumers cannot assume the stricter built-in result.
+
+Reconciliation reads catalog rows, account-store instances and service responses through their owning contracts. Catalog failures preserve registrations; an empty catalog withdraws them. `emitChanged` tells clients to read the tracker list again. Exception message guards accept objects and functions because catalog and account readers can throw unchecked values; other thrown values remain the warning argument unchanged. The provider-id null check follows eligibility's existing validation and establishes the map key's string type.
+
+### Why route guards retain unchecked fields
+
+Provider errors can carry non-string messages, and mapping values are sanitized by the provider. The routes preserve those values and check only the fields they use. Capability predicates narrow optional implementation parts using the existing runtime tests. The string-length guard establishes no string methods or length type; numeric coercion preserves the existing comparison against integer bounds.
+
+### Why session events keep permissive field decoding
+
+Session events arrive through JavaScript callers. The runtime decodes plain objects and primitive strings, keeps all session-id aliases in their existing precedence, and treats malformed fields as empty. Event type comparisons remain exact, while session ids, status types and error names are trimmed.
+
+### Why session text and OAuth state retain string checks
+
+Session origins can come from unchecked legacy files, and OAuth state comes from the public callback. Primitive-string guards preserve the empty fallback for malformed values, including boxed strings. Internal private-address helpers take strings directly. Shared carrier-grade NAT space `100.64.0.0/10` is private here because overlay networks use it, as described in [RFC 6598 section 7](https://www.rfc-editor.org/rfc/rfc6598#section-7). IPv6 unique-local and link-local ranges follow [RFC 4193 section 3](https://www.rfc-editor.org/rfc/rfc4193#section-3) and [RFC 4291 section 2.5.6](https://www.rfc-editor.org/rfc/rfc4291#section-2.5.6).
+
+### Why account permissions have a platform-specific assertion
+
+The account-store test checks the requested `0600` write mode and `chmod` on every platform. It also checks the resulting POSIX mode outside Windows. Windows reports writable files as `0666` and cannot express owner-only POSIX permission bits through Node's `chmod`.
+
 ### Why the registry lives on the server and descriptors are served, not compiled into the UI
 
 The phone app bundles its UI and talks to servers of other versions, so the server says which trackers exist. The UI keeps a snapshot for first paint and a per-id presentation table (icon, translated nouns), because translated text cannot come from the server.
@@ -131,3 +169,23 @@ A refresh token and a client secret travel to the token endpoint. A package upda
 ### Why reads may overlap and the service is told so
 
 The picker, the preview and the board read at once. The notification role promised one call at a time because a channel delivers in order; a tracker's reads have no order to keep, so they go out as they come, and the contract says so. Writes are per call, each with its own handle.
+
+### Why the routes define local fork write interfaces
+
+The upstream contract's write signatures are narrower than the fork's routes: priority is passed through as the client sent it, and the local tracker also accepts the `assignee` / `containerId` fields the contract does not declare. The local `Fork*` interfaces (`ForkCreateInput`, `ForkEditInput`, `ForkUpdateStateInput`, `ForkDeleteInput`, `ForkCommentInput`) describe exactly what the fork forwards to the tracker rather than promising the stricter contract shape. Only the built-in trackers carry the item-write methods (`create`, `edit`, `remove`, `comment`); the extension implementation does not, so the structural `hasCreate`/`hasEdit`/`hasDelete`/`hasComments` guards narrow the union before calling.
+
+### Why the grouping and blocker fields are gated on the body
+
+The `feature` filter has no capability gate: a tracker without a grouping slug ignores it, and no surface offers the filter where nothing carries one. `feature` is not declared as accepting `undefined`, so it is spread into the list options only when it has a value. Likewise the create route forwards `feature`, `blockedBy` and `assignee` only when the body names them (as the edit route does): a tracker without them is handed nothing. `readIdentifiers` trims, dedupes and upper-cases blocker ids like the identifiers they point at, so a lower-case `local-2` still blocks. Edit forwards only the fields the body carries — an absent field leaves the stored value alone, an explicit `null` clears it. A delete names the item in the query, like `items/get`, so the identifier needs no path escaping and the container can ride along: the same number exists in every container of a tracker whose identifiers restart.
+
+### Why the built-in `get` uses a locally widened container signature
+
+The built-in trackers accept a container hint as a second argument to `get`; the contract only declares one, so `ContainerGetTracker` narrows the implementation structurally to the wider signature and the route passes `containerId` when the query supplies it (falling back to `projectDirectory`).
+
+### Why extension descriptors keep the write/presentation capabilities off
+
+Extension contributions do not declare the `feature`, `blockers`, `assignee`, `create`, `edit`, `delete` or `itemComments` capabilities, and the guest protocol exposes no item-write methods. The descriptor builder keeps them off so the board never offers an action that cannot run. A contributed item's `url` addresses a real page on the tracker's own instance, so `externalUrl` is on and it can be handed to the browser: names are the tracker's own words, and its containers are not OpenChamber project folders (`containersAreProjects: false`).
+
+### Why the built-in tracker list is one registration entry per module
+
+`BUILT_IN_TRACKERS` (`registry.ts`) lists the built-in trackers in registration order, one module folder and one entry here each. `server/index.js` builds the one registry over them, with the source-control ids as `foreignIds`.

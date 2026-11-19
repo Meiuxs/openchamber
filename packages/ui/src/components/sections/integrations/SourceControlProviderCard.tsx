@@ -7,6 +7,7 @@ import { useI18n } from '@/lib/i18n';
 import type { SourceControlIdentity } from '@/lib/api/types';
 import type { SourceControlProviderDescriptor } from '@/lib/source-control/providers/descriptor';
 import { getRuntimeKey } from '@/lib/runtime-switch';
+import { useEnterpriseMode } from '@/stores/useEnterprisePolicyStore';
 import {
   SETTINGS_CONTROL_CLUSTER_CLASS,
   SettingsControlGroup,
@@ -24,6 +25,7 @@ import { IntegrationCatalogCard } from './IntegrationCatalogCard';
 
 export const SourceControlProviderCard: React.FC<{ descriptor: SourceControlProviderDescriptor }> = ({ descriptor }) => {
   const { t } = useI18n();
+  const enterpriseMode = useEnterpriseMode();
   const sourceControl = getRegisteredRuntimeAPIs()?.sourceControl;
   const identities = useSourceControlAuthStore((state) => state.identities);
   const entries = useSourceControlAuthStore((state) => state.entries);
@@ -41,10 +43,10 @@ export const SourceControlProviderCard: React.FC<{ descriptor: SourceControlProv
   const settingsItem = `integrations.source-control.${descriptor.id}`;
 
   const defaultIdentity = React.useMemo(() => (
-    instances.defaultInstance && instances.defaultInstance !== legacyFlow?.instance
+    !enterpriseMode && instances.defaultInstance && instances.defaultInstance !== legacyFlow?.instance
       ? { provider: descriptor.id, instance: instances.defaultInstance }
       : null
-  ), [descriptor.id, instances.defaultInstance, legacyFlow?.instance]);
+  ), [descriptor.id, enterpriseMode, instances.defaultInstance, legacyFlow?.instance]);
 
   React.useEffect(() => {
     if (sourceControl) void refreshInstances(sourceControl);

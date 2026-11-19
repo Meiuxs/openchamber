@@ -3,6 +3,7 @@ import { registerSourceControlRoutes } from './routes.js';
 import express from 'express';
 import { once } from 'node:events';
 import { createBindingService } from './binding-service.js';
+import { createSourceControlProviders } from './provider-registry.js';
 import { configureWebAuxiliaryBinding, configureWebTransportBinding, createWebSourceControlAPI } from '../../../src/api/source-control';
 import { createHttpsCredentialReference } from '../git/credential-resolver.js';
 
@@ -96,6 +97,50 @@ it('configures managed HTTPS through the web Git adapter, HTTP route and binding
   } finally {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
+});
+
+it('binds every configured project when an account connects', async () => {
+  const providers = createSourceControlProviders({ loaders: {} });
+  const account = { provider: 'gitlab', instance: 'https://gitlab.com', accountId: 'credential-auto' };
+  const credential = { credentialRevision: 2, providerUserId: 'https://gitlab.com#42' };
+  const bindAccountToProject = vi.fn(async () => ({ status: 'bound', transportResult: { revision: 1 } }));
+  const accountUnavailable = vi.fn(async () => []);
+  const accountConnected = vi.fn(async () => []);
+  const onRepositoryTransportChanged = vi.fn(async () => {});
+  const app = { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), use: vi.fn() };
+
+  registerSourceControlRoutes(app, {
+    providers,
+    bindingService: {
+      accountConnected,
+      accountUnavailable,
+      bindAccountToProject,
+      validateReadContext: vi.fn(),
+      validateMutationContext: vi.fn(),
+    },
+    identityProvisioning: {
+      ensureAccountIdentity: vi.fn(),
+      repointAccountIdentities: vi.fn(),
+      backfillAccountIdentities: vi.fn(),
+    },
+    listConfiguredProjects: async () => [{ path: '/repo-one' }, { path: '/repo-two' }],
+    onRepositoryTransportChanged,
+  });
+
+  await providers.events.connected({
+    account,
+    user: { id: 42, login: 'safe-user', provider: 'gitlab', instance: 'https://gitlab.com' },
+    credential,
+    renews: [{ provider: 'gitlab', instance: 'https://gitlab.com', accountId: 'old-credential' }],
+  });
+  await vi.waitFor(() => expect(bindAccountToProject).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(accountConnected).toHaveBeenCalledTimes(1));
+
+  expect(accountUnavailable).toHaveBeenCalledWith({ provider: 'gitlab', instance: 'https://gitlab.com', accountId: 'old-credential' });
+  expect(bindAccountToProject).toHaveBeenCalledWith({ ...account, directory: '/repo-one' });
+  expect(bindAccountToProject).toHaveBeenCalledWith({ ...account, directory: '/repo-two' });
+  expect(onRepositoryTransportChanged).toHaveBeenCalledWith('/repo-one', { revision: 1 });
+  expect(onRepositoryTransportChanged).toHaveBeenCalledWith('/repo-two', { revision: 1 });
 });
 
 describe('source-control provider registry', () => {
@@ -237,6 +282,36 @@ describe('source-control provider registry', () => {
     } finally {
       if (previousConfigDir === undefined) delete process.env.GH_CONFIG_DIR;
       else process.env.GH_CONFIG_DIR = previousConfigDir;
+    }
+  });
+
+  it('omits default instances no account uses in enterprise mode', async () => {
+    const previousConfigDir = process.env.GH_CONFIG_DIR;
+    const previousEnterprise = process.env.OPENCHAMBER_ENTERPRISE_MODE;
+    process.env.GH_CONFIG_DIR = '/oc-no-gh-cli-config';
+    process.env.OPENCHAMBER_ENTERPRISE_MODE = '1';
+    try {
+      const handlers = new Map();
+      const app = {
+        get: vi.fn((route, handler) => {
+          if (Object.prototype.toString.call(route) === '[object String]') handlers.set(route, handler);
+        }),
+        post: vi.fn(), put: vi.fn(), delete: vi.fn(), use: vi.fn(),
+      };
+      registerSourceControlRoutes(app, { gitea: { execFile: missingGt }, gitlab: { store: {
+        listInstances: async () => ['https://gitlab.example.com'],
+        readInstance: async () => ({ activeAccountId: null, accounts: [], cliDisabled: false, cliActive: false }),
+      } } });
+      const json = vi.fn();
+
+      await handlers.get('/api/source-control/instances')({}, { json });
+
+      expect(json).toHaveBeenCalledWith({ instances: [{ provider: 'gitlab', instance: 'https://gitlab.example.com' }] });
+    } finally {
+      if (previousConfigDir === undefined) delete process.env.GH_CONFIG_DIR;
+      else process.env.GH_CONFIG_DIR = previousConfigDir;
+      if (previousEnterprise === undefined) delete process.env.OPENCHAMBER_ENTERPRISE_MODE;
+      else process.env.OPENCHAMBER_ENTERPRISE_MODE = previousEnterprise;
     }
   });
 

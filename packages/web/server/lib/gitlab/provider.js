@@ -407,17 +407,20 @@ export function createProvider({
   const verify = (origin, token) => verifyGitLabToken({ origin, token, fetch: fetchImpl, timeoutMs });
   const identityFor = (origin, accountId) => ({ provider: descriptor.id, instance: origin, accountId });
 
-  const announceConnectedAccount = async (origin, credential, user) => {
+  const supersededAccounts = async (origin, user) => {
+    const instance = await store.readInstance(origin).catch(() => null);
+    const providerUserId = `${origin}#${user.id}`;
+    return (instance?.accounts ?? []).filter((candidate) => candidate.providerUserId === providerUserId)
+      .map((candidate) => identityFor(origin, candidate.id));
+  };
+  const announceConnectedAccount = async (origin, credential, user, superseded = []) => {
     if (!credential?.credentialId) return;
     const account = identityFor(origin, credential.credentialId);
-    const instance = await store.readInstance(origin).catch(() => null);
-    const superseded = (instance?.accounts ?? []).filter((candidate) =>
-      candidate.providerUserId === credential.providerUserId && candidate.id !== credential.credentialId);
     await events.connected({
       account,
       user,
       credential: { credentialRevision: credential.credentialRevision, providerUserId: credential.providerUserId },
-      renews: superseded.map((candidate) => ({ ...account, accountId: candidate.id })),
+      renews: superseded.filter((candidate) => candidate.accountId !== credential.credentialId),
     });
   };
 
@@ -657,17 +660,19 @@ export function createProvider({
         consume();
         if (result.status !== 'connected') return { pending: false, body: { connected: false, status: result.error, error: result.message } };
         const user = await verify(origin, result.accessToken);
+        const superseded = await supersededAccounts(origin, user);
         const credential = await store.setAccount(origin, {
           token: result.accessToken, user, source: 'oauth', scope: result.scope,
           refreshToken: result.refreshToken, expiresIn: result.expiresIn,
         });
-        await announceConnectedAccount(origin, credential, user);
+        await announceConnectedAccount(origin, credential, user, superseded);
         return { pending: false, body: { connected: true, user, scope: result.scope } };
       },
       connectToken: async ({ instance: origin, token }) => {
         const user = await verify(origin, token);
+        const superseded = await supersededAccounts(origin, user);
         const credential = await store.setAccount(origin, { token, user, source: 'pat' });
-        await announceConnectedAccount(origin, credential, user);
+        await announceConnectedAccount(origin, credential, user, superseded);
         return { connected: true, user };
       },
       activate: async ({ instance: origin, accountId }) => {

@@ -6,7 +6,26 @@ This module owns source-control provider registration and server-side repository
 
 Repository bindings intentionally keep provider accounts, parent Git transport credentials, auxiliary checkout credentials, and commit identities separate. Managed remote and auxiliary bindings require endpoint-specific opaque `credentialId` values; system bindings reject that field in both input and persisted state. New managed HTTPS grants use `ocgit:v2` references that pin the immutable credential ID and revision and retain the separate provider-user ID for actor and audit attribution. Auxiliary records identify `submodule` or `lfs` plus exact redacted endpoint metadata. Bindings contain references and redacted endpoint metadata only; provider tokens remain in their provider auth stores. The Git network operation service, not provider routes or clients, owns transport execution.
 
+Origin provider auth stores keep one credential per normalized instance and provider user. Reconnecting replaces the active credential's token in place, keeps its ID and revision, and drops older duplicates from the persisted file. A connection event reconciles every configured project: one matching remote becomes the provider binding's primary remote, and an HTTPS endpoint on that instance also gets a managed credential for the connected account. A project with no matching remote keeps its current binding. One failed project does not stop the others.
+
 ## Registration
+
+Binding DTOs belong to `binding-types.ts`, using `ProviderId` from
+`provider-id.ts`. The server never imports UI source types: a type-only import
+also pulls those implementations into TypeScript's emit program. The UI keeps
+its existing independent contract until a shared owner is chosen.
+
+Descriptor arrays are readonly because built-in descriptors freeze them.
+`identity.noReplyEmail` accepts an explicit undefined numeric ID, matching
+identity provisioning before a provider identity is available. Connected
+profile names and emails may be null. Version probes may return a null version
+and an optional edition; neither field establishes that an instance is supported.
+`ProviderReadContext` describes the authority returned by `validateReadContext`,
+including the optional linked-read marker. `ProviderMutationContext` adds the
+validated idempotency key and mutation target. `ProviderMutations` exposes the
+non-null mutation API for providers that implement it. Providers specialize its
+normalized-input and provider-target type parameters with the shapes established
+by their own normalizers. Both default to JSON for unconverted providers.
 
 The route shell's optional `onMutationSucceeded` callback receives the validated context, normalized input and durable record after executor completion, including whether this is a replay. The GitHub user-merge follower uses it to establish server interest for a waiting merge. It makes no provider write and leaves worktree cleanup to the existing merged-worktree owner. A callback failure is warned without failing the already accepted provider mutation; notifications are best effort, as with session notifications.
 
@@ -18,7 +37,7 @@ The route shell's optional `onMutationSucceeded` callback receives the validated
 - `outbound-handles.js` mints a handle (32 random bytes) per forwarded call, bound to the guest, the provider, the instance origin, the call's token or none, the call's deadline and the forge methods it may send (`GET` only for every read, `auth.*`, `mutation.resolveTarget` and `mutation.reconcile`; every method for `mutation.perform` alone, so a write happens only where the executor keys and audits it; another method is refused with `403 METHOD_NOT_ALLOWED` before it is recorded); the adapter revokes it when the call ends and the registry revokes a guest's handles when it unregisters. `refusal(bearer)` answers the listener before it reads a body (unknown or expired handle), and `serve` is the `POST /source-control/outbound` route of the callback listener (`../guests/host-callback.js`): it parses the request with the SDK's `outboundRequest` schema, joins path and query on the bound origin (`joinGuestRequestUrl`), passes only the allowed request headers, adds the token as the extension declared (`authorization: Bearer|token <t>`, or `private-token`), does not follow redirects, stops at 20 s or the deadline, refuses an answer over 8 MB, and relays only the allowed response headers. Every request a handle carried is recorded as `{ method, status }` before it is sent; nothing here logs a handle, token, body or query.
 - For token accounts, the adapter trusts only what the proxy recorded. A `401` the service reports writes the account off (through the shell's usual 401 handling) only when the forge answered 401 on that call's handle; otherwise it is a malformed answer. A failed mutation is `failed` only when the service was never reached or every non-GET request of the call got a 4xx (or none was sent); a malformed answer the adapter detects after the call (a foreign target, status or change request source) carries the call's record too. Any other failure is `outcome-unknown`, whatever status the service reports. Service-login accounts use the identity and failure rules under *Service-owned login*.
 - Enterprise mode adds no key for the role: it needs the `service` grant, which enterprise mode already limits to allowlisted Git sources or local folders (`../guests/enterprise.js`), and the callback listener is loopback-only. The limit holds at runtime too: every call re-reads the guest's row, which carries the policy as it is now, so a policy turned on or narrowed after registration refuses the next call and withdraws the provider without a restart. What the user writes reaches the instance they signed in to, as with self-hosted GitLab and Gitea (the open question in `../gitea/DOCUMENTATION.md`); the outbound proxy is the one place a future policy would act.
-- `provider-registry.js` (`createSourceControlProviders`) is created once per runtime by `opencode/feature-routes-runtime.js` over one auth store. It serves the descriptors synchronously, loads each implementation (`<provider>/provider.js`, `createProvider(hostServices)`) on first use, answers `readTransportCredential` for Git transport and bindings (a credential is valid only for the instance it was asked for: its provider-user id must start with `<instance>#`, checked by the provider and again by the credential resolver, the binding validators and the clone planner, so a credential id that exists on another host never mints or resolves a reference for this one), and carries the account events (`connected`, `invalidated`, `removed`) providers report; listeners run in order and are awaited, so bindings move before a provider changes its store. `registerExtension({ descriptor, guest })` attaches an extension's descriptor to the facade and builds its implementation (`extension-provider.js`) on first use with the runtime's `extensionServices` (outbound handles, the extension store path); `unregisterExtension(id)` detaches it, disposes and drops the implementation and revokes the guest's handles.
+- `provider-registry.js` (`createSourceControlProviders`) is created once per runtime by `server-frame/feature-routes-runtime.js` over one auth store. It serves the descriptors synchronously, loads each implementation (`<provider>/provider.js`, `createProvider(hostServices)`) on first use, answers `readTransportCredential` for Git transport and bindings (a credential is valid only for the instance it was asked for: its provider-user id must start with `<instance>#`, checked by the provider and again by the credential resolver, the binding validators and the clone planner, so a credential id that exists on another host never mints or resolves a reference for this one), and carries the account events (`connected`, `invalidated`, `removed`) providers report; listeners run in order and are awaited, so bindings move before a provider changes its store. `registerExtension({ descriptor, guest })` attaches an extension's descriptor to the facade and builds its implementation (`extension-provider.js`) on first use with the runtime's `extensionServices` (outbound handles, the extension store path); `unregisterExtension(id)` detaches it, disposes and drops the implementation and revokes the guest's handles.
 - `routes.js` registers, before the generic OpenCode proxy: the shell's routes for every provider (`provider-routes.js`), `GET /api/source-control/providers`, `GET /api/source-control/instances`, the binding routes, and last a catch-all that answers any other path under `/api/source-control/` with `404 SOURCE_CONTROL_PROVIDER_UNAVAILABLE`. Between the binding routes and the catch-all sits the shell's extension dispatcher: a request under `/api/source-control/ext-<id>/` goes to that extension's router when one is mounted, and falls through to the catch-all otherwise. `registerExtensionProvider` / `unregisterExtensionProvider` (on the object `registerSourceControlRoutes` returns) register an extension in the registry and mount its router together, and take both down together; registering also moves bindings left on an earlier credential of its accounts, as the start-up repair does for built-ins.
 - `review-position.js` holds what every provider's review draft shares: the position of a comment, the `/pr/review/comment*` and `/pr/review/discard` entries of a mutation table, and both line numbers of a line in a unified diff. Capability `reviewDrafts` (`{ fileComments }`, published as `features.reviewDrafts` and `features.reviewDraftFileComments`) turns on those routes and `GET /pr/review/state`. The draft lives on the host, never here: a device, a browser tab or an agent writing to the host all see one draft. Extension providers do not declare the capability.
 - `provider-routes.js` is the generic shell. For each provider it registers literal `/api/source-control/<id>/...` routes: capabilities, auth (status, accounts, device flow through `oauth-flow-registry.js`, token, activate, CLI switch, removal), bound reads (status, lists, context, issues, upstream, branches, labels, reviewers), the reference picker (`references`, `references/across`, `references/detail`, `references/status`, capability `referencePicker`), uploads, the mutation routes and the retired `/me`. A descriptor's `routeAliases` adds the provider's legacy aliases declaratively: its account routes and `/me` under another prefix, extra names for a route, and retired paths answering `410` (GitHub's `/api/github/*`). A request without `instance` names the descriptor's legacy instance, if it has one. It validates the read or mutation context through the binding service before any account lookup, resolves the exact bound account through the implementation, keeps one status cache per provider, maps errors (`401` writes off only the acting account after renewal, transient failures answer the last-known status, a `4xx` after dispatch is a definite failure and anything else `outcome-unknown`; a provider may classify and word its own mutation failures through `mutations.classifyError` / `presentError`, and an error carrying `sourceControlResponse` is answered as the provider chose) and drives the durable mutation executor. A provider's `mutations.afterSuccess` (GitHub drops its pull context and pull-list caches there) runs after the executor returns, best effort: the record is already durable, so a failure there never turns a landed write into `outcome-unknown`. A create whose result names the number it made gets that number in the receipt's target. A capability the descriptor turns off still gets its route and answers `501 SOURCE_CONTROL_CAPABILITY_UNSUPPORTED`; so does one the implementation lacks. It also returns the reads other modules make with an already validated context (`readChangeRequestPatch`/`File` for walkthroughs and the comparison view, `readLiveSummaries` for tracked items, `readChangeRequestHead`, `resolveChangeRequestSource`), dispatched by the context's provider; these provider-neutral names are the only ones `routes.js` returns. The first three resolve the account through the implementation (`auth.resolveAccount`); live summaries pass `orCurrent`, so a provider may read with the instance's current account when the named one no longer resolves (GitHub does, GitLab does not).
@@ -26,7 +45,7 @@ The route shell's optional `onMutationSucceeded` callback receives the validated
 - Gitea (`../gitea/`) is the third built-in provider and the template for further in-core ones: one module folder with `descriptor.js` and `provider.js`, one entry in the descriptor list and one in the loader map, and no UI code (its icon is a path in the descriptor). It signs in with personal access tokens only, keeps its accounts in `section('gitea')` of the auth store (so a file holding a Gitea account is written as version 4, or version 5 when an instance also has a separate SSH address), has no default instance, and turns off review threads, uploads, stacks and the reference picker, so those routes answer 501. What was verified against live Gitea 1.21 and 1.27, and what is still unverified, is listed in `../gitea/DOCUMENTATION.md`.
 - Forgejo (`../forgejo/`) is Gitea's implementation with its own descriptor: section `forgejo`, the same capabilities, and `https://codeberg.org` as its default instance. Gitea and Forgejo accept any origin, so an instance belongs to one card: the one its own API namespace names, else the one its `/version` names (Forgejo's carries a `+gitea-` suffix); Forgejo serves `/api/forgejo/v1/version`, which no Gitea release does, and Forgejo 16 names no edition on the compatible `/version`, so the namespace is what still tells them apart. The other card refuses it at connect (`ownerElsewhere` above), and no instance is known to both. What was verified against live Forgejo is in `../forgejo/DOCUMENTATION.md`.
 - GitHub, GitLab, Gitea, Gerrit and Forgejo all answer at `/api/source-control/<id>/*` with the same neutral DTOs. GitHub's descriptor keeps its auth and user aliases under `/api/github/*`; its retired PR, repository, issue, and pull-context aliases return `410` before authority or provider work.
-- `GET /api/source-control/instances` returns, per provider in registry order, its default instances plus the ones its implementation knows: self-managed GitLab origins, Gitea and Forgejo origins and GitHub Enterprise hosts already present in the server credential store (a host the user registered a PAT for, or one gh has a stored login for), and the Gitea instances gt has a token login for. A provider instance with a separate SSH address carries it as `instanceSshUrl`, so clients recognise remotes on that host. It never exposes accounts or tokens. A provider that fails to load or list is named in `unavailableProviders` instead of failing the whole answer, so one broken provider never hides the others' instances.
+- `GET /api/source-control/instances` returns, per provider in registry order, its default instances plus the ones its implementation knows: self-managed GitLab origins, Gitea and Forgejo origins and GitHub Enterprise hosts already present in the server credential store (a host the user registered a PAT for, or one gh has a stored login for), and the Gitea instances gt has a token login for. In enterprise mode only the known instances are returned, so an unused default such as `gitlab.com` does not appear as an empty card; a stored instance still appears so its account can be removed or switched. A provider instance with a separate SSH address carries it as `instanceSshUrl`, so clients recognise remotes on that host. It never exposes accounts or tokens. A provider that fails to load or list is named in `unavailableProviders` instead of failing the whole answer, so one broken provider never hides the others' instances.
 - `repository-identity.js` derives a repository ID from the real Git common directory and its filesystem identity. A checkout, linked worktree, and symlink share one ID; a moved or path-replaced repository resolves to a different ID. Its public config revision hashes a versioned canonical repository ID and sorted normalized effective fetch/push topology. Author, signing, and upstream-only edits do not invalidate that revision. Private transport identity separately hashes Git's effective transport-relevant configuration across system, global, local, worktree, and included files. Only that hash reaches transport validation; values and origin paths stay inside the Git query process. A remote whose fetch or push address is a path on disk (absolute or relative, `file://`, a Windows drive) is left out before the revision is hashed, so it is in no repository context, binding read or transport authority, and adding or removing it moves no revision. `GET /api/git/remotes` leaves it out by the same rule (`isDiskPathRemoteUrl` in `url-redaction.js`), so the Git panel offers no action that would be refused. A branch that tracks such a remote is never pushed elsewhere on its own: the panel asks where to push, and a dirty branch switch reports no remote. Git in the terminal still uses it.
 - `binding-storage.js` owns version-2 `source-control-bindings.json` persistence under `OPENCHAMBER_DATA_DIR`. Reads and writes share one store-local queue and a cross-process snapshot lock that covers the entire read/check/write, including account reconciliation. A missing file reads as an empty version-2 store. A file carrying any other version, or one that fails the strict parse, is rejected with `INVALID_SOURCE_CONTROL_BINDINGS` and left on disk untouched: the store never converts, repairs or replaces it, and bindings do not silently start empty. Writes are atomic, mode `0600`, and compare-and-swap by repository revision. Deletes retain revision tombstones so stale requests cannot recreate a binding.
 - `binding-contract.js` owns the dependency-free strict persisted binding parser, separate binding-response parser, readiness projection, aggregate state, and public endpoint validation for the server and the web adapter. The persisted parser rejects response-only credential presentation, so `source-control-bindings.json` remains references-only. The response parser accepts only the tagged safe presentation contract and rejects unknown fields. Its instance rule takes the caller's `insecureOrigins` (the machine policy's allowlist, resolved where the response is read or parsed): a presentation may name an HTTP instance only on a loopback host or an allowlisted exact origin, and the web adapter passes what the published descriptors carry. Safe endpoint metadata accepts credential-free HTTP/HTTPS, SSH URL, and SCP display forms plus bounded base64url fingerprints; local-file, credential-bearing HTTPS, query, fragment, traversal, control-character, and unsafe fingerprint forms fail closed. Each provider stores its approved fetch endpoint and readiness. Each remote stores readiness alongside its exact fetch/push endpoints; auxiliary grants have their own readiness. Only `ready` grants authority. `account-unavailable`, `confirmation-required`, and `config-changed` retain repair metadata without granting the affected capability. Binding `state` is an aggregate UI summary, never the authority gate.
@@ -225,6 +244,45 @@ A provider is a new destination for a token and for what the user writes into is
 
 ## Decisions
 
+### Why reconnect keeps one credential and one credential ID
+
+A provider user only has one meaningful token at a time. Keeping several rows made Settings show the same account twice and split its bindings across IDs. Reconnect now updates the existing row, so bindings and Git identity profiles that name it remain valid. Older rows from the previous behavior are removed on the next reconnect, and the connection event carries them as superseded so identity profiles can be repointed.
+
+### Why account connection reconciles configured projects
+
+Users added projects before signing in had no binding route except opening each project and choosing the identity by hand. The connection event now walks the configured projects, binds the remote that belongs to the connected instance, and configures managed HTTPS where the endpoint matches. Non-matching remotes and non-HTTPS endpoints keep their existing transport authority, because an account credential cannot serve them.
+
+### Why repository resolution keeps separate result types
+
+Git path resolution distinguishes an unsupported repository from a successful
+read with both Git directories and the bare flag. Repository ID reads add the
+filesystem identity and retain the worktree's Git directory. Public topology
+reads omit raw endpoints and transport revision; private reads include them
+only through the existing private resolver.
+
+The extension reconciler's provider-ID accessor checks the invariant established
+by eligibility before storing a map key. Guest contributions remain owned by the
+catalog contract. Status cache data retains its caller's shape and gains only
+the checked or generated `fetchedAt`; invalidation keeps its original property
+comparison. Error messages remain unchecked until redaction converts them with
+`String(value || '')`.
+
+### Why source-control input guards are folder-local
+
+The binding contract also compiles in UI projects, which cannot import the
+unconverted shared JavaScript guards without declarations. Folder-local
+predicates retain those checks, including boxed-string acceptance, while
+narrowing file and request values before use. Integer and finite-number
+predicates keep the original acceptance rules. Error-code predicates accept
+plain thrown objects as well as Error instances.
+
+### Why lock release has separate cleanup functions
+
+Release failures replace an operation's result or error, and a failed close
+replaces an earlier release failure. Async and synchronous cleanup preserve
+that order. Separate release and close functions express these failures without
+control-flow statements in the caller's finally block.
+
 ### Why OAuth renewal holds a separate cross-process lock
 
 GitLab refresh tokens are single-use, so renewal holds a separate lock across the network call and re-reads the credential after acquiring it. A waiter uses the replacement token while the credential ID and revision remain stable for existing bindings. Expiry-triggered reads keep the stored token if renewal stays busy; a refused request can renew on demand, and a rejected refresh leaves invalidation to the normal request failure path.
@@ -233,9 +291,95 @@ GitLab refresh tokens are single-use, so renewal holds a separate lock across th
 
 Version selection inspects every serialized instance, including opaque sections this process never parses, because an `sshUrl` in any section requires version 5. Choosing from parsed sections alone can write a snapshot the store itself refuses to read.
 
+### Why auth parsing keeps raw JSON separate from credentials
+
+The auth store reads JSON, injected filesystem results and OAuth renewal responses.
+Its file guards retain the version, exact-key, account, integer, boolean and SSH
+normalization checks before exposing credentials. Unknown provider sections remain
+JSON until their provider requests them. Their contents do not acquire credential
+types merely by surviving a read. Shared instance helpers return the credential
+union, including extension string user IDs, rather than promising numeric IDs or
+one provider's secret field.
+
+A version-5 instance may contain `sshUrl: null`: normalization accepts it and the
+existing parser retains it, while public reads and writes omit a falsy address.
+Missing credential invalidation reasons may be assigned as explicit `undefined`
+during serialization and are then omitted by JSON. The in-memory types preserve
+both cases. Dictionary ownership checks remain in place before section access;
+missing section and credential-slot checks express parser-established occupancy.
+
+### Why remote project-path protocols remain strings
+
+`git/credential-resolver.js` owns `normalizeGitRemoteEndpoint` and
+`normalizeGitCredentialEndpoint`. Their protocol check uses `in` on an ordinary
+object, so an inherited key with an explicit port can pass: the remote
+`constructor://example.com:80/team/repo` returns protocol `constructor`.
+`ProviderDescriptor.projectPathOfRemote` therefore accepts a string protocol.
+Gerrit's implementation strips `a/` only for `http` and `https` and retains the
+path for every other protocol. The declaration preserves that existing behavior
+without claiming that the normalizer checked a closed protocol union.
+
+### Why binding drafts remain separate from persisted bindings
+
+Binding mutations build remote and auxiliary records incrementally, before the
+store checks the managed credential and rejects credentials on other modes.
+`BindingDraft` describes those intermediate records. `parseBinding` establishes
+the persisted tagged union through the existing validation; a non-null
+`compareAndSwap` input returns a non-null parsed binding. Readiness projection
+also accepts drafts because provider mutation projects readiness before the store
+adds repository identity and revision.
+
+The service's mutation target contains only the project owner and name and the
+optional number, head, base and SHA it checks. The SDK's wire mutation target
+also requires project and repository identifiers; the service does not claim to
+have established those fields. Transport account user IDs include extension
+strings, while the older provider credential declaration names numeric IDs.
+Credential presentation retains its own identity and safe-text checks.
+
+Provider parsing preserves array cardinality, so parsing one provider returns
+one provider. Missing credential presentation remains unavailable. The checkout
+path control-character expression uses `String.raw` to retain the original
+character range under the TypeScript lint rule.
+
 ### Why session secrets stay outside session objects
 
 Providers keep tokens and verified CLI users in module-owned `WeakMap` entries keyed by the exact session object, so serializing or logging a session cannot expose a token. CLI identity uncertainty preserves the user's activation switch and keeps it visible for explicit deactivation; only confirmed absence or token refusal clears it.
+
+### Why PAT account contracts retain uncertain values
+
+PAT authentication uses the auth store's credential union. Verification receives
+the token field as read, including an absent token. Verified users retain numeric or string IDs, including in account
+events, and nullable profile fields. Caught error messages remain unchecked values
+in status and response bodies.
+
+Service login supplies `status`; token-based CLI login supplies `tokenResult`.
+The selected descriptor determines which callback is required. CLI invocation
+retains its receiver. Non-null accessors check those dependencies and the
+already-established login and username invariants without adding defaults.
+
+Extension response types come from each SDK response schema. The generic
+forwarder preserves the method-to-schema relationship: pass-through resources
+return the JSON object or array that was checked, while head, status, source and
+mutation responses retain their schema's checked fields. A resource read does
+not establish a patch or file DTO merely by forwarding JSON.
+
+Schema-parsed profile fields can contain explicit `undefined`. Auth input and
+account-event types retain it; the auth parser omits those fields when storing
+the user. A null credential revision matches no stored revision. Failure kinds
+remain unchecked error metadata until a caller interprets them.
+
+### Why mutation tables retain ownership checks
+
+Mutation routes are dictionary keys supplied by callers. `Object.hasOwn`
+rejects inherited names such as `constructor` before selecting a normalizer.
+Normalized inputs describe the fields each normalizer copies and the digest it
+assembles; they do not acquire a provider response type.
+
+Outbound evidence starts as an array of `{ method, status }` records with a null
+status until dispatch settles. Error classification retains its array check and
+integer-status check because an error's evidence is unchecked. It does not
+assume that an array check validated each member. User IDs retain the separate
+primitive-string and safe-integer checks before forwarding an account.
 
 ### Why startup repair is separate from route registration
 
@@ -397,3 +541,42 @@ Both operation vocabularies and the result step list grow with each feature, so 
 ### Why only the evidence stores keep names they cannot read
 
 The audit log and `git-network-operations.json` keep a record they cannot fully name; `source-control-bindings.json` and `source-control-mutations.json` still refuse a file they cannot parse. What separates them is what an unreadable record can change. A binding decides whether a transfer is authorized, and a mutation record decides whether a provider write already happened, so a guess there risks an unauthorized push or a repeated write and refusing is the only safe answer. An audit record answers neither: it grants nothing, and provider reconciliation reads one back only to reuse the runtime snapshot it already carries, so a failure there ends that mutation rather than a Git operation. An operation record's one decision is the restart one, which resolves conservatively (`planned` becomes `cancelled`, `running` becomes `outcome-unknown`) and never resumes work. Both keepers still validate the lifecycle state, the record envelope, and every bound that keeps directories, endpoints, credentials and process output out of the file, so a kept record can be pruned, evicted and read back without being interpreted.
+
+## Fork decisions from the JS→TS merge
+
+The fork carried explanatory comments through the upstream JS→TS migration,
+where upstream moved them into this document. They are recorded here so the
+product `.ts` files stay comment-free. Decisions already described above are
+named but not repeated; the reasons unique to the fork are stated in full.
+
+### origin-instance.ts — URL-origin instance
+
+An instance identified by its URL origin (GitLab and other self-hostable
+providers) accepts HTTPS, HTTP on a loopback host for local deployments and
+tests, or HTTP on an origin the machine policy lists in
+`allowedInsecureGitOrigins` for an intranet host without TLS; no credentials,
+path, query, or fragment. `label` names the provider in the errors a person
+reads. `insecureOrigins` overrides the policy read for tests and callers that
+resolved it already. See the instance normalization invariant above.
+
+### extension-descriptor.ts — extension instances and pattern compilation
+
+- The administrator's insecure-origin allowlist never widens an extension's instances: an empty set is passed instead of reading the policy.
+- URL templates compile to bounded placeholders: no unbounded repetition anywhere, so a path cannot make the compiled pattern backtrack without limit, whatever the templates. See *Why an extension's thread pattern is compiled from templates and not supplied as a regex*.
+- An extension's instances stay exactly as strict as before: the administrator's insecure-origin allowlist never widens them, so this empty set is passed instead of reading the policy. See *Why extension providers never see the allowlist*.
+
+### binding-contract.ts — instance forms and caller-supplied allowlist
+
+- An instance is either a bare lowercase hostname (GitHub's form) or a normalized origin (GitLab's form): HTTPS, HTTP on a loopback host, or HTTP on an origin the caller's insecure allowlist names (the web adapter passes the policy origins the server published with its provider descriptors).
+- A binding as a response carries `insecureOrigins`, the caller's allowlist of plain-HTTP origins. See *Why the plain-HTTP allowlist reaches `binding-contract.js` as a parameter and not as a policy import*.
+
+### provider-descriptors.ts — published provider shape
+
+- The published shape carries the policy's plain-HTTP allowlist for origin-form providers, in addition to the server's own descriptor contract.
+- `publicProviderDescriptor` is what a client reads about a provider (`GET /api/source-control/providers`): plain JSON in the shape the UI registry parses, built from the descriptor's own fields plus its `presentation` block. No functions, patterns, transport policy or other server-only fields leave the server; `order` is the registry's priority order. `extension` (`{ guestId, name, version }`) marks a provider an installed extension serves, and older clients drop the field. The change-host features (`reviewModel`, `revisions`, `createByPush`, and the presentation's `branchHeads` and `submitRequirements`) and `discussions` (with `urls.discussion`) appear only when the descriptor declares them, as do `urls.commit` and `urls.user`. `insecureOrigins` — the policy's allowlisted plain-HTTP origins, resolved by the caller at read time — is published for origin-form providers only when non-empty, so the client's instance check accepts exactly what the server will.
+
+### auth-storage.ts — one credential per provider user
+
+`setAccount` keeps a single active credential for each provider user of an origin instance. On reconnect it replaces the existing credential in place: `credentialId` and `revision` are copied from the credential being replaced rather than regenerated, while the token, user, source, scope and status come from the new input. Older duplicates for the same provider user are dropped from the persisted file, and the fresh credential becomes the instance's active one.
+
+This matters because a binding pins its provider credential by ID and revision. Reusing both across a reconnect keeps an existing binding valid and avoids treating the reconnect as an unauthorized credential change that would need repair. The ID and revision are therefore read explicitly from the existing credential, and only the fields a reconnect actually changes are overwritten. Binders that still name a dropped duplicate are repaired on the next connect; see the reconciliation behavior described under Purpose.

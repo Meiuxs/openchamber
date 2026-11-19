@@ -1,6 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
-import { allowedInsecureGitOrigins } from '../enterprise-mode.js';
+import { allowedInsecureGitOrigins, isEnterpriseMode } from '../enterprise-mode.js';
 import { createBindingService } from './binding-service.js';
 import { createBindingStore } from './binding-storage.js';
 import { createChangeRequestWorktreeSource } from './change-request-worktree.js';
@@ -92,6 +92,17 @@ export function registerSourceControlRoutes(app, dependencies = {}) {
     store: { createProfile, getProfiles, updateProfile },
   });
   const oauthFlowRegistry = dependencies.oauthFlowRegistry ?? createOAuthFlowRegistry();
+  const listConfiguredProjects = dependencies.listConfiguredProjects ?? (async () => []);
+  const afterTransportChange = async (directory, read) => {
+    if (!(dependencies.onRepositoryTransportChanged instanceof Function)) return true;
+    try {
+      await dependencies.onRepositoryTransportChanged(directory, read);
+      return true;
+    } catch (error) {
+      console.warn('Repository transport configuration was not updated:', redactSensitiveText(error?.message));
+      return false;
+    }
+  };
   const listConnectedAccounts = async () => {
     const entries = [];
     for (const descriptor of providers.list()) {
@@ -114,12 +125,35 @@ export function registerSourceControlRoutes(app, dependencies = {}) {
     auditStore: dependencies.auditStore,
     runtimeIdentity: dependencies.runtimeIdentity,
   });
-  const adoptConnectedAccount = (account, credential) => {
+  const adoptConnectedAccount = (account, credential, renews = []) => {
     if (!credential?.providerUserId || !Number.isSafeInteger(credential.credentialRevision)) return;
     const { credentialRevision, providerUserId } = credential;
-    bindingService.accountConnected({ ...account, credentialRevision, providerUserId }).catch((error) => {
+    void (async () => {
+      if (bindingService.accountUnavailable instanceof Function) {
+        for (const previous of renews) await bindingService.accountUnavailable(previous);
+      }
+      await bindingService.accountConnected({ ...account, credentialRevision, providerUserId });
+    })().catch((error) => {
       console.warn('Failed to move repository bindings to the connected account:', error?.message ?? error);
     });
+  };
+  const bindConfiguredProjects = (account, credential) => {
+    if (!credential?.providerUserId || !Number.isSafeInteger(credential.credentialRevision)
+      || !(bindingService.bindAccountToProject instanceof Function)) return;
+    void (async () => {
+      const projects = await listConfiguredProjects();
+      for (const project of projects) {
+        if (!isPlainObject(project) || typeof project.path !== 'string' || !project.path) continue;
+        try {
+          const result = await bindingService.bindAccountToProject({ ...account, directory: project.path });
+          if (result?.transportResult && !await afterTransportChange(project.path, result.transportResult)) {
+            console.warn('Auto-bound project committed a transport grant, but its Git configuration was not updated.');
+          }
+        } catch (error) {
+          console.warn('Failed to bind a configured project to the connected account:', redactSensitiveText(error?.message ?? error));
+        }
+      }
+    })().catch((error) => console.warn('Failed to list configured projects for account binding:', redactSensitiveText(error?.message ?? error)));
   };
   const accountConnected = ({ account, user, renews = [], credential }) => {
     try {
@@ -128,7 +162,8 @@ export function registerSourceControlRoutes(app, dependencies = {}) {
     } catch (error) {
       console.warn('Failed to provision a Git identity for the connected account:', error?.message ?? error);
     }
-    adoptConnectedAccount(account, credential);
+    adoptConnectedAccount(account, credential, renews);
+    bindConfiguredProjects(account, credential);
   };
   const accountUnavailable = async (identity, callback) => {
     await bindingService.accountUnavailable(identity);
@@ -155,9 +190,13 @@ export function registerSourceControlRoutes(app, dependencies = {}) {
     const impl = await providers.implementation(descriptor.id);
     const defaults = [...descriptor.instance.defaultInstances];
     const known = (await impl?.auth.listInstances?.()) ?? [];
+    // Enterprise mode shows only instances an account already made known. A
+    // built-in default nobody signed in to has no account to use or remove
+    // from this card.
+    const listed = isEnterpriseMode() ? known : [...defaults, ...known];
     const sshHosts = new Map(((await impl?.auth.listSshHosts?.()) ?? [])
       .map((entry) => [entry.instance, entry.sshUrl]));
-    return [...new Set([...defaults, ...known])]
+    return [...new Set(listed)]
       .map((instance) => {
         const entry = { provider: descriptor.id, instance };
         const sshUrl = sshHosts.get(instance);
@@ -277,16 +316,6 @@ export function registerSourceControlRoutes(app, dependencies = {}) {
       return sendBindingError(res, error);
     }
   });
-  const afterTransportChange = async (directory, read) => {
-    if (!(dependencies.onRepositoryTransportChanged instanceof Function)) return true;
-    try {
-      await dependencies.onRepositoryTransportChanged(directory, read);
-      return true;
-    } catch (error) {
-      console.warn('Repository transport configuration was not updated:', redactSensitiveText(error?.message));
-      return false;
-    }
-  };
   const sendTransportConfigPartial = (res) => res.status(500).json({
     error: 'The repository binding was saved, but its Git configuration could not be updated. Git in a terminal still uses the previous credentials; retry to apply it.',
     code: 'SOURCE_CONTROL_TRANSPORT_CONFIG_PARTIAL',

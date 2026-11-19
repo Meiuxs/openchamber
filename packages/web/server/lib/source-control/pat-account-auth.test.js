@@ -16,14 +16,22 @@ function fakeStore() {
     readAccount: async (origin, id, revision) => instanceOf(origin).accounts.find((account) => account.id === id
       && account.status === 'valid' && (revision === undefined || account.credentialRevision === revision)) ?? null,
     setAccount: async (origin, { token, user, source }) => {
+      const instance = instanceOf(origin);
+      const providerUserId = `${origin}#${user.id}`;
+      const existing = instance.accounts.find((account) => account.providerUserId === providerUserId);
       next += 1;
-      const id = `occred:v1:ext-forge:${next}:r1`;
+      const id = existing?.id ?? `occred:v1:ext-forge:${next}:r1`;
       const account = {
-        id, credentialId: id, credentialRevision: 1, providerUserId: `${origin}#${user.id}`,
+        id, credentialId: id, credentialRevision: existing?.credentialRevision ?? 1, providerUserId,
         token, user, source, scope: '', status: 'valid',
       };
-      const instance = instanceOf(origin);
-      instances.set(origin, { activeAccountId: id, accounts: [...instance.accounts, account] });
+      const accounts = existing
+        ? instance.accounts.filter((candidate) => candidate.providerUserId !== providerUserId || candidate === existing)
+        : [...instance.accounts];
+      const index = existing ? accounts.indexOf(existing) : accounts.length;
+      if (existing) accounts[index] = account;
+      else accounts.push(account);
+      instances.set(origin, { activeAccountId: id, accounts });
       return account;
     },
     activate: async (origin, id) => {
@@ -81,14 +89,17 @@ describe('PAT account auth', () => {
     });
   });
 
-  it('renews the earlier credential of the same user when it connects again', async () => {
+  it('keeps one account when the same user connects again', async () => {
     const { auth, events } = setup();
     await auth.connectToken({ instance: ORIGIN, token: 'pat-1' });
     const first = await auth.readCurrentAccountId({ instance: ORIGIN });
     await auth.connectToken({ instance: ORIGIN, token: 'pat-1' });
+    const current = await auth.readCurrentAccountId({ instance: ORIGIN });
 
+    expect(current).toBe(first);
     expect(events.connected).toHaveBeenLastCalledWith(expect.objectContaining({
-      renews: [{ provider: 'ext-forge', instance: ORIGIN, accountId: first }],
+      account: expect.objectContaining({ accountId: first }),
+      renews: [],
     }));
   });
 
@@ -148,6 +159,47 @@ describe('PAT account auth', () => {
     expect(session).toMatchObject({ instance: ORIGIN, providerUserId: `${ORIGIN}#7`, secretKind: 'pat', persisted: true });
     expect(accounts.tokenFor(session)).toBe('pat-1');
     expect(accounts.tokenFor({ ...session })).toBeUndefined();
+  });
+
+  it.each([null, undefined, 7, 'offline', Symbol('offline')])('passes a thrown value unchanged to the classifier: %s', async (failure) => {
+    const store = fakeStore();
+    let failing = false;
+    const classifyFailure = vi.fn(() => 'unreachable');
+    const accounts = createPatAccountAuth({
+      descriptor,
+      store,
+      events: { connected: vi.fn(), invalidated: vi.fn(), removed: vi.fn() },
+      verify: async () => {
+        if (failing) throw failure;
+        return { id: 7, login: 'alice' };
+      },
+      probe: async () => ({ supported: true }),
+      classifyFailure,
+    });
+    await accounts.auth.connectToken({ instance: ORIGIN, token: 'pat-1' });
+    failing = true;
+
+    await expect(accounts.auth.status({ instance: ORIGIN })).resolves.toMatchObject({ status: 'unreachable', connected: false });
+    expect(classifyFailure).toHaveBeenCalledWith(failure);
+  });
+
+  it('retains an unchecked error message in the SSH response body', async () => {
+    const message = { toString: () => 'bad address' };
+    const accounts = createPatAccountAuth({
+      descriptor: { ...descriptor, settings: [{ key: 'sshUrl' }] },
+      store: fakeStore(),
+      events: { connected: vi.fn(), invalidated: vi.fn(), removed: vi.fn() },
+      verify: async () => ({ id: 7, login: 'alice' }),
+      probe: async () => ({ supported: true }),
+      classifyFailure: () => 'provider-error',
+      normalizeSshUrl: () => { throw { message }; },
+      parseSshUrl: () => null,
+    });
+
+    await expect(accounts.auth.setSshUrl({ instance: ORIGIN, sshUrl: 'bad' })).rejects.toMatchObject({
+      message: 'bad address',
+      sourceControlResponse: { status: 400, body: { error: message, code: 'INVALID_SSH_URL' } },
+    });
   });
 
   it('answers 401 naming the exact account when it does not resolve', async () => {

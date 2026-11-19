@@ -2,6 +2,7 @@ import React from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { loadDesktopSettings, updateDesktopSettings } from '@/lib/persistence';
 import { normalizeInsecureGitOrigin } from '@/lib/settings/parsers';
+import { NESTED_REPOSITORY_SCAN_DEPTHS, type NestedRepositoryScanDepth, setNestedRepositoryScanDepth, useNestedRepositoryScanDepth, usesWebNestedRepositoryScan } from '@/lib/nestedRepositoryScanDepth';
 import { useConfigStore } from '@/stores/useConfigStore';
 import { useEnterpriseMode } from '@/stores/useEnterprisePolicyStore';
 import { useUIStore } from '@/stores/useUIStore';
@@ -14,6 +15,8 @@ import {
   SettingsRadioGroup,
   SettingsRadioOption,
   SettingsCheckboxRow,
+  SettingsFieldRow,
+  SettingsChipGroup,
   SETTINGS_OPTION_STACK_CLASS,
 } from '@/components/sections/shared/SettingsSection';
 
@@ -22,6 +25,8 @@ export const GitSettings: React.FC = () => {
   const settingsGitmojiEnabled = useConfigStore((state) => state.settingsGitmojiEnabled);
   const setSettingsGitmojiEnabled = useConfigStore((state) => state.setSettingsGitmojiEnabled);
   const showGitignored = useFilesViewShowGitignored();
+  const scanDepth = useNestedRepositoryScanDepth();
+  const webScanAvailable = usesWebNestedRepositoryScan();
   const gitChangesViewMode = useUIStore((state) => state.gitChangesViewMode);
   const setGitChangesViewMode = useUIStore((state) => state.setGitChangesViewMode);
 
@@ -122,6 +127,28 @@ export const GitSettings: React.FC = () => {
           />
         </div>
       </SettingsSection>
+      {webScanAvailable ? (
+        <SettingsSection title={t('settings.openchamber.git.discoveryTitle')}>
+          <SettingsFieldRow
+            label={t('settings.openchamber.git.scanDepthLabel')}
+            info={t('settings.openchamber.git.scanDepthInfo')}
+            settingsItem="git.scan-depth"
+          >
+            <SettingsChipGroup
+              value={scanDepth}
+              options={NESTED_REPOSITORY_SCAN_DEPTHS.map((depth) => ({
+                value: depth,
+                label: t(`settings.openchamber.git.scanDepth.${depth}`),
+              }))}
+              onChange={(depth: NestedRepositoryScanDepth) => {
+                setNestedRepositoryScanDepth(depth);
+                void updateDesktopSettings({ nestedRepositoryScanDepth: depth });
+              }}
+              aria-label={t('settings.openchamber.git.scanDepthLabel')}
+            />
+          </SettingsFieldRow>
+        </SettingsSection>
+      ) : null}
       <GitInsecureOriginsSection />
     </>
   );

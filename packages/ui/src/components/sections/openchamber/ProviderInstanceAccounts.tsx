@@ -19,7 +19,7 @@ import {
   SettingsChipGroup,
   SettingsFieldRow,
 } from '@/components/sections/shared/SettingsSection';
-import { useSourceControlAuthEntry, useSourceControlAuthStore } from '@/stores/useSourceControlAuthStore';
+import { getSourceControlAuthKey, useSourceControlAuthEntry, useSourceControlAuthStore } from '@/stores/useSourceControlAuthStore';
 import { getRuntimeKey, subscribeRuntimeEndpointWillChange } from '@/lib/runtime-switch';
 import { SourceControlAccountList } from './SourceControlAccountList';
 import { DeviceFlowCode } from './DeviceFlowCode';
@@ -298,6 +298,20 @@ export const ProviderInstanceAccounts: React.FC<ProviderInstanceAccountsProps> =
     try {
       await sourceControl.authDisconnect(identity, accountId);
       if (!isCurrentRuntime()) return;
+      const current = useSourceControlAuthStore.getState().entries[getSourceControlAuthKey(identity)]?.status;
+      if (current) {
+        const remaining = (current.accounts ?? []).filter((account) => account.id !== accountId);
+        const stillConnected = remaining.some((account) => account.current && account.status === 'valid');
+        setStatus(identity, stillConnected
+          ? { ...current, accounts: remaining }
+          : {
+            ...identity,
+            status: 'disconnected',
+            connected: false,
+            accounts: remaining,
+            ...(current.cli ? { cli: current.cli } : {}),
+          });
+      }
       await refreshStatus(sourceControl, identity, { force: true });
       if (!isCurrentRuntime()) return;
       await refreshInstances(sourceControl, { force: true });

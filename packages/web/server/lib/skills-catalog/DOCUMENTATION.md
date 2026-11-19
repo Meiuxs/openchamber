@@ -5,15 +5,18 @@ This module provides skill discovery, scanning, and installation capabilities fo
 
 ## Entrypoints and structure
 - `packages/web/server/lib/skills-catalog/`: Skills catalog module directory containing all skill-related functionality.
-  - `cache.js`: In-memory cache for scan results with TTL support.
-  - `curated-sources.js`: Predefined skill sources (Anthropic, OpenAI, Cursor, Matt Pocock).
-  - `github-meta.js`: Best-effort GitHub repository metadata (stars, last push) with in-memory TTL cache.
-  - `git.js`: Git operations helpers for cloning and auth error detection.
-  - `install.js`: Skills installation from git repositories.
-  - `installed-sources.js`: Which source and repo subpath each catalog-installed skill came from, for the Installed badge.
-  - `remove-directory.js`: Deletes a clone or skill folder, retrying a delete Windows refuses for a moment.
-  - `scan.js`: Skills scanning from git repositories.
-  - `source.js`: Source string parsing for git repositories.
+  - `cache.ts`: In-memory cache for scan results with TTL support.
+  - `curated-sources.ts`: Predefined skill sources (Anthropic, OpenAI, Cursor, Matt Pocock).
+  - `disk-cache.ts`: Shared disk persistence and cache-entry validation.
+  - `github-meta.ts`: Best-effort GitHub repository metadata (stars, last push) with in-memory TTL cache.
+  - `git.ts`: Git operations helpers for cloning and auth error detection.
+  - `install.ts`: Skills installation from git repositories.
+  - `installed-sources.ts`: Which source and repo subpath each catalog-installed skill came from, for the Installed badge.
+  - `remove-directory.ts`: Deletes a clone or skill folder, retrying a delete Windows refuses for a moment.
+  - `scan.ts`: Skills scanning from git repositories.
+  - `source.ts`: Source string parsing for git repositories.
+
+Relative imports and the API headings retain `.js` specifiers for emitted JavaScript and the source resolver.
 
 ## Invariants
 
@@ -22,6 +25,62 @@ This module provides skill discovery, scanning, and installation capabilities fo
 - A scan of a subpath that does not exist returns `ok: true` with no items. A failed `ls-tree` reads as an empty catalog, so a mistyped or removed subpath shows no skills instead of an error.
 - A root-level `SKILL.md` is dropped from scan results. OpenCode names a skill after the folder that holds it, and a file at the repository root has no such folder name.
 - A source `#ref` is limited to letters, digits and `._/-`, never starts with `-` (it becomes a git argument) and never contains `..`.
+
+## Decisions
+
+### Why persisted values retain their checked shape
+
+Disk cache entries validate only a numeric expiry and a non-null object value, including arrays. Cache reads therefore expose `object`, without promising scan or GitHub metadata fields the reader never checks. HTTP consumers own the narrowing they need. Install provenance validates only the 3 non-empty identity strings, retains their original whitespace, and passes optional metadata through unchecked. Its entry type leaves that metadata `unknown` so reading a file cannot promise valid scope or source enums.
+
+The provenance guard checks and narrows those strings locally. The shared JavaScript `asNonEmptyString` helper has no declaration, so importing it into this TypeScript implementation would break the VS Code consumer, whose compiler does not enable `allowJs`.
+
+### Why external checks remain at parsing boundaries
+
+Source strings and subpaths retain their runtime string checks. Disk JSON, expiry, object values, GitHub payloads and push timestamps, installed-source records, and YAML name and description fields remain checked at their input boundaries. Internally generated skill names and file contents need no repeated string checks; Node and Bun timers expose `unref` directly. Array checks that govern fallback or dictionary acceptance remain unchanged.
+
+### Installation conversion contracts
+
+`../opencode/config-files.d.ts` exposes the existing `OPENCODE_CONFIG_DIR` string used
+by `install.ts`. Its implementation derives the path from environment variables
+and the home directory. Conversion imports that owner value.
+
+Install results expose the validated scope and generated target source, with
+separate success and failure shapes. Scope, target source, selections and the
+default subpath retain their input checks. Skill names come from
+`path.posix.basename`, which already returns a string. Conflict decisions retain
+ordinary dictionary lookup and truthiness behavior, including inherited keys.
+Copying a skill keeps file permissions best-effort if `chmod` fails.
+
+### Why the Git home probe uses config path expansion
+
+`git config --path` expands `~` using Git's own home setting. A shell alias starts Git Bash on Windows, which rewrites `HOME=NUL` into a checkout-relative path before printing it. The config probe checks the unchanged isolated environment without that shell transformation.
+
+### Why source parsing keeps refs, ports and plain-HTTP origins distinct (`source.ts`)
+
+Both the URL-source and shorthand parsers take an optional `policy` — the policy-reading options of `allowedInsecureGitOrigins` — so tests inject files through it.
+
+- A `#ref` is a branch or tag: letters, digits and `._/-`, never starting with `-` (it would become a git argument) and never containing `..`.
+- Parsing `owner/repo#ref` or `https://host/owner/repo.git#ref` yields the source without the fragment and the branch or tag it names (null when none).
+- An http(s) source parser yields `host` (no port), `port` (`''` when none) and path segments, or null when it cannot be read. A `git@host[:port]:path` source parser yields `host` and `port`, or null.
+- Plain HTTP is accepted only for a host the administrator — or the user, in Settings → Git — listed in `allowedInsecureGitOrigins`; every other plain-HTTP remote keeps being refused.
+- The SSH clone URL needs host and port apart: `git@host:port:path` is not a form git can resolve, so a port-bearing source uses `ssh://git@host:port/path` instead. An explicit port survives only in the `ssh://` URL form; in scp-style `git@host:port:path` the `port` is read as the repo owner instead.
+- Recognized source forms are SSH `git@host:owner/repo(.git)` and HTTPS `http(s)://host[:port]/owner/repo(.git)`, plus the shorthand `owner/repo[/subpath...]`. For SSH URLs a subpath is accepted only through `options.subpath`.
+
+### Why installs guard traversal, file types and git versions (`install.ts`)
+
+Copying a skill first ensures the source realpath is still under the source root, guarding against traversal, and skips non-file entries such as sockets and devices. Skill names are validated early and conflicts are computed without mutating; when no conflict exists the install simply proceeds. The parent directories of a project target are created so the copy can land.
+
+A `#ref` on the source picks the branch or tag; without it the clone follows the default branch. Git 2.20 has no `sparse-checkout` subcommand: a full checkout installs the same skill directories, so a sparse setup that fails is not fatal, but a half-configured sparse checkout would hide those directories, so sparse mode is turned off for the checkout itself. The checkout fetches the selected blobs from the partial clone, so it authenticates the same way the clone did.
+
+### Why isolated git runs keep HOME only for SSH (`git.ts`)
+
+HTTP-speaking protocols keep a netrc-hiding HOME; `ssh` is the only protocol that needs the real HOME, for `known_hosts`. Git before 2.32 ignores `GIT_CONFIG_GLOBAL`, and HTTP runs hide HOME below, so an old Git finds no `~/.gitconfig` either; managed SSH keeps HOME for `known_hosts`, where the global config stays readable. Git's Curl transport also consults netrc outside Git configuration, so an ambient `~/.netrc` entry must not authenticate as a different account than the selected one — again, SSH keeps HOME for `known_hosts`.
+
+The protocols an isolated run may speak are `https` for an HTTPS remote and, additionally, `http` when the URL is on an origin the machine policy lists in `allowedInsecureGitOrigins`: the source parser already refuses every other plain-HTTP remote, but Git refuses the transport itself before connecting, so the allowlist has to be repeated here. A selected identity that names no credential never falls back to System Git.
+
+### Why the curated catalog honors policy and licensing (`curated-sources.ts`)
+
+Four of the built-in catalogs ship under a proprietary `LICENSE.txt` that forbids copies outside Anthropic's services; the rest of the repository is Apache 2.0. The catalogs on offer follow the machine policy: `skillsCatalogSources` replaces the built-in list (an administrator who names catalogs wants those, whether or not the built-ins are hidden); otherwise the built-in catalogs are offered, or none when the policy hides them.
 
 ## Public API
 

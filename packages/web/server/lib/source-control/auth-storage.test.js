@@ -22,27 +22,47 @@ afterEach(async () => {
 });
 
 describe('source-control auth storage', () => {
-  it('round trips distinct OAuth and PAT credentials for the same provider user', async () => {
+  it('replaces one provider user credential in place when reconnecting', async () => {
     const { store } = await makeStore();
     const origin = 'https://gitlab.example.com';
     const pat = await store.setAccount(origin, { token: 'one', user: { id: 1, login: 'old-login' }, source: 'pat' });
     const oauth = await store.setAccount(origin, { token: 'two', user: { id: 1, login: 'new-login' }, source: 'oauth', scope: 'api' });
 
-    expect(pat.id).not.toBe(oauth.id);
-    expect(pat.providerUserId).toBe(`${origin}#1`);
-    expect(oauth.providerUserId).toBe(pat.providerUserId);
+    expect(oauth.id).toBe(pat.id);
+    expect(oauth.credentialRevision).toBe(pat.credentialRevision);
+    expect(oauth.providerUserId).toBe(`${origin}#1`);
     expect((await store.readInstance(origin)).activeAccountId).toBe(oauth.id);
-    await expect(store.readAccount(origin, pat.id, pat.credentialRevision)).resolves.toMatchObject({ token: 'one' });
-    await expect(store.readAccount(origin, oauth.id, oauth.credentialRevision)).resolves.toMatchObject({ token: 'two' });
+    await expect(store.readAccount(origin, oauth.id, oauth.credentialRevision)).resolves.toMatchObject({ token: 'two', source: 'oauth', scope: 'api' });
     await expect(store.readAccount(origin, oauth.id, oauth.credentialRevision + 1)).resolves.toBeNull();
-    await expect(store.listAccounts(origin)).resolves.toHaveLength(2);
+    await expect(store.listAccounts(origin)).resolves.toHaveLength(1);
   });
 
-  it('targets one credential and keeps its provider user available while a sibling remains valid', async () => {
+  it('collapses historical duplicate credentials for one provider user on reconnect', async () => {
+    const { filePath, store } = await makeStore();
+    const origin = 'https://gitlab.example.com';
+    await fs.writeFile(filePath, JSON.stringify({ version: 2, providers: { gitlab: { instances: { [origin]: {
+      activeCredentialId: 'legacy-two',
+      credentials: [
+        { credentialId: 'legacy-one', revision: 1, providerUserId: `${origin}#1`, token: 'one', user: { id: 1, login: 'one' }, source: 'pat', scope: '', status: 'valid' },
+        { credentialId: 'legacy-two', revision: 1, providerUserId: `${origin}#1`, token: 'two', user: { id: 1, login: 'one' }, source: 'oauth', scope: '', status: 'valid' },
+      ],
+      cliDisabled: false,
+      cliActive: false,
+    } } } } }), 'utf8');
+
+    const credential = await store.setAccount(origin, { token: 'fresh', user: { id: 1, login: 'one' }, source: 'pat' });
+
+    expect(credential.id).toBe('legacy-two');
+    await expect(store.listAccounts(origin)).resolves.toHaveLength(1);
+    await expect(store.readAccount(origin, 'legacy-one')).resolves.toBeNull();
+    expect(JSON.parse(await fs.readFile(filePath, 'utf8')).providers.gitlab.instances[origin].credentials).toHaveLength(1);
+  });
+
+  it('targets one credential and keeps a different provider user valid', async () => {
     const { store } = await makeStore();
     const origin = 'https://gitlab.example.com';
     const first = await store.setAccount(origin, { token: 'one', user: { id: 1, login: 'one' }, source: 'pat' });
-    const second = await store.setAccount(origin, { token: 'two', user: { id: 1, login: 'one' }, source: 'oauth' });
+    const second = await store.setAccount(origin, { token: 'two', user: { id: 2, login: 'two' }, source: 'oauth' });
 
     await expect(store.markAccountInvalid(origin, first.id, 'unauthorized')).resolves.toBe(true);
     await expect(store.readAccount(origin, first.id)).resolves.toBeNull();
@@ -336,6 +356,57 @@ describe('source-control auth storage', () => {
     expect(written.providers.github.instances[host].sshUrl).toBe(sshUrl);
   });
 
+  it('reads a null SSH address and omits it on the next write', async () => {
+    const { filePath, store } = await makeStore();
+    const origin = 'https://gitlab.example.com';
+    await fs.writeFile(filePath, JSON.stringify({
+      version: 5,
+      providers: {
+        gitlab: { instances: { [origin]: {
+          activeCredentialId: null, credentials: [], cliDisabled: true, cliActive: false, sshUrl: null,
+        } } },
+        github: { instances: {} },
+      },
+    }), 'utf8');
+
+    await expect(store.readInstance(origin)).resolves.toEqual({
+      activeAccountId: null, accounts: [], cliDisabled: true, cliActive: false,
+    });
+    await store.setCliDisabled(origin, false);
+    expect(JSON.parse(await fs.readFile(filePath, 'utf8'))).toEqual({
+      version: 2, providers: { gitlab: { instances: {} } },
+    });
+  });
+
+  it.each([false, 0, '', [], {}])('refuses an unnormalized SSH address %j without rewriting it', async (sshUrl) => {
+    const { filePath, store } = await makeStore();
+    const original = {
+      version: 5,
+      providers: {
+        gitlab: { instances: { 'https://gitlab.example.com': {
+          activeCredentialId: null, credentials: [], cliDisabled: false, cliActive: false, sshUrl,
+        } } },
+        github: { instances: {} },
+      },
+    };
+    await fs.writeFile(filePath, JSON.stringify(original), 'utf8');
+    await expect(store.listInstances()).rejects.toMatchObject({ code: 'INVALID_SOURCE_CONTROL_AUTH' });
+    expect(JSON.parse(await fs.readFile(filePath, 'utf8'))).toEqual(original);
+  });
+
+  it('omits nullable profile fields while preserving extension string identities', async () => {
+    const { store } = await makeStore();
+    const origin = 'https://forge.example.com';
+    const credential = await store.section('ext-forge').setAccount(origin, {
+      token: 'pat', source: 'pat',
+      user: { id: 'external-user', login: 'person', name: null, email: null, avatarUrl: null },
+    });
+    expect(credential.user).toEqual({ id: 'external-user', login: 'person' });
+    await expect(store.section('ext-forge').readAccount(origin, credential.id)).resolves.toMatchObject({
+      user: { id: 'external-user', login: 'person' },
+    });
+  });
+
   it('keeps version 5 while an unparsed extra section carries an SSH address, and returns to version 4 once it is cleared', async () => {
     const { filePath } = await makeStore();
     const origin = 'https://gitea.example.com';
@@ -446,7 +517,7 @@ describe('source-control auth storage', () => {
       const refresh = vi.fn(async () => { throw Object.assign(new Error('invalid_grant'), { kind: 'invalid-token' }); });
       const store = await renewingStore(refresh, clock);
       const oauth = await store.setAccount(origin, { token: 'stale', user, source: 'oauth', refreshToken: 'refresh-1', expiresIn: 60 });
-      const pat = await store.setAccount(origin, { token: 'pat', user, source: 'pat', refreshToken: 'ignored', expiresIn: 60 });
+      const pat = await store.setAccount(origin, { token: 'pat', user: { id: user.id + 1, login: 'pat-user' }, source: 'pat', refreshToken: 'ignored', expiresIn: 60 });
 
       await expect(store.readAccount(origin, oauth.id)).resolves.toMatchObject({ token: 'stale', status: 'valid' });
       await expect(store.renewAccount(origin, oauth.id)).resolves.toBe(false);

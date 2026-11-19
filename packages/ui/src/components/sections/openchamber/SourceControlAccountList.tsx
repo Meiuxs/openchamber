@@ -5,7 +5,7 @@ import type { SourceControlAuthAccount } from '@/lib/api/types';
 
 type SourceControlAccountGroup = {
   key: string;
-  accounts: SourceControlAuthAccount[];
+  account: SourceControlAuthAccount;
 };
 
 const groupSourceControlAccounts = (
@@ -16,20 +16,16 @@ const groupSourceControlAccounts = (
     const key = JSON.stringify([
       account.user.provider,
       account.user.instance,
-      account.user.id,
+      account.source === 'cli' ? `cli:${account.user.id}` : account.user.id,
     ]);
     const group = groups.get(key);
-    if (group) {
-      group.accounts.push(account);
-    } else {
-      groups.set(key, { key, accounts: [account] });
+    if (!group || (account.current && !group.account.current)
+      || (account.status === 'valid' && group.account.status !== 'valid' && !group.account.current)) {
+      groups.set(key, { key, account });
     }
   }
   return Array.from(groups.values());
 };
-
-const credentialHandle = (id: string): string | null =>
-  /[0-9a-f]{8}(?=-[0-9a-f]{4}-)/i.exec(id)?.[0] ?? null;
 
 const ProviderMark: React.FC<{ provider: string }> = ({ provider }) => (
   <ProviderIcon descriptor={useSourceControlProvider(provider)} variant="fill" className="size-4 text-muted-foreground" />
@@ -54,7 +50,10 @@ export const SourceControlAccountList: React.FC<SourceControlAccountListProps> =
 }) => (
   <div className="divide-y divide-[var(--surface-subtle)]">
     {groupSourceControlAccounts(accounts).map((group) => {
-      const user = group.accounts[0].user;
+      const { account } = group;
+      const user = account.user;
+      const source = sourceLabel(account);
+      const status = statusLabel(account);
       return (
         <div key={group.key} className="py-3 first:pt-0 last:pb-0">
           <div className="flex min-w-0 items-center gap-3">
@@ -80,34 +79,16 @@ export const SourceControlAccountList: React.FC<SourceControlAccountListProps> =
               </div>
             </div>
           </div>
-          <div className="ms-12 mt-2 divide-y divide-[var(--surface-subtle)]">
-            {group.accounts.map((account) => {
-              const source = sourceLabel(account);
-              const status = statusLabel(account);
-              const handle = group.accounts.some((other) => other !== account && sourceLabel(other) === source)
-                ? credentialHandle(account.id) : null;
-              return (
-                <div
-                  key={account.id}
-                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2 first:pt-0 last:pb-0"
-                >
-                  <div className="flex flex-wrap items-center gap-1.5 typography-micro text-muted-foreground">
-                    <span>{source}</span>
-                    {status ? <>
-                      <span aria-hidden="true">·</span>
-                      <span className="text-[var(--status-warning)]">{status}</span>
-                    </> : null}
-                    {handle ? <>
-                      <span aria-hidden="true">·</span>
-                      <span className="font-mono">{handle}</span>
-                    </> : null}
-                    {group.accounts.length > 1 && account.current
-                      ? <span className="oc-tile-inset rounded-full px-1.5">{currentLabel}</span> : null}
-                  </div>
-                  <div className="ms-auto flex flex-wrap justify-end gap-2">{renderActions(account)}</div>
-                </div>
-              );
-            })}
+          <div className="ms-12 mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <div className="flex flex-wrap items-center gap-1.5 typography-micro text-muted-foreground">
+              <span>{source}</span>
+              {status ? <>
+                <span aria-hidden="true">·</span>
+                <span className="text-[var(--status-warning)]">{status}</span>
+              </> : null}
+              {account.current ? <span className="oc-tile-inset rounded-full px-1.5">{currentLabel}</span> : null}
+            </div>
+            <div className="ms-auto flex flex-wrap justify-end gap-2">{renderActions(account)}</div>
           </div>
         </div>
       );
