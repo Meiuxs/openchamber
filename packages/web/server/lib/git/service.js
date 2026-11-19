@@ -5016,9 +5016,11 @@ export async function setWorktreePinned(directory, pinned, list = null, now = Da
 export async function isWorktreeDirectoryPinned(directory) {
   const directoryPath = normalizeDirectoryPath(directory);
   if (!directoryPath || !fs.existsSync(directoryPath)) return false;
-  const result = await runGitCommand(directoryPath, ['rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir', '--abbrev-ref', 'HEAD']);
+  const result = await runGitCommand(directoryPath, ['rev-parse', '--absolute-git-dir', '--git-common-dir', '--abbrev-ref', 'HEAD']);
   if (!result.success) return false;
-  const [gitDir, commonDir, branch] = String(result.stdout || '').split(/\r?\n/);
+  const [rawGitDir, rawCommonDir, branch] = String(result.stdout || '').split(/\r?\n/).map((line) => line.trim());
+  const gitDir = rawGitDir ? path.resolve(directoryPath, rawGitDir) : '';
+  const commonDir = rawCommonDir ? path.resolve(directoryPath, rawCommonDir) : '';
   if (!gitDir || !commonDir || gitDir === commonDir || !branch || branch === 'HEAD') return false;
   return parseBranchPin(await readGitConfigValue(directoryPath, `branch.${branch}.openchamberPinned`)) !== null;
 }

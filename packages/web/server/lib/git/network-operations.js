@@ -1772,7 +1772,8 @@ export function createNetworkOperations({
             'fetch', '--atomic', '--no-tags', '--no-prune', '--no-prune-tags', '--no-recurse-submodules', '--refmap=',
             '--', plan.rawEndpoint, plan.fetchRefspec,
           ], context, deadline, { transfer: true }).catch((error) => {
-            if (error?.code === 129 && !controls.isCancellationRequested()) {
+            if (!controls.isCancellationRequested() && (error?.code === 129
+              || /unknown (option|switch)/i.test(String(error?.stderr || error?.message || '')))) {
               return commandResult(plan, controls, [
                 'fetch', '--no-tags', '--no-prune', '--no-prune-tags', '--no-recurse-submodules', '--refmap=',
                 '--', plan.rawEndpoint, plan.fetchRefspec,

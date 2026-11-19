@@ -772,6 +772,25 @@ describe('Git network operations', () => {
     expect(JSON.stringify(auditStore.plan.mock.calls)).not.toContain(ENDPOINT);
   });
 
+  it('retries the remote Fetch without --atomic when the host Git rejects the option', async () => {
+    const operation = setup({ mode: 'managed', spawnResponder: ({ args }) => {
+      if (args[0] === 'config') return { code: 0, stdout: '+refs/heads/*:refs/remotes/publish/*\0' };
+      if (args.includes('--atomic')) return { code: 129, stderr: "error: unknown option `atomic'" };
+      return { code: 0 };
+    } });
+    const planned = await operation.service.plan({ ...remoteFetchRequest(), transportMode: 'managed' });
+    const result = await operation.service.execute(planned.operationId);
+    expect(result.state).toBe('succeeded');
+    const transfers = operation.calls.filter((call) => call.args.includes('fetch'));
+    expect(transfers).toHaveLength(2);
+    expect(transfers[0].args).toContain('--atomic');
+    expect(transfers[1].args).not.toContain('--atomic');
+    expect(transfers.slice(1).map((call) => call.args.slice(call.args.indexOf('fetch')))).toEqual([
+      ['fetch', '--no-tags', '--no-prune', '--no-prune-tags', '--no-recurse-submodules', '--refmap=',
+        '--', ENDPOINT, '+refs/heads/*:refs/remotes/publish/*'],
+    ]);
+  });
+
   it.each([1, 2])('remote Fetch rejects mapping drift at execution validation %s before transfer', async (changeAt) => {
     let reads = 0;
     const operation = setup({ mode: 'system', spawnResponder: () => ({ code: 0, stdout: reads++ >= changeAt

@@ -8067,6 +8067,36 @@ describe('worktree task titles', () => {
     expect(await isWorktreeDirectoryPinned(path.join(repo, 'missing'))).toBe(false);
   });
 
+  // Git before 2.31 does not know --path-format=absolute and, instead of
+  // failing, prints the option to stdout and exits 0 (UOS ships 2.20.1). The
+  // echoed option must never shift the parsed branch (same constraint as
+  // resolveRepositoryGitPaths).
+  it('keeps detecting a pinned worktree when Git echoes an unknown option to stdout', async () => {
+    if (!canRunGit() || process.platform === 'win32') return; // the wrapper is a shell script
+    const { repo, linked } = createLinkedWorktree();
+    await setWorktreePinned(linked, true, 'release', 1234);
+
+    const wrapperDirectory = createTempDir();
+    const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+    fs.writeFileSync(path.join(wrapperDirectory, 'git'), `#!/bin/sh
+if [ "$1" = "rev-parse" ] && [ "$3" = "--path-format=absolute" ]; then
+  echo "--path-format=absolute"
+  "$REAL_GIT" rev-parse --git-dir --git-common-dir --abbrev-ref HEAD
+  exit $?
+fi
+exec "$REAL_GIT" "$@"
+`);
+    fs.chmodSync(path.join(wrapperDirectory, 'git'), 0o755);
+    vi.stubEnv('PATH', `${wrapperDirectory}${path.delimiter}${process.env.PATH || ''}`);
+    vi.stubEnv('REAL_GIT', realGit);
+    try {
+      expect(await isWorktreeDirectoryPinned(linked)).toBe(true);
+      expect(await isWorktreeDirectoryPinned(repo)).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('files a pinned worktree into a pin list and back, keeping the first pin time', async () => {
     const { repo, linked } = createLinkedWorktree();
     const entryOf = async () => (await getWorktrees(repo)).find((worktree) => fs.realpathSync(worktree.path) === fs.realpathSync(linked));
