@@ -3,7 +3,7 @@ import { parseGitLabUser } from './user.js';
 
 export interface GitLabTokenVerificationOptions {
   origin: string;
-  token: string;
+  token: string | undefined;
   fetch?: typeof fetch;
   timeoutMs?: number;
 }
@@ -14,13 +14,13 @@ interface VerificationFailure {
 
 const isVerificationFailure = (value: unknown): value is VerificationFailure => value != null;
 
-const credentialHeaders = (token: string): Record<string, string>[] => [
+const credentialHeaders = (token: string | undefined): Record<string, string>[] => [
   { Accept: 'application/json', Authorization: `Bearer ${token}` },
-  { Accept: 'application/json', 'PRIVATE-TOKEN': token },
+  { Accept: 'application/json', 'PRIVATE-TOKEN': `${token}` },
 ];
 
 export async function verifyGitLabToken({ origin, token, fetch: fetchImpl = fetch, timeoutMs = 10_000 }: GitLabTokenVerificationOptions) {
-  let response;
+  let response: Response | undefined;
   for (const headers of credentialHeaders(token)) {
     try {
       response = await fetchWithTimeout(fetchImpl, `${origin}/api/v4/user`, { headers }, timeoutMs);
@@ -30,6 +30,7 @@ export async function verifyGitLabToken({ origin, token, fetch: fetchImpl = fetc
     }
     if (response.status !== 401) break;
   }
+  if (response === undefined) throw new GitLabRequestError('unreachable', 'GitLab instance is unreachable');
   if (response.status === 401) throw new GitLabRequestError('invalid-token', 'GitLab token is invalid', response.status);
   if (response.status === 403) throw new GitLabRequestError('unavailable', 'GitLab token verification is forbidden', response.status);
   if (response.status === 429 || response.status >= 500) throw new GitLabRequestError('temporarily-unavailable', 'GitLab is temporarily unavailable', response.status);

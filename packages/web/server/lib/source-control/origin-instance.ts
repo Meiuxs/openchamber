@@ -6,7 +6,7 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 const isLoopbackHost = (hostname: string) => LOOPBACK_HOSTS.has(String(hostname).toLowerCase());
 
 export function normalizeOriginInstance(
-  value: string,
+  value: string | undefined,
   { label, insecureOrigins = null }: { label: string; insecureOrigins?: Set<string> | null },
 ) {
   const raw = isString(value) ? value.trim() : '';

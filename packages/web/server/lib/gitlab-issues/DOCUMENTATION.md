@@ -6,13 +6,13 @@ The design and requirements live in `docs/gitlab-issue-spec/gitlab-issue-automat
 
 This module turns one labeled GitLab issue into a reviewable merge request. It owns the polling dispatcher, the run ledger, the GitLab API adapter, the worktree and push boundary, the five prompt contracts (triage, plan, implement, review, feedback), and the read/act routes of the runs panel. It does not merge merge requests, it does not create issues, and it does not fix CI failures after a merge request opens. After a merge request opens it does answer reviewer comments: a bounded run of comment-driven fix rounds (`addressing`), described below.
 
-- `dispatcher.js` is the timer and the phase loop: project scan cadence, claim, concurrency caps, leases, cancellation, timeout, recovery, triage, review rounds, and merge polling.
-- `ledger.js` is the authoritative phase store at `<data dir>/gitlab-issue-runs.json`, keyed by `origin|projectId|iid`.
-- `machine.js` declares the phases and the only legal transitions.
-- `gitlab.js` parses the issue template, builds branch names, resolves accounts, and wraps the GitBeaker calls the dispatcher uses.
-- `workspace.js` creates and removes worktrees, writes the commit identity, and runs authenticated fetch and push through a one-shot credential lease.
-- `prompts.js` builds the triage, plan, implementation, review, and feedback prompts and validates the agent's structured output.
-- `routes.js` serves the issue-creation route and the panel's read/act routes. The act route changes GitLab labels or posts a command comment as the operator's bound account; it never writes the ledger.
+- `dispatcher.ts` is the timer and the phase loop: project scan cadence, claim, concurrency caps, leases, cancellation, timeout, recovery, triage, review rounds, and merge polling.
+- `ledger.ts` is the authoritative phase store at `<data dir>/gitlab-issue-runs.json`, keyed by `origin|projectId|iid`.
+- `machine.ts` declares the phases and the only legal transitions.
+- `gitlab.ts` parses the issue template, builds branch names, resolves accounts, and wraps the GitBeaker calls the dispatcher uses.
+- `workspace.ts` creates and removes worktrees, writes the commit identity, and runs authenticated fetch and push through a one-shot credential lease.
+- `prompts.ts` builds the triage, plan, implementation, review, and feedback prompts and validates the agent's structured output.
+- `routes.ts` serves the issue-creation route and the panel's read/act routes. The act route changes GitLab labels or posts a command comment as the operator's bound account; it never writes the ledger.
 
 
 The GitLab labels are a mirror for humans. A label change a human makes is read back each tick; a label change the bot makes follows a ledger write.
@@ -230,4 +230,52 @@ The verdict is already written in the comment, so leaving the close to a human w
 ### Why a wrong not-an-issue verdict needs the ledger row removed
 
 Reopening the issue is not enough to make the automation look at it again: `claim()` skips any issue that already has a ledger entry, so the reopened issue stays ignored even after `ai-ready` is re-added. A person who disagrees with the verdict reopens the issue, deletes that `done` row from `<data dir>/gitlab-issue-runs.json`, and adds `ai-ready`; the next scan claims it as a new run.
+
+## Implementation notes
+
+These are the lower-level invariants the source kept as inline comments before the TypeScript migration; they are recorded here so no decision is lost from the code.
+
+### Why a bot note carries a machine-readable header
+
+Every note the automation posts leads with a header the dispatcher parses back, followed by the author's body. The header is the parse contract; the body is what a person reads. The hidden marker described above is what separates the automation's writes from a shared account's, and the header is what the structured readers (plan, evidence, review findings) key on.
+
+### Why an unusable model id is dropped instead of blocking
+
+A configured model is written as `provider/model`, the same shape `defaultModel` uses. An unusable value is dropped at parse time rather than blocking dispatch: the phase falls back to the default model so a stale setting cannot stall every run on the project.
+
+### Why label readers accept two shapes
+
+Issue labels come back as plain strings or as `{ name }` objects depending on the endpoint and the `withLabelsDetails` flag. Every reader funnels through one normalizer so a label check behaves the same whichever endpoint supplied it.
+
+### Why prompt closers are neutralized
+
+Issue text and review findings are untrusted. A payload containing one of the closing tags could end its `<... untrusted="true">` block early and speak as the instructions. Neutralizing the closing tag keeps the text readable to a person while the block stays intact.
+
+### Why the review-revision loop has its own bound
+
+A reviewer sending a run back is bounded by `REVIEW_MAX_REVISIONS`, not by the retry budget, and a revision round starts from a clean attempt count. The same holds for triage and feedback rounds: they are bounded by their own outcome, not by infrastructure attempts. This is why a triage pass resetting `attempts` matches how the review rounds already behave.
+
+### Why the feedback reply quotes the round
+
+The reply to a bare mention, and the note that opens a feedback round, name what the round will address so a late reviewer can tell which comments were heard. They are sent to the channel the round was triggered from, and they use the mention command against the bot's real username — a hard-coded name would break on any other instance.
+
+### Why the issue-creation dialog is a confirmation, not a second entry point
+
+The create route files the issue through the project's configured bot account without `ai-ready`. The visual dialog is a confirmation step, not a second automation entry: a person still decides when the dispatcher picks the issue up.
+
+### Why path and branch inputs are normalized at the boundary
+
+The settings sanitizer stores a Windows path with backslashes while the UI sends the same directory with forward slashes; the comparison normalizes both to one spelling. A backtick in a typed target branch would end the delimited `目标分支:` value the dispatcher parses, so it is rejected at input. The branch list the dialog offers is the configured set, default branch first, so a typed target cannot name a ref the instance does not have and claim an issue that then blocks with `branch-missing`.
+
+### Why errors are logged without the raw response
+
+A GitLab error object can carry the authenticated request — and its token. The logger extracts only the message and status fields, never the whole error, so a failed call cannot print a credential into the log. A failed ledger read is likewise surfaced as an error, never an empty list, so a broken ledger cannot masquerade as "no runs".
+
+### Why the panel can read and act when the bot token is broken
+
+The panel resolves the project's instance and path without requiring a usable bot account, so it still reads and acts when the bot credential is what broke. It reads a run's issue state from GitLab through the bot account when one exists and through the triggerer otherwise — both have seen the issue, and neither is asked for a permission it never needed. Comment commands the operator posts through the panel are read by the dispatcher as the acting user, so the run's triggerer and the audit trail stay with that account.
+
+### Why the rail is drawn up to the blocking stage
+
+The panel draws the rail up to the stage that blocked, and a session start is recorded as an event just like a phase move, so the step line can show every move without the server keeping any UI text.
 

@@ -35,7 +35,7 @@ export const useSmallModelStore = create<SmallModelStore>()((set, get) => ({
         const query = trimmed ? `?directory=${encodeURIComponent(trimmed)}` : '';
         const response = await runtimeFetch(`/api/small-model${query}`);
         if (!response.ok) return;
-        // SAFETY: `GET /api/small-model` (server `small-model/routes.js`)
+        // SAFETY: `GET /api/small-model` (server `small-model/routes.ts`)
         // answers `{ available: boolean, ... }`; only that field is read and
         // anything but a real boolean is treated as "no answer" below.
         const payload = (await response.json().catch(() => null)) as { available?: boolean } | null;

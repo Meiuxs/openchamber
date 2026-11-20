@@ -1,3 +1,4 @@
+import { asNonEmptyString } from '../shared/guards.js';
 import { getTrustRefusal } from './client.js';
 import type { Application } from '../shared/http-contracts.js';
 import type { GenerationOptions } from './index.js';
@@ -12,6 +13,8 @@ interface FailureFields {
   message?: unknown;
   statusCode?: unknown;
   code?: unknown;
+  _tag?: unknown;
+  reason?: unknown;
 }
 
 interface FailureResponse {
@@ -75,16 +78,20 @@ export function registerSmallModelRoutes(app: Application, { getSmallModelServic
         return res.status(403).json({ error: refusal.message, code: refusal.code, directory: refusal.directory });
       }
       const failure = hasFailureFields(error) ? error : undefined;
-      const statusCode = Number(failure?.statusCode) || 500;
+      const providerError = failure?._tag === 'ProviderRequestError' && failure?.reason === 'provider';
+      const statusCode = providerError ? 502 : Number(failure?.statusCode) || 500;
       if (statusCode >= 500) {
         console.error('Small model generation failed:', error);
       }
       const payload: FailureResponse = {
-        error: statusCode === 404 || failure?.code === 'small-model-unavailable' || failure?.code === 'generation-timeout'
-          ? (failure?.message || 'No small model is available')
-          : 'The selected Small Model could not complete this action. Choose another model in Settings → Sessions → Small Model and try again.',
+        error: providerError
+          ? `The provider refused: ${asNonEmptyString(failure?.message) || 'The request failed'}`
+          : statusCode === 404 || failure?.code === 'small-model-unavailable' || failure?.code === 'generation-timeout'
+            ? (failure?.message || 'No small model is available')
+            : 'The selected Small Model could not complete this action. Choose another model in Settings → Sessions → Small Model and try again.',
       };
-      if (failure?.code) payload.code = failure.code;
+      if (providerError) payload.code = 'provider-error';
+      else if (failure?.code) payload.code = failure.code;
       res.status(statusCode).json(payload);
     }
   });

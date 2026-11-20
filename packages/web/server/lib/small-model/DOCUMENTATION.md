@@ -253,6 +253,12 @@ provider, such as prompt enhancement, stop there instead of waiting out their
 own deadline. Rate limits and overloaded providers keep the generic response:
 another model on that provider may still answer.
 
+The route's own rationale: OpenCode tags a provider that refused the call
+itself (connection refused, a 5xx from upstream). The message names the cause,
+and asking the same provider again through another route cannot change the
+answer. A rate limit or overloaded provider stays on the generic path: another
+model on that provider may still answer.
+
 ## Structured output
 
 `/api/experimental/generate/text` has no structured-output mode. `responseSchema` is therefore

@@ -120,17 +120,46 @@ them. Renewal keeps only a nonempty string token and a positive finite expiry.
 Process output becomes text only after the shared string predicate accepts it.
 Numeric process exit codes and transport failure codes remain separate checks.
 
-### Why resource orchestration remains JavaScript
+### Why resource replies keep their wire types
 
 GitBeaker's `ProjectSchema.forked_from_project`,
 `MergeRequestSchema.head_pipeline`, `MergeRequestSchema.pipeline` and
-`MergeRequestSchema.user` are unchecked extension fields. Legacy resource paths
-read their properties and can pass a truthy, unchecked fork ID into
-`Projects.show`. Its declared project-ID parameter accepts only strings and
-numbers. Converting this boundary requires retaining the unchecked values and
-GitBeaker's runtime coercion, rather than declaring validated project metadata.
-The requester also exposes GraphQL bodies as a broad response union. The
-resource and provider implementations retain their JavaScript boundary.
+`MergeRequestSchema.user` are unchecked extension fields. The local GitBeaker
+declaration reflects the requester factory's JSON, text, Blob and stream
+responses and GitBeaker's expanded page shape. It promises no endpoint-specific
+schema. `Projects.show` stringifies unchecked fork IDs before
+encoding them; `RepositoryFiles.showRaw` passes its ref to the query formatter.
+GraphQL responses need their own field checks since the requester also returns
+text, blobs and streams. Draft note positions and response fields forwarded
+without validation retain their wire types.
+
+### Why mutation arguments are typed by route
+
+The route's normalizer establishes which fields the write and reconciliation
+can use. The mutation table keeps those contracts together and preserves the
+stored kind and digest fields. A draft comment always requires text; an
+ordinary review can publish drafts without supplying text.
+
+### Why payload checks remain in the mappers
+
+No transport schema validates resource payloads before the mappers see them.
+The mappers retain checks for primitive strings, integers, plain objects and
+arrays. A diff accepts either path as a nonempty string, then selects the first
+truthy path, which may be a non-string value from a malformed response.
+
+Request failures may carry arbitrary `code` and `name` fields. Classification
+still checks the type of `code` before using its string prefix. Fetch failures
+can supply a non-string error message; the request error keeps Error's message
+coercion and leaves the message absent for `undefined`.
+
+### Why mapper paths retain unchecked values
+
+Diff paths validate either path before selecting the first truthy raw value.
+A truthy non-string `new_path` with a valid `old_path` therefore passes through
+unchanged. Notes validate the combined fallback, so the same input omits the
+position. Compound raw-value selections remain `unknown` in the output contract
+unless the selected value itself is narrowed. Numeric note lines retain the
+nonnegative-integer check, including zero.
 
 ### Why repository string checks remain at the input boundary
 
@@ -169,3 +198,40 @@ A personal access token travels as a bearer token on current GitLab releases. Se
 ### instance.ts
 
 No fork-local decisions were carried in this module's comments.
+
+### resources.ts — version probe, legacy diff reads, positioned-note fallback
+
+The fork carried these design notes in `resources.ts`; upstream moved them here
+during the JS→TS migration so the product `.ts` file stays comment-free.
+
+- **Version probe for 12.7.** GitLab 12.7 (the intranet deployment) has no
+  version-aware feature flags. One `GET /api/v4/version` probe, cached per client
+  in a `WeakMap`, decides which endpoints and which draft-title vocabulary that
+  instance understands. The probe is shared by the review-ability degrader and
+  the draft/ready title rules; an unreadable version leaves every ability on.
+- **Legacy diff reads.** GitLab before 15.7 has no merge-request diff list;
+  `/changes` is the read it replaced. An instance that answered once is
+  remembered in a process-local set, so the probing 404 costs one request per
+  process rather than one per read. `readMergeRequestDiffs` returns every changed
+  file from the diff list, or from `/changes` on an older instance. Only the
+  fallback's success proves the endpoint is missing — a merge request this
+  account cannot read answers 404 too — so a failed fallback propagates and is
+  never remembered as a legacy instance. The 30-per-page cap and the overflow
+  failure stay with this read.
+- **Positioned-note fallback.** When the instance has no draft-note review (or
+  rejected it with 404), a positioned note is published immediately instead of
+  being left as a draft; this is the same degradation the review-ability note
+  above describes. The `MergeRequestNotes.create` call is cast through `unknown`
+  because GitBeaker's declaration omits the `position` option that the deployed
+  instance accepts; the cast returns a note whose integer `id` is the only field
+  read. A `// SAFETY:` comment records that checked invariant, and an inline
+  `oxlint-disable-next-line` suppresses `no-chained-type-assertions` — removing
+  the double assertion would mean editing the vendored declaration, not the
+  local logic or its types.
+
+Related fork decisions are already recorded above and are unchanged here: the
+`WIP:`/`Draft:` prefix rules (*Why review abilities degrade on instances before
+13.2*, and the draft-state invariant), the response-shape detection for the
+reviewers field on older instances (the `/pr/reviewers` invariant), and the
+`detailed_merge_status`/`merge_status` merge-state mapping kept in `resources.ts`
+and `mappers.ts`.

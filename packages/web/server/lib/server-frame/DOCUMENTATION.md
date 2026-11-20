@@ -42,18 +42,34 @@ The server port getter returns null before a port is known. The local-file
 collector accepts an optional number and selects a web log only for a positive
 integer, so omitting the null port preserves its source selection.
 
+### Why GitLab issue automation has a second dispatcher with its own broker
+
+GitLab issue automation runs a second dispatcher beside the local-issue one. It owns a dedicated credential broker so its leases never inherit a repository binding or a persistent credential helper. The broker starts on the first lease, so a machine that never enables automation never opens the loopback listener. Server composition injects this dispatcher and broker into route registration (`registerGitlabIssueRoutes`) and gives both the dispatcher and the panel the same sanitized projects, binding service, auth store, credential resolver, worktree bootstrap store and credential broker, so the injected wiring is the only path by which automation reaches those dependencies.
+
+### Why automation worktrees run the project's own setup commands
+
+The project's worktree setup commands (a dependency install, say) belong to the automation's worktrees exactly as they do to worktrees a person makes. The dispatcher's `resolveWorktreeSetup` reads that same project setup, and its `worktreeSetupState` reports `ready`, `failed` or `pending`, so automation sessions wait for setup instead of racing it.
+
+### Why the GitLab issue panel shares the dispatcher's in-memory ledger
+
+The panel route is injected with the same dispatcher instance (and its in-memory ledger) that the dispatcher writes, so a tick and a poll never disagree about an entry; `ledgerPath` is the on-disk name for that same ledger.
+
+### Why stopFolderWatches stops both folder watches
+
+`stopFolderWatches` stops both the theme folder watch and the folder-installed extensions watch in one call, clearing each handle so a later startup recreates both.
+
 ## Modules
 
-- `packages/web/server/lib/server-frame/cli-options.js`: CLI/environment option parsing for server startup arguments.
-- `packages/web/server/lib/server-frame/cli-entry-runtime.js`: CLI entrypoint runtime that detects direct execution, parses CLI options, and starts server bootstrap.
-- `packages/web/server/lib/server-frame/bootstrap-runtime.js`: base app bootstrap runtime for status/auth/tts/notification/OpenChamber route wiring.
-- `packages/web/server/lib/server-frame/core-routes.js`: server status/system routes, auth/access guard routes, and settings utility route registration.
-- `packages/web/server/lib/server-frame/server-utils-runtime.js`: shared server runtime utilities for OpenCode proxy wiring, OpenCode port/readiness helpers, and snapshot fetchers.
-- `packages/web/server/lib/server-frame/static-routes-runtime.js`: static asset/SPA fallback route registration and manifest route wiring.
-- `packages/web/server/lib/server-frame/feature-routes-runtime.js`: feature route composition runtime for dynamic import-backed config/skill/provider route registration. Source-control provider registration is delegated to `lib/source-control/routes.js`. One exact persisted-credential resolver, including optional revision pinning, is shared by transport binding, clone planning, contributor transfer, execution, and safe HTTPS binding-read presentation. The managed SSH inventory supplies the matching verified-fingerprint projection without exposing its key record or path. Server composition supplies one durable worktree-bootstrap store to both Git and OpenChamber-session routes; the runtime exposes a lazy bound-checkout hydration adapter so session-created worktrees use the same local inspection and exact parent authority rules as Git-route worktrees.
-- `packages/web/server/lib/server-frame/startup-pipeline-runtime.js`: server startup tail orchestration runtime for terminal/proxy/static/start-listen flow.
-- `packages/web/server/lib/server-frame/server-startup-runtime.js`: server listen/startup tunnel flow and process/signal handler orchestration runtime.
-- `packages/web/server/lib/server-frame/shutdown-runtime.js`: graceful shutdown orchestration runtime for watcher/session/guest-services/terminal/process/server teardown. It stops [chat-directory cleanup](../chat-directories/DOCUMENTATION.md) before the watcher and OpenCode so pending checks cannot start a removal during teardown.
+- `cli-options.ts`: CLI and environment option parsing for server startup.
+- `cli-entry-runtime.ts`: direct-execution detection, option parsing and server bootstrap.
+- `bootstrap-runtime.ts`: base app route wiring.
+- `core-routes.ts`: status, auth, access and settings utility routes.
+- `server-utils-runtime.ts`: OpenCode proxy wiring, readiness, path and snapshot helpers.
+- `static-routes-runtime.ts`: static assets, SPA fallback and manifest route wiring.
+- `packages/web/server/lib/server-frame/feature-routes-runtime.ts`: feature route composition runtime for dynamic import-backed config/skill/provider route registration. Source-control provider registration is delegated to `lib/source-control/routes.js`. One exact persisted-credential resolver, including optional revision pinning, is shared by transport binding, clone planning, contributor transfer, execution, and safe HTTPS binding-read presentation. The managed SSH inventory supplies the matching verified-fingerprint projection without exposing its key record or path. Server composition supplies one durable worktree-bootstrap store to both Git and OpenChamber-session routes; the runtime exposes a lazy bound-checkout hydration adapter so session-created worktrees use the same local inspection and exact parent authority rules as Git-route worktrees.
+- `startup-pipeline-runtime.ts`: startup orchestration for terminal, proxy, static routes and listener.
+- `server-startup-runtime.ts`: listener startup, tunnel startup and process handlers.
+- `shutdown-runtime.ts`: graceful teardown. It stops [chat-directory cleanup](../chat-directories/DOCUMENTATION.md) before the watcher and OpenCode so pending checks cannot start a removal during teardown.
 
 ## Public exports (bootstrap-runtime.js)
 - `createBootstrapRuntime(dependencies)`: creates runtime for base app route bootstrap and UI auth controller initialization.
@@ -128,7 +144,7 @@ integer, so omitting the null port preserves its source selection.
 - Returned API:
   - `registerStaticRoutes(app)`
 
-## Public exports (feature-routes-runtime.js)
+## Public exports (feature-routes-runtime.ts)
 - `createFeatureRoutesRuntime(dependencies)`: creates runtime for main feature route registration orchestration.
 - Returned API:
   - `registerRoutes(app, routeDependencies)`

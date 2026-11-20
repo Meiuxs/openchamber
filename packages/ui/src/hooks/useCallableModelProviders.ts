@@ -21,7 +21,7 @@ export function useCallableModelProviders(enabled = true): string[] | undefined 
           headers: { Accept: 'application/json' },
         });
         if (!response.ok) return;
-        // SAFETY: `GET /api/small-model` (server `small-model/routes.js`)
+        // SAFETY: `GET /api/small-model` (server `small-model/routes.ts`)
         // answers `{ authenticatedProviders: string[], ... }`; the array check
         // and the string filter below reject anything else.
         const payload = (await response.json().catch(() => null)) as { authenticatedProviders?: unknown } | null;

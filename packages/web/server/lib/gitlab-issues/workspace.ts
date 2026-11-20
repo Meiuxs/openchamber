@@ -1,0 +1,250 @@
+import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { createWorktree as defaultCreateWorktree, removeWorktree as defaultRemoveWorktree } from '../git/service.js';
+import type { BootstrapStore, WorktreeCreateInput, WorktreeServerOptions, WorktreeRemovalInput } from '../git/service-contracts.js';
+import type { createGitCredentialBroker } from '../git/credential-broker.js';
+import { isValidGitRefName } from './gitlab.js';
+
+type CredentialEndpoint = { protocol: string; host: string; port: number; path: string };
+
+export interface IssueCredential {
+  actor: { provider: string; instance: string; accountId: string; login: string | null };
+  username: string;
+  password: string;
+  allowedEndpoint: CredentialEndpoint;
+  endpointAliases?: readonly CredentialEndpoint[] | undefined;
+}
+
+class WorkspaceError extends Error {
+  code: string;
+  exitCode?: number | null | undefined;
+  stdout?: string | undefined;
+  stderr?: string | undefined;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'WorkspaceError';
+    this.code = code;
+  }
+}
+
+const redact = (text: string | null | undefined, secrets: readonly (string | null | undefined)[] | null | undefined) => {
+  let result = String(text ?? '');
+  for (const secret of secrets ?? []) {
+    if (secret) result = result.split(secret).join('[redacted]');
+  }
+  return result.trim();
+};
+
+type WorktreeCreator = (
+  repoPath: string,
+  input: WorktreeCreateInput,
+  options: WorktreeServerOptions & { reuseNodeModules?: boolean | undefined },
+) => Promise<{ path: string }>;
+
+type WorktreeRemover = (repoPath: string, input: WorktreeRemovalInput) => Promise<boolean>;
+
+export interface WorkspaceOptions {
+  spawnImpl?: typeof spawn | undefined;
+  gitBinary?: string | undefined;
+  credentialBroker: ReturnType<typeof createGitCredentialBroker>;
+  createWorktree?: WorktreeCreator | undefined;
+  removeWorktree?: WorktreeRemover | undefined;
+}
+
+interface RunOptions {
+  cwd?: string | undefined;
+  env?: NodeJS.ProcessEnv | undefined;
+  gitConfigArgs?: string[] | undefined;
+  redactionSecrets?: string[] | undefined;
+}
+
+interface CommandResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+interface LeaseEnv {
+  env: NodeJS.ProcessEnv;
+  gitConfigArgs: string[];
+  redactionSecrets: string[];
+}
+
+interface WorktreeRemovalResult {
+  removed: boolean;
+  dirty: boolean;
+  error?: string | undefined;
+}
+
+export function createGitlabIssueWorkspace({
+  spawnImpl = spawn,
+  gitBinary = 'git',
+  credentialBroker,
+  createWorktree = defaultCreateWorktree,
+  removeWorktree = defaultRemoveWorktree,
+}: WorkspaceOptions) {
+  if (!credentialBroker) throw new Error('GitLab issue workspace needs the credential broker');
+
+  const run = (args: string[], { cwd, env = {}, gitConfigArgs = [], redactionSecrets = [] }: RunOptions = {}): Promise<CommandResult> => new Promise((resolve, reject) => {
+    const child = spawnImpl(gitBinary, [...gitConfigArgs, ...args], {
+      cwd,
+      shell: false,
+      env: { ...process.env, ...env },
+      windowsHide: true,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.on('data', (chunk: Buffer | string) => { stdout += chunk.toString(); });
+    child.stderr?.on('data', (chunk: Buffer | string) => { stderr += chunk.toString(); });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve({ code, stdout, stderr });
+      else {
+        const failure = new WorkspaceError('git-failed', redact(stderr || stdout, redactionSecrets));
+        failure.exitCode = code;
+        failure.stdout = stdout;
+        failure.stderr = stderr;
+        reject(failure);
+      }
+    });
+  });
+
+  const withLease = async <Result>({ operationId = randomUUID(), credential, operation }: {
+    operationId?: string | undefined;
+    credential: IssueCredential;
+    operation: (lease: LeaseEnv) => Promise<Result>;
+  }): Promise<Result> => {
+    if (credentialBroker.start instanceof Function) await credentialBroker.start();
+    const lease = credentialBroker.issue({
+      operationId,
+      credential: {
+        mode: 'managed',
+        transport: 'https',
+        username: credential.username,
+        password: credential.password,
+        actor: credential.actor,
+        allowedEndpoint: credential.allowedEndpoint,
+      },
+      endpointAliases: credential.endpointAliases ?? [],
+    });
+    try {
+      return await operation({
+        env: lease.env,
+        gitConfigArgs: [...lease.gitConfigArgs],
+        redactionSecrets: [...(lease.redactionSecrets ?? []), credential.username, credential.password],
+      });
+    } finally {
+      lease.revoke();
+    }
+  };
+
+  const hasUncommittedChanges = async ({ cwd }: { cwd: string }): Promise<boolean> => {
+    const result = await run(['status', '--porcelain'], { cwd });
+    return result.stdout.trim().length > 0;
+  };
+
+  return {
+    run,
+    async remoteUrl({ cwd, remote }: { cwd: string; remote: string }) {
+      const result = await run(['remote', 'get-url', remote], { cwd });
+      return result.stdout.trim();
+    },
+    async fetchBranch({ cwd, remote, branch, credential }: { cwd: string; remote: string; branch: string; credential: IssueCredential }) {
+      return withLease({
+        credential,
+        operation: (lease) => run(
+          ['fetch', '--no-tags', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`],
+          { cwd, ...lease },
+        ),
+      });
+    },
+    async localBranchExists({ cwd, branch }: { cwd: string; branch: string }) {
+      const result = await run(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { cwd })
+        .catch(() => ({ code: 1 }));
+      return result.code === 0;
+    },
+    async createWorktreeFor({
+      repoPath, branch, worktreeName, startRef, mode = 'new', bootstrapStore, startCommand = '',
+    }: {
+      repoPath: string;
+      branch: string;
+      worktreeName: string;
+      startRef?: string | undefined;
+      mode?: string | undefined;
+      bootstrapStore?: BootstrapStore | null | undefined;
+      startCommand?: string | null | undefined;
+    }) {
+      const setup = String(startCommand ?? '').trim();
+      const input: WorktreeCreateInput = mode === 'existing'
+        ? { mode: 'existing', branchName: branch, existingBranch: branch, worktreeName }
+        : { mode: 'new', branchName: branch, worktreeName };
+      if (mode !== 'existing') input.startRef = startRef ?? null;
+      if (setup) input.startCommand = setup;
+      try {
+        return await createWorktree(repoPath, input, { bootstrapStore: bootstrapStore ?? undefined, reuseNodeModules: true });
+      } catch (error) {
+        throw new WorkspaceError('worktree-failed', error instanceof Error ? error.message : String(error));
+      }
+    },
+    async configureIdentity({ cwd, name, email }: { cwd: string; name: string; email: string }) {
+      const signing = await run(['config', '--bool', 'commit.gpgsign'], { cwd })
+        .catch(() => ({ stdout: 'false' }));
+      if (String(signing.stdout).trim() === 'true') {
+        throw new WorkspaceError(
+          'signing-required',
+          'The repository requires signed commits and no triggerer signing key is available',
+        );
+      }
+      const worktreeConfig = await run(['config', '--get', 'extensions.worktreeConfig'], { cwd })
+        .then((result) => result.stdout.trim())
+        .catch(() => '');
+      if (worktreeConfig !== 'true') {
+        await run(['config', 'extensions.worktreeConfig', 'true'], { cwd });
+      }
+      await run(['config', '--worktree', 'user.name', name], { cwd });
+      await run(['config', '--worktree', 'user.email', email], { cwd });
+      await run(['config', '--worktree', 'credential.helper', ''], { cwd });
+    },
+    hasUncommittedChanges,
+    async commitCountSince({ cwd, baseRef }: { cwd: string; baseRef: string }) {
+      const result = await run(['rev-list', '--count', `${baseRef}..HEAD`], { cwd });
+      return Number.parseInt(result.stdout.trim(), 10) || 0;
+    },
+    async hasDiffSince({ cwd, baseRef }: { cwd: string; baseRef: string }) {
+      const exitCode = await run(['diff', '--quiet', `${baseRef}..HEAD`], { cwd })
+        .then(() => 0, (error) => (error instanceof WorkspaceError ? error.exitCode : null));
+      if (exitCode === 0) return false;
+      if (exitCode === 1) return true;
+      throw new WorkspaceError('git-failed', 'Could not compare the branch against the target');
+    },
+    async pushBranch({ cwd, remote, branch, credential }: { cwd: string; remote: string; branch: string; credential: IssueCredential }) {
+      if (!isValidGitRefName(branch)) {
+        throw new WorkspaceError('invalid-branch', `Refusing to push invalid branch name: ${branch}`);
+      }
+      try {
+        await withLease({
+          credential,
+          operation: (lease) => run(
+            ['push', '--no-verify', remote, `HEAD:refs/heads/${branch}`],
+            { cwd, ...lease },
+          ),
+        });
+      } catch (error) {
+        throw new WorkspaceError('push-rejected', error instanceof Error ? error.message : String(error));
+      }
+      const head = await run(['rev-parse', 'HEAD'], { cwd });
+      return { branch, sha: head.stdout.trim() };
+    },
+    async removeWorktreeSafely({ repoPath, worktreePath }: { repoPath: string; worktreePath: string | null | undefined }): Promise<WorktreeRemovalResult> {
+      if (!worktreePath) return { removed: false, dirty: false };
+      if (await hasUncommittedChanges({ cwd: worktreePath })) return { removed: false, dirty: true };
+      try {
+        await removeWorktree(repoPath, { directory: worktreePath });
+        return { removed: true, dirty: false };
+      } catch (error) {
+        return { removed: false, dirty: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+  };
+}

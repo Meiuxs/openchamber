@@ -1,0 +1,1716 @@
+import fs from 'node:fs/promises';
+import { parseGitLabRemoteUrl } from '../gitlab/repo.js';
+import { isRecord, isString } from '../shared/guards.js';
+import { parseModelRef } from '../shared/model-ref.js';
+import type { JsonObject, JsonValue } from '../shared/json-values.js';
+import type { SettingsProject } from '../settings/settings-normalization-runtime.js';
+import type { AuthCredential, createSourceControlAuthStore } from '../source-control/auth-storage.js';
+import type { registerSourceControlRoutes } from '../source-control/routes.js';
+import type { BindingRead } from '../source-control/binding-service-contracts.js';
+import type { createGitCredentialResolver, createHttpsCredentialReference } from '../git/credential-resolver.js';
+import type { createOpenCodeClient } from '../openchamber-sessions/opencode-client.js';
+import type { BootstrapStore } from '../git/service-contracts.js';
+import {
+  BLOCKED_REASONS, PHASES, canTransition, isActivePhase,
+} from './machine.js';
+import {
+  TemplateError, assistantText, buildIssueBranch, findAccountForUser, isBareBotMention, isBotNoteBody, labelNamesOf,
+  matchReusableBranch, parseFeedbackCommand, parseIssueTemplate, resolveAccount, resolveProjectConfig,
+} from './gitlab.js';
+import type { GitlabIssueApi } from './gitlab.js';
+import { withBotNoteMarker } from './bot-notes.js';
+import { createGitlabIssueLedger, ledgerKey } from './ledger.js';
+import type { GitlabIssueLedger, RunEntry, RunEvent, RunSession, NoteWatermarks } from './ledger.js';
+import {
+  AgentOutputError, buildFeedbackPrompt, buildImplementPrompt, buildPlanPrompt, buildReviewPrompt,
+  buildTriagePrompt,
+  formatBareMentionComment, formatBlockedComment, formatEvidenceComment, formatFeedbackAckComment,
+  formatFeedbackPushComment, formatFindingLine, formatMrComment, formatPlanComment,
+  formatReviewComment, formatTriageComment, parseAgentOutput, sessionStageLabel,
+} from './prompts.js';
+import type { EvidenceResult, Finding, FeedbackLine } from './prompts.js';
+import type { IssueCredential } from './workspace.js';
+
+const BUSY_LABELS = ['ai-working', 'ai-plan-review', 'ai-review', 'ai-blocked', 'ai-done'];
+
+const DEFAULT_STARTUP_DELAY_MS = 30_000;
+const DEFAULT_TICK_INTERVAL_MS = 10_000;
+const DEFAULT_LEASE_MS = 5 * 60 * 1000;
+const MAX_ATTEMPTS = 2;
+const REVIEW_MAX_REVISIONS = 3;
+const FEEDBACK_MAX_ROUNDS = 5;
+const FEEDBACK_MIN_ACCESS_LEVEL = 30;
+const SLOT_PHASES: readonly string[] = Object.freeze([
+  PHASES.CLAIMED, PHASES.TRIAGING, PHASES.PLANNING, PHASES.WAITING_APPROVAL,
+  PHASES.PREPARING, PHASES.IMPLEMENTING, PHASES.REVIEWING, PHASES.VERIFYING,
+  PHASES.ADDRESSING,
+]);
+
+const SESSION_FAILED_DETAIL = '会话没有任何输出就结束了（常见原因：模型不可用、额度不足，或会话被中断）。';
+
+const hasLabel = (issue: JsonObject | null | undefined, name: string) => labelNamesOf(issue).includes(name);
+
+interface ErrorFields {
+  message?: unknown;
+  name?: unknown;
+  code?: unknown;
+  status?: unknown;
+  response?: unknown;
+  cause?: unknown;
+  data?: unknown;
+}
+
+const isErrorFields = (error: unknown): error is ErrorFields => isRecord(error);
+const errorFields = <Value>(error: Value): ErrorFields | null => (isErrorFields(error) ? error : null);
+const responseStatus = <Value>(error: Value) => {
+  const fields = errorFields(error);
+  if (!fields) return undefined;
+  const response = errorFields(fields.response);
+  if (response?.status !== undefined) return response.status;
+  const cause = errorFields(fields.cause);
+  return errorFields(cause?.response)?.status;
+};
+const unauthorized = <Value>(error: Value) => responseStatus(error) === 401 || errorFields(error)?.status === 401;
+const errorName = <Value>(error: Value) => errorFields(error)?.name;
+const errorCode = <Value>(error: Value) => errorFields(error)?.code;
+const errorMessage = <Value>(error: Value) => {
+  const message = errorFields(error)?.message;
+  return isString(message) ? message : String(error);
+};
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+const isLoopbackHost = (hostname: string) => LOOPBACK_HOSTS.has(hostname) || hostname.startsWith('127.');
+
+const endpointForRemote = (rawUrl: string | null | undefined) => {
+  let url: URL;
+  try {
+    url = new URL(String(rawUrl ?? ''));
+  } catch {
+    return null;
+  }
+  if (url.username || url.password) return null;
+  const plainHttpAllowed = url.protocol === 'http:' && isLoopbackHost(url.hostname);
+  if (url.protocol !== 'https:' && !plainHttpAllowed) return null;
+  const secure = url.protocol === 'https:';
+  return {
+    protocol: secure ? 'https' : 'http',
+    host: url.hostname,
+    port: Number(url.port) || (secure ? 443 : 80),
+    path: url.pathname,
+  };
+};
+
+type Endpoint = NonNullable<ReturnType<typeof endpointForRemote>>;
+type ProjectConfig = ReturnType<typeof resolveProjectConfig>;
+type AuthStore = ReturnType<typeof createSourceControlAuthStore>;
+type BindingService = ReturnType<typeof registerSourceControlRoutes>;
+type CredentialResolver = ReturnType<typeof createGitCredentialResolver>;
+type OpencodeClient = ReturnType<typeof createOpenCodeClient>;
+
+interface ClientLike {
+  session: {
+    active(): Promise<JsonValue>;
+    create(payload: JsonObject): Promise<JsonValue>;
+    prompt(input: { sessionID: string; text: string }): Promise<JsonValue>;
+    interrupt(input: { sessionID: string }): Promise<JsonValue>;
+    get(input: { sessionID: string }): Promise<JsonValue>;
+  };
+  message: {
+    list(input: { sessionID: string; limit: number; order: string }): Promise<JsonValue>;
+  };
+}
+
+interface SessionCreatedLike {
+  sessionID?: string | undefined;
+  directory?: string | undefined;
+  createdAt?: string | number | undefined;
+  promptDispatched?: boolean | undefined;
+  title?: string | undefined;
+}
+
+export interface DispatcherDependencies {
+  listProjects: () => Promise<SettingsProject[]>;
+  authStore: AuthStore;
+  bindingService: BindingService;
+  apiFactory: (input: { origin: string; account: AuthCredential }) => GitlabIssueApi;
+  workspace: CreateGitlabIssueWorkspaceLike;
+  clientFactory: (input: { directory: string }) => OpencodeClient;
+  credentialResolver: CredentialResolver;
+  createHttpsCredentialReference: typeof createHttpsCredentialReference;
+  worktreeBootstrapStore?: BootstrapStore | null | undefined;
+  resolveWorktreeSetup?: ((project: SettingsProject) => Promise<{ startCommand: string }>) | null | undefined;
+  worktreeSetupState?: ((input: { directory: string; bootstrapStore: BootstrapStore | null }) => Promise<'ready' | 'pending' | 'failed'>) | null | undefined;
+  waitForOpenCodeReady?: ((...args: never[]) => Promise<void>) | null | undefined;
+  onSessionCreated?(event: SessionCreatedLike): void;
+  logger?: Pick<Console, 'warn'> | undefined;
+  now?: (() => number) | undefined;
+  tickIntervalMs?: number | undefined;
+  startupDelayMs?: number | undefined;
+  issueScanEveryTicks?: number | undefined;
+  maxPerProjectPerTick?: number | undefined;
+  maxPerTick?: number | undefined;
+  maxActivePerProject?: number | undefined;
+  maxActiveGlobal?: number | undefined;
+  leaseMs?: number | undefined;
+  contextTtlMs?: number | undefined;
+  ledger?: GitlabIssueLedger | undefined;
+  ledgerPath?: string | undefined;
+}
+
+interface CredentialRequestLike {
+  mode: string;
+  credentialId: string;
+  endpoint: Endpoint | undefined;
+  operationId: string;
+  deadline: string | number;
+}
+
+interface WorkspaceCommandResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+interface CreateGitlabIssueWorkspaceLike {
+  fetchBranch(input: { cwd: string; remote: string; branch: string; credential: IssueCredential }): Promise<WorkspaceCommandResult>;
+  localBranchExists(input: { cwd: string; branch: string }): Promise<boolean>;
+  createWorktreeFor(input: {
+    repoPath: string; branch: string; worktreeName: string; startRef?: string | undefined;
+    mode?: string | undefined; bootstrapStore?: BootstrapStore | null | undefined; startCommand?: string | null | undefined;
+  }): Promise<{ path: string }>;
+  configureIdentity(input: { cwd: string; name: string; email: string }): Promise<void>;
+  commitCountSince(input: { cwd: string; baseRef: string }): Promise<number>;
+  hasDiffSince(input: { cwd: string; baseRef: string }): Promise<boolean>;
+  pushBranch(input: { cwd: string; remote: string; branch: string; credential: IssueCredential }): Promise<{ branch: string; sha: string }>;
+  removeWorktreeSafely(input: { repoPath: string; worktreePath: string | null | undefined }): Promise<{ removed: boolean; dirty: boolean }>;
+  run(args: string[], options?: { cwd?: string | undefined }): Promise<WorkspaceCommandResult>;
+}
+
+interface DispatchContext {
+  project: SettingsProject;
+  config: ProjectConfig;
+  instance: string;
+  primaryRemote: string;
+  remoteUrl: string;
+  endpoint: Endpoint | null;
+  projectPath: string;
+  projectId: string | number;
+  defaultBranch: string | null;
+  botAccount: AuthCredential;
+  botUsername: string;
+  api: GitlabIssueApi;
+}
+
+type SessionResult =
+  | { status: 'busy' }
+  | { status: 'failed' }
+  | { status: 'idle'; text: string; completedAt: number };
+
+interface FeedbackScanItem {
+  channel: string;
+  noteId: number;
+  userId: number;
+  author: string;
+  text: string;
+}
+
+const isJsonRecord = (value: unknown): value is JsonObject => isRecord(value);
+const isInteger = (value: unknown): value is number => Number.isInteger(value);
+const asId = (value: JsonValue | undefined): string | number => (isString(value) || isInteger(value) ? value : 0);
+const asIid = (value: JsonValue | undefined): number => (isInteger(value) ? value : 0);
+const asText = (value: JsonValue | null | undefined) => (isString(value) ? value : '');
+
+export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies) {
+  const {
+    listProjects,
+    authStore,
+    bindingService,
+    apiFactory,
+    workspace,
+    clientFactory,
+    credentialResolver,
+    createHttpsCredentialReference,
+    worktreeBootstrapStore = null,
+    resolveWorktreeSetup = null,
+    worktreeSetupState = null,
+    waitForOpenCodeReady = null,
+    onSessionCreated,
+    logger = console,
+    now = Date.now,
+    tickIntervalMs = DEFAULT_TICK_INTERVAL_MS,
+    startupDelayMs = DEFAULT_STARTUP_DELAY_MS,
+    issueScanEveryTicks = 3,
+    maxPerProjectPerTick = 1,
+    maxPerTick = 3,
+    maxActivePerProject = 1,
+    maxActiveGlobal = 3,
+    leaseMs = DEFAULT_LEASE_MS,
+    contextTtlMs = 60_000,
+    ledger = createGitlabIssueLedger({ filePath: dependencies.ledgerPath, now }),
+  } = dependencies;
+
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let startupTimer: ReturnType<typeof setTimeout> | null = null;
+  let ticking = false;
+  let stopped = false;
+  let tickCount = 0;
+  let recovered = false;
+  const contextCache = new Map<string, { at: number; signature: string; context: DispatchContext }>();
+
+  const isoNow = () => new Date(now()).toISOString();
+  const keyOf = (run: RunEntry) => ledgerKey(run.origin, run.projectId, run.iid);
+  const slotRuns = (runs: RunEntry[]) => runs.filter((run) => SLOT_PHASES.includes(run.phase));
+  const warn = <Value>(message: string, error?: Value) => logger.warn?.(message, errorFields(error)?.message || error);
+
+  const touch = (run: RunEntry) => ledger.update(keyOf(run), {
+    leaseUntil: new Date(now() + leaseMs).toISOString(),
+  });
+
+  const MAX_RUN_EVENTS = 20;
+  const withEvents = (run: RunEntry, events: RunEvent[]): RunEvent[] => [
+    ...(Array.isArray(run.events) ? run.events : []),
+    ...events,
+  ].slice(-MAX_RUN_EVENTS);
+  const withEvent = (run: RunEntry, event: RunEvent) => withEvents(run, [event]);
+
+  const MAX_RUN_SESSIONS = 20;
+  const withSession = (run: RunEntry, session: RunSession): RunSession[] => [
+    ...(Array.isArray(run.sessions) ? run.sessions : []),
+    session,
+  ].slice(-MAX_RUN_SESSIONS);
+
+  const transition = async (run: RunEntry, to: string, patch: Partial<RunEntry> = {}) => {
+    if (!canTransition(run.phase, to)) throw new Error(`Illegal transition ${run.phase} -> ${to}`);
+    return ledger.update(keyOf(run), {
+      phase: to,
+      since: isoNow(),
+      lastError: null,
+      leaseUntil: new Date(now() + leaseMs).toISOString(),
+      events: withEvent(run, { at: isoNow(), kind: 'phase', from: run.phase, to }),
+      ...patch,
+    });
+  };
+
+  const block = async (run: RunEntry, reason: string, detail = '', patch: Partial<RunEntry> = {}) => ledger.update(keyOf(run), {
+    phase: PHASES.BLOCKED,
+    blockedReason: reason,
+    events: withEvent(run, {
+      kind: 'blocked',
+      from: run.phase === PHASES.BLOCKED ? (run.blockedFrom ?? null) : run.phase,
+      reason,
+      detail: isString(detail) && detail.trim() ? detail.trim().slice(0, 240) : null,
+    }),
+    blockedFrom: run.phase === PHASES.BLOCKED ? (run.blockedFrom ?? null) : run.phase,
+    lastError: detail || null,
+    since: isoNow(),
+    leaseUntil: null,
+    ...patch,
+  });
+
+  const cleanupWorktree = async (run: RunEntry, context: DispatchContext, note: string | null = null) => {
+    if (!run.worktreePath) return null;
+    let cleanup;
+    try {
+      cleanup = await workspace.removeWorktreeSafely({
+        repoPath: context.project.path,
+        worktreePath: run.worktreePath,
+      });
+    } catch (error) {
+      warn(`[gitlab-issues] worktree cleanup failed for #${run.iid}:`, error);
+      return run.worktreePath;
+    }
+    if (cleanup.dirty) {
+      if (note) {
+        await context.api.postNote(run.projectId, run.iid, note)
+          .catch((error) => warn(`[gitlab-issues] cleanup note failed for #${run.iid}:`, error));
+      }
+      return run.worktreePath;
+    }
+    if (!cleanup.removed) {
+      warn(`[gitlab-issues] worktree still on disk for #${run.iid}: ${run.worktreePath}`);
+      return run.worktreePath;
+    }
+    return null;
+  };
+
+  const blockWithComment = async (run: RunEntry, context: DispatchContext, reason: string, detail: string, patch: Partial<RunEntry> = {}) => {
+    const retained = await cleanupWorktree(
+      run,
+      context,
+      `工作区有未提交改动，已保留：\`${run.worktreePath}\``,
+    );
+    const next = await block(run, reason, detail, { ...patch, worktreePath: retained });
+    await context.api.addLabels(run.projectId, run.iid, ['ai-blocked'])
+      .catch((error) => warn(`[gitlab-issues] ai-blocked label failed for #${run.iid}:`, error));
+    await context.api
+      .removeLabels(run.projectId, run.iid, ['ai-working', 'ai-plan-review', 'ai-review'])
+      .catch((error) => warn(`[gitlab-issues] working label clear failed for #${run.iid}:`, error));
+    await context.api.postNote(run.projectId, run.iid, formatBlockedComment(reason, detail))
+      .catch((error) => warn(`[gitlab-issues] blocked note failed for #${run.iid}:`, error));
+    return next;
+  };
+
+  const failRun = async (run: RunEntry, context: DispatchContext, reason: string, detail: string) => {
+    const repeated = Boolean(run.lastError) && run.lastError === detail;
+    const exhausted = (run.attempts ?? 0) >= MAX_ATTEMPTS;
+    const nextReason = repeated || exhausted ? BLOCKED_REASONS.REPEATED_ERROR : reason;
+    return blockWithComment(run, context, nextReason, detail, { attempts: run.attempts ?? 0 });
+  };
+
+  const markBotUnauthorized = async (context: DispatchContext) => {
+    contextCache.delete(context.project.id);
+    try {
+      await authStore.markAccountInvalid(context.instance, context.botAccount.credentialId);
+      logger.warn?.(`[gitlab-issues] bot account refused for project ${context.project.id}; marked invalid and dispatch paused`);
+    } catch (error) {
+      warn(`[gitlab-issues] bot account refused for project ${context.project.id}; could not mark it invalid:`, error);
+    }
+  };
+
+  const resolveContext = async (project: SettingsProject, config: ProjectConfig): Promise<DispatchContext | null> => {
+    const bindingRead: BindingRead | null = await bindingService.get(project.path);
+    const binding = bindingRead?.binding;
+    if (!binding) return null;
+    const provider = (binding.providers ?? []).find((entry) => entry?.provider === 'gitlab'
+      && entry.readiness === 'ready');
+    if (!provider?.instance) return null;
+    const primaryRemote = provider.primaryRemote;
+    const remote = (bindingRead.repository?.remotes ?? []).find((entry) => entry?.name === primaryRemote);
+    const remoteUrl = asText(remote?.fetch?.displayUrl ?? provider.endpoint?.displayUrl ?? '');
+    const parsed = parseGitLabRemoteUrl(remoteUrl, provider.instance);
+    if (!parsed) return null;
+    const botAccount = await resolveAccount(authStore, provider.instance, config.botAccountId);
+    if (!botAccount) {
+      logger.warn?.(`[gitlab-issues] bot account unusable for project ${project.id}`);
+      return null;
+    }
+    const api = withBotNoteMarker(apiFactory({ origin: provider.instance, account: botAccount }));
+    let botUser: JsonObject | null;
+    let projectInfo: JsonObject;
+    try {
+      botUser = await api.currentUser();
+      projectInfo = await api.getProject(parsed.projectPath);
+    } catch (error) {
+      if (unauthorized(error)) {
+        // SAFETY: this partial context is only read by markBotUnauthorized for account invalidation.
+        await markBotUnauthorized({ project, instance: provider.instance, botAccount } as DispatchContext);
+      }
+      throw error;
+    }
+    return {
+      project,
+      config,
+      instance: provider.instance,
+      primaryRemote,
+      remoteUrl,
+      endpoint: endpointForRemote(remoteUrl),
+      projectPath: parsed.projectPath,
+      projectId: asId(projectInfo.id),
+      defaultBranch: isString(projectInfo.default_branch) ? projectInfo.default_branch : null,
+      botAccount,
+      botUsername: asText(botUser?.username),
+      api,
+    };
+  };
+
+  const resolveActor = async (run: RunEntry) => {
+    const account = await resolveAccount(authStore, run.origin, run.actorAccountId);
+    if (!account) return null;
+    return { account, api: apiFactory({ origin: run.origin, account }) };
+  };
+
+  const credentialFor = async (context: DispatchContext, account: AuthCredential): Promise<IssueCredential> => {
+    const deadline: string | number = new Date(now() + 60_000).toISOString();
+    const request: CredentialRequestLike = {
+      mode: 'managed',
+      credentialId: createHttpsCredentialReference({
+        provider: 'gitlab',
+        instance: context.instance,
+        credentialId: account.credentialId,
+        credentialRevision: account.credentialRevision,
+        providerUserId: account.providerUserId,
+      }),
+      endpoint: context.endpoint ?? undefined,
+      operationId: `gitlab-issue-${context.projectId}`,
+      deadline,
+    };
+    // SAFETY: the fork passes an ISO deadline; managed HTTPS resolution does not read it.
+    const resolved = await credentialResolver.resolve(request as Parameters<CredentialResolver['resolve']>[0]);
+    // SAFETY: the managed reference above always resolves to an HTTPS credential.
+    return resolved as IssueCredential;
+  };
+
+  const sessionClient = (run: RunEntry): ClientLike => {
+    // SAFETY: OpenCode client replies are JSON-shaped; only ids and text records are read here.
+    return clientFactory({ directory: run.worktreePath ?? '' }) as ClientLike;
+  };
+
+  const readSessionResult = async (client: ClientLike, sessionID: string): Promise<SessionResult> => {
+    const response = await client.session.active();
+    const active = isJsonRecord(response) && isJsonRecord(response.data) ? response.data : response;
+    if (isJsonRecord(active) && Object.hasOwn(active, sessionID)) return { status: 'busy' };
+    const listed = await client.message.list({ sessionID, limit: 10, order: 'desc' });
+    const records = (isJsonRecord(listed) && Array.isArray(listed.data) ? listed.data : [])
+      .map((item) => (isJsonRecord(item) ? item : {}));
+    const latestAssistant = records.find((record) => record?.type === 'assistant');
+    if (!latestAssistant) {
+      return { status: records.some((record) => record?.type === 'idle') ? 'failed' : 'busy' };
+    }
+    const time = isJsonRecord(latestAssistant?.time) ? latestAssistant.time : null;
+    const finishedAt = isInteger(time?.completed) ? time.completed : null;
+    if (!finishedAt) return { status: 'busy' };
+    const assistant = records.find((record) => record?.type === 'assistant' && assistantText(record).length > 0);
+    return {
+      status: 'idle',
+      text: assistantText(assistant),
+      completedAt: finishedAt,
+    };
+  };
+
+  const sessionFinished = (run: RunEntry, result: SessionResult) => result.status === 'idle'
+    && Number.isFinite(result.completedAt)
+    && result.completedAt >= Date.parse(run.since ?? '');
+
+  const sessionFailed = (run: RunEntry, result: SessionResult) => result.status === 'failed'
+    || (sessionFinished(run, result) && !String(result.status === 'idle' ? result.text : '').trim());
+
+  const worktreeSetupCommand = async (project: SettingsProject) => {
+    if (!resolveWorktreeSetup) return '';
+    try {
+      const setup = await resolveWorktreeSetup(project);
+      return String(setup?.startCommand ?? '').trim();
+    } catch (error) {
+      warn(`[gitlab-issues] worktree setup could not be resolved for ${project.path}:`, error);
+      return '';
+    }
+  };
+
+  const ensureWorktree = async (run: RunEntry, context: DispatchContext): Promise<RunEntry> => {
+    if (run.worktreePath) return run;
+    if (!context.endpoint) {
+      return blockWithComment(
+        run, context, BLOCKED_REASONS.MISSING_CREDENTIAL,
+        '主远端不是 HTTPS 地址，无法使用一次性凭据租约推送。',
+      );
+    }
+    const actor = await resolveAccount(authStore, run.origin, run.actorAccountId);
+    if (!actor) {
+      return blockWithComment(run, context, BLOCKED_REASONS.MISSING_CREDENTIAL, '触发者账号不可用。');
+    }
+    const actorApi = apiFactory({ origin: run.origin, account: actor });
+    let actorUser: JsonObject | null;
+    try {
+      actorUser = await actorApi.currentUser();
+    } catch (error) {
+      if (unauthorized(error)) {
+        return blockWithComment(run, context, BLOCKED_REASONS.MISSING_CREDENTIAL, '触发者账号已失效。');
+      }
+      throw error;
+    }
+    const email = isString(actorUser?.email) ? actorUser.email.trim() : '';
+    if (!email) {
+      return blockWithComment(
+        run, context, BLOCKED_REASONS.MISSING_CREDENTIAL,
+        '触发者账号没有可见邮箱，无法写入提交身份。',
+      );
+    }
+
+    let recorded: RunEntry | null = null;
+    try {
+      const existing = matchReusableBranch(
+        await context.api.listBranches(run.projectId, `issue-${run.iid}`),
+        context.config.prefix,
+        run.iid,
+      );
+      const base = existing ?? run.targetBranch;
+      if (base !== run.targetBranch) {
+        const botCredential = await credentialFor(context, context.botAccount);
+        await workspace.fetchBranch({
+          cwd: context.project.path, remote: context.primaryRemote, branch: base ?? '', credential: botCredential,
+        });
+      }
+      const botCredential = await credentialFor(context, context.botAccount);
+      await workspace.fetchBranch({
+        cwd: context.project.path, remote: context.primaryRemote, branch: run.targetBranch ?? '', credential: botCredential,
+      });
+
+      const branchExists = await workspace.localBranchExists({
+        cwd: context.project.path, branch: run.branch ?? '',
+      });
+      const worktree = await workspace.createWorktreeFor({
+        repoPath: context.project.path,
+        branch: run.branch ?? '',
+        worktreeName: `gitlab-issue-${run.iid}`,
+        startRef: `${context.primaryRemote}/${base}`,
+        mode: branchExists ? 'existing' : 'new',
+        bootstrapStore: worktreeBootstrapStore,
+        startCommand: await worktreeSetupCommand(context.project),
+      });
+      recorded = await ledger.update(keyOf(run), {
+        worktreePath: worktree.path,
+        since: isoNow(),
+        leaseUntil: new Date(now() + leaseMs).toISOString(),
+      });
+      await workspace.configureIdentity({
+        cwd: worktree.path,
+        name: asText(actorUser?.name ?? actorUser?.username),
+        email,
+      });
+      return recorded;
+    } catch (error) {
+      if (errorName(error) !== 'WorkspaceError') throw error;
+      const current = recorded ?? run;
+      if (errorCode(error) === 'signing-required') {
+        return blockWithComment(
+          current, context, BLOCKED_REASONS.MISSING_CREDENTIAL,
+          '目标仓库要求签名提交，但服务端没有触发者的签名密钥。',
+        );
+      }
+      return failRun(current, context, BLOCKED_REASONS.VERIFICATION_FAILED, errorMessage(error));
+    }
+  };
+
+  const startSession = async (run: RunEntry, context: DispatchContext, stage: string): Promise<RunEntry> => {
+    if (stage !== 'review' && (run.attempts ?? 0) >= MAX_ATTEMPTS) {
+      return failRun(run, context, BLOCKED_REASONS.REPEATED_ERROR, 'Attempt limit reached');
+    }
+    let setupState: 'ready' | 'pending' | 'failed' = 'ready';
+    if (worktreeSetupState) {
+      try {
+        setupState = (await worktreeSetupState({
+          directory: run.worktreePath ?? '',
+          bootstrapStore: worktreeBootstrapStore,
+        })) ?? 'ready';
+      } catch (error) {
+        warn(`[gitlab-issues] worktree setup state unreadable for #${run.iid}:`, error);
+      }
+    }
+    if (setupState === 'pending') return run;
+    if (setupState === 'failed') {
+      return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, '工作树 setup 失败，依赖没有装好。');
+    }
+    const client = sessionClient(run);
+    const issue = await context.api.getIssue(run.projectId, run.iid);
+    const actor = await resolveAccount(authStore, run.origin, run.actorAccountId);
+    if (!actor) {
+      return blockWithComment(run, context, BLOCKED_REASONS.MISSING_CREDENTIAL, '触发者账号不可用。');
+    }
+    const title = `#${run.iid}: ${String(issue?.title ?? '').replace(/\s+/g, ' ').trim()} · ${sessionStageLabel(stage, run.feedbackRounds)}`;
+    const payload: JsonObject = { title, location: { directory: run.worktreePath } };
+    const usesReviewModel = stage === 'review' && Boolean(context.config.reviewModel);
+    const modelValue = isString(usesReviewModel ? context.config.reviewModel : context.project.defaultModel)
+      ? String(usesReviewModel ? context.config.reviewModel : context.project.defaultModel).trim()
+      : '';
+    const modelRef = parseModelRef(modelValue);
+    if (modelRef) {
+      payload.model = { providerID: modelRef.providerID, id: modelRef.id };
+      const variant = usesReviewModel
+        ? (context.config.reviewVariant || context.project.defaultVariant)
+        : context.project.defaultVariant;
+      if (variant) {
+        const model = isJsonRecord(payload.model) ? payload.model : {};
+        model.variant = variant;
+      }
+    }
+    if (context.project.defaultAgent) payload.agent = context.project.defaultAgent;
+    const session = await client.session.create(payload);
+    const sessionData = isJsonRecord(session) ? session : null;
+    const sessionID = asText(isJsonRecord(sessionData?.data) ? sessionData.data.id : sessionData?.id);
+    if (!sessionID) throw new Error('failed to create session');
+    const nextPhase = stage === 'triage' ? PHASES.TRIAGING
+      : stage === 'plan' ? PHASES.PLANNING
+        : stage === 'review' ? PHASES.REVIEWING
+          : stage === 'feedback' ? PHASES.ADDRESSING : PHASES.IMPLEMENTING;
+    await ledger.update(keyOf(run), {
+      sessionId: sessionID,
+      sessions: withSession(run, { sessionId: sessionID, stage: nextPhase, at: isoNow() }),
+      phase: nextPhase,
+      since: isoNow(),
+      attempts: stage === 'triage' || stage === 'review' || stage === 'feedback'
+        ? (run.attempts ?? 0) : (run.attempts ?? 0) + 1,
+      leaseUntil: new Date(now() + leaseMs).toISOString(),
+      events: withEvents(run, [
+        { at: isoNow(), kind: 'phase', from: run.phase, to: nextPhase },
+        { at: isoNow(), kind: 'session', phase: nextPhase },
+      ]),
+    });
+    const text = stage === 'triage'
+      ? buildTriagePrompt({
+        issue,
+        iid: run.iid,
+        projectPath: run.worktreePath ?? '',
+        actorLogin: asText(actor.user.login),
+        kind: run.kind,
+      })
+      : stage === 'plan'
+        ? buildPlanPrompt({
+          issue, iid: run.iid, projectPath: run.worktreePath ?? '', actorLogin: asText(actor.user.login),
+        })
+        : stage === 'review'
+        ? buildReviewPrompt({
+          issue,
+          iid: run.iid,
+          projectPath: run.worktreePath ?? '',
+          actorLogin: asText(actor.user.login),
+          baseRef: `${context.primaryRemote}/${run.targetBranch}`,
+          evidence: run.evidence,
+          feedbackItems: run.feedbackItems,
+        })
+        : stage === 'feedback'
+          ? buildFeedbackPrompt({
+            issue,
+            iid: run.iid,
+            projectPath: run.worktreePath ?? '',
+            actorLogin: asText(actor.user.login),
+            branch: run.branch ?? '',
+            targetBranch: run.targetBranch ?? '',
+            baseRef: `${context.primaryRemote}/${run.targetBranch}`,
+            feedbackItems: run.feedbackItems ?? [],
+            round: run.feedbackRounds ?? 1,
+            maxRounds: FEEDBACK_MAX_ROUNDS,
+          })
+          : buildImplementPrompt({
+          issue,
+          iid: run.iid,
+          projectPath: run.worktreePath ?? '',
+          actorLogin: asText(actor.user.login),
+          branch: run.branch ?? '',
+          targetBranch: run.targetBranch ?? '',
+          reviewFindings: run.reviewFindings,
+        });
+    try {
+      await client.session.prompt({ sessionID, text });
+    } catch (error) {
+      await client.session.interrupt({ sessionID }).catch(() => {});
+      await ledger.update(keyOf(run), { sessionId: null }).catch(() => {});
+      throw error;
+    }
+    onSessionCreated?.({
+      sessionID,
+      directory: run.worktreePath ?? '',
+      createdAt: isoNow(),
+      promptDispatched: true,
+      title,
+    });
+    // SAFETY: the run was just persisted under this key, so the ledger lookup yields a RunEntry.
+    return ledger.get(keyOf(run)) as Promise<RunEntry>;
+  };
+
+  const claim = async (context: DispatchContext, issue: JsonObject): Promise<boolean> => {
+    const fresh = await context.api.getIssue(context.projectId, asIid(issue?.iid));
+    const labels = labelNamesOf(fresh);
+    if (fresh.state !== 'opened' || !labels.includes('ai-ready')
+      || labels.some((label) => BUSY_LABELS.includes(label))) return false;
+    const key = ledgerKey(context.instance, context.projectId, asIid(fresh.iid));
+    if (await ledger.get(key)) return false;
+
+    const baseEntry: RunEntry = {
+      origin: context.instance,
+      projectEntryId: context.project.id,
+      projectId: context.projectId,
+      projectPath: context.projectPath,
+      title: isString(fresh.title) ? fresh.title : null,
+      iid: asIid(fresh.iid),
+      kind: null,
+      phase: PHASES.BLOCKED,
+      targetBranch: '',
+      branch: '',
+      actorUserId: null,
+      actorAccountId: null,
+      sessionId: null,
+      sessions: [],
+      worktreePath: null,
+      mrIid: null,
+      attempts: 0,
+      leaseUntil: null,
+      since: isoNow(),
+      updatedAt: isoNow(),
+      lastError: null,
+      blockedReason: null,
+      blockedFrom: null,
+      triageVerdict: null,
+      triageNoteId: null,
+      outcome: null,
+      approvalNoteId: null,
+      planNoteId: null,
+      evidenceNoteId: null,
+      evidence: null,
+      reviewRounds: 0,
+      reviewNoteId: null,
+      reviewVerdict: null,
+      reviewFindings: null,
+      feedbackRounds: 0,
+      lastFeedbackActor: null,
+      feedbackItems: null,
+      noteWatermarks: null,
+    };
+
+    let template: ReturnType<typeof parseIssueTemplate>;
+    try {
+      template = parseIssueTemplate(fresh);
+    } catch (error) {
+      if (!(error instanceof TemplateError)) throw error;
+      await context.api.addLabels(context.projectId, asIid(fresh.iid), ['ai-blocked']).catch(() => {});
+      await context.api.postNote(
+        context.projectId,
+        asIid(fresh.iid),
+        `自动化已暂停，原因：\`${error.reason}\`。请按模板补充 \`类型:\` 和 \`目标分支:\` 行后重新添加 \`ai-ready\`。`,
+      ).catch(() => {});
+      await ledger.put({
+        ...baseEntry,
+        blockedReason: error.reason,
+        lastError: error.message,
+      });
+      return false;
+    }
+
+    const targetBranch = template.targetBranch || asText(context.defaultBranch);
+    try {
+      await context.api.showBranch(context.projectId, targetBranch);
+    } catch {
+      await context.api.addLabels(context.projectId, asIid(fresh.iid), ['ai-blocked']).catch(() => {});
+      await context.api.postNote(
+        context.projectId,
+        asIid(fresh.iid),
+        `自动化已暂停，原因：\`branch-missing\`。目标分支 \`${targetBranch}\` 不存在。`,
+      ).catch(() => {});
+      await ledger.put({
+        ...baseEntry,
+        kind: template.kind,
+        targetBranch,
+        blockedReason: BLOCKED_REASONS.BRANCH_MISSING,
+        lastError: `Target branch does not exist: ${targetBranch}`,
+      });
+      return false;
+    }
+
+    let triggerer: { userId: number } | null;
+    try {
+      triggerer = await context.api.latestTriggerer(context.projectId, asIid(fresh.iid));
+    } catch (error) {
+      if (unauthorized(error)) throw error;
+      await context.api.addLabels(context.projectId, asIid(fresh.iid), ['ai-blocked']).catch(() => {});
+      await context.api.postNote(
+        context.projectId,
+        asIid(fresh.iid),
+        '自动化已暂停，原因：`label-events-unavailable`。该实例读不到 `ai-ready` 的标签事件，无法确认触发者。',
+      ).catch(() => {});
+      await ledger.put({
+        ...baseEntry,
+        kind: template.kind,
+        targetBranch,
+        phase: PHASES.BLOCKED,
+        blockedFrom: PHASES.CLAIMED,
+        blockedReason: BLOCKED_REASONS.LABEL_EVENTS_UNAVAILABLE,
+        since: isoNow(),
+        lastError: isString(errorFields(error)?.message) ? String(errorFields(error)?.message) : 'Label events are unavailable',
+      });
+      return false;
+    }
+    const actor = triggerer
+      ? await findAccountForUser(authStore, context.instance, triggerer.userId)
+      : null;
+    const accessLevel = triggerer ? await context.api.accessLevelOf(context.projectId, triggerer.userId) : 0;
+    if (!triggerer || !actor || accessLevel < 30) {
+      await context.api.addLabels(context.projectId, asIid(fresh.iid), ['ai-blocked']).catch(() => {});
+      await context.api.postNote(
+        context.projectId,
+        asIid(fresh.iid),
+        '自动化已暂停，原因：`missing-credential`。触发者在 OpenChamber 中没有可用的同实例账号，或权限低于 Developer。',
+      ).catch(() => {});
+      await ledger.put({
+        ...baseEntry,
+        kind: template.kind,
+        targetBranch,
+        actorUserId: triggerer?.userId ?? null,
+        blockedReason: BLOCKED_REASONS.MISSING_CREDENTIAL,
+        lastError: 'Triggerer account is missing or lacks Developer access',
+      });
+      return false;
+    }
+
+    const reused = matchReusableBranch(
+      await context.api.listBranches(context.projectId, `issue-${fresh.iid}`),
+      context.config.prefix,
+      asIid(fresh.iid),
+    );
+    const entry: RunEntry = {
+      ...baseEntry,
+      kind: template.kind,
+      phase: PHASES.CLAIMED,
+      targetBranch,
+      branch: reused ?? buildIssueBranch(context.config.prefix, asIid(fresh.iid), fresh.title),
+      actorUserId: triggerer.userId,
+      actorAccountId: actor.credentialId,
+      leaseUntil: new Date(now() + leaseMs).toISOString(),
+      events: [{ at: isoNow(), kind: 'phase', from: null, to: PHASES.CLAIMED }],
+    };
+    await ledger.put(entry);
+    try {
+      await context.api.addLabels(context.projectId, asIid(fresh.iid), ['ai-working']);
+      await context.api.postNote(
+        context.projectId,
+        asIid(fresh.iid),
+        `已认领。分支：\`${entry.branch}\`，目标分支：\`${targetBranch}\`。`,
+      );
+    } catch (error) {
+      await ledger.remove(key);
+      throw error;
+    }
+    return true;
+  };
+
+  const scanProject = async (context: DispatchContext) => {
+    const issues = await context.api.listOpenIssues(context.projectId);
+    let claimed = 0;
+    for (const issue of issues) {
+      if (claimed >= maxPerProjectPerTick) break;
+      if (await claim(context, issue)) claimed += 1;
+    }
+    return claimed;
+  };
+
+  const handleClaimed = async (run: RunEntry, context: DispatchContext) => {
+    const prepared = await ensureWorktree(run, context);
+    if (prepared.phase === PHASES.BLOCKED) return prepared;
+    return transition(prepared, PHASES.PREPARING);
+  };
+
+  const handlePreparing = async (run: RunEntry, context: DispatchContext) => startSession(run, context, 'triage');
+
+  const closeAsNotAnIssue = async (run: RunEntry, context: DispatchContext, triage: { verdict: string }, noteId: number) => {
+    try {
+      await context.api.closeIssue(run.projectId, run.iid ?? 0);
+    } catch (error) {
+      warn(`[gitlab-issues] issue close failed for #${run.iid}:`, error);
+      return blockWithComment(
+        run,
+        context,
+        BLOCKED_REASONS.NOT_AN_ISSUE,
+        '判定为非问题，但 bot 无权关闭 issue，请人工关闭。',
+        { triageVerdict: triage.verdict, triageNoteId: noteId },
+      );
+    }
+    await context.api.removeLabels(run.projectId, run.iid ?? 0, ['ai-working', 'ai-plan-review', 'ai-review'])
+      .catch((error) => warn(`[gitlab-issues] working label clear failed for #${run.iid}:`, error));
+    await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-done'])
+      .catch((error) => warn(`[gitlab-issues] ai-done label failed for #${run.iid}:`, error));
+    const retained = await cleanupWorktree(run, context, `issue 已关闭，工作区有未提交改动，已保留：\`${run.worktreePath}\``);
+    return transition(run, PHASES.DONE, {
+      outcome: 'not-an-issue',
+      triageVerdict: triage.verdict,
+      triageNoteId: noteId,
+      sessionId: null,
+      worktreePath: retained,
+      leaseUntil: null,
+    });
+  };
+
+  const handleTriaging = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | void> => {
+    if (!run.sessionId) {
+      const prepared = run.worktreePath ? run : await ensureWorktree(run, context);
+      if (prepared.phase === PHASES.BLOCKED) return prepared;
+      return startSession(prepared, context, 'triage');
+    }
+    const result = await readSessionResult(sessionClient(run), run.sessionId);
+    if (sessionFailed(run, result)) {
+      return failRun(run, context, BLOCKED_REASONS.SESSION_FAILED, SESSION_FAILED_DETAIL);
+    }
+    if (!sessionFinished(run, result)) return;
+    let triage;
+    try {
+      triage = parseAgentOutput(result.status === 'idle' ? result.text : '', 'triage');
+    } catch (error) {
+      if (!(error instanceof AgentOutputError)) throw error;
+      return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, error.message);
+    }
+    if (triage.verdict === 'insufficient-info') {
+      return blockWithComment(
+        run,
+        context,
+        BLOCKED_REASONS.INSUFFICIENT_INFO,
+        `报告缺少可核验的信息：${triage.missing}`,
+      );
+    }
+    const noteId = await context.api.postNote(run.projectId, run.iid ?? 0, formatTriageComment(triage));
+    if (triage.verdict === 'not-an-issue') {
+      return closeAsNotAnIssue(run, context, triage, noteId);
+    }
+    return transition(run, run.kind === 'feature' ? PHASES.PLANNING : PHASES.IMPLEMENTING, {
+      triageVerdict: triage.verdict,
+      triageNoteId: noteId,
+      sessionId: null,
+      attempts: 0,
+    });
+  };
+
+  const handlePlanning = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | void> => {
+    if (!run.sessionId) {
+      const prepared = run.worktreePath ? run : await ensureWorktree(run, context);
+      if (prepared.phase === PHASES.BLOCKED) return prepared;
+      return startSession(prepared, context, 'plan');
+    }
+    const result = await readSessionResult(sessionClient(run), run.sessionId);
+    if (sessionFailed(run, result)) {
+      return failRun(run, context, BLOCKED_REASONS.SESSION_FAILED, SESSION_FAILED_DETAIL);
+    }
+    if (!sessionFinished(run, result)) return;
+    let plan;
+    try {
+      plan = parseAgentOutput(result.status === 'idle' ? result.text : '', 'plan');
+    } catch (error) {
+      if (!(error instanceof AgentOutputError)) throw error;
+      return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, error.message);
+    }
+    const noteId = await context.api.postNote(run.projectId, run.iid ?? 0, formatPlanComment(plan));
+    const next = await transition(run, PHASES.WAITING_APPROVAL, { planNoteId: noteId, sessionId: null });
+    await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-plan-review'])
+      .catch((error) => warn(`[gitlab-issues] ai-plan-review label failed for #${run.iid}:`, error));
+    await context.api.removeLabels(run.projectId, run.iid ?? 0, ['ai-working'])
+      .catch((error) => warn(`[gitlab-issues] ai-working label failed for #${run.iid}:`, error));
+    return next;
+  };
+
+  const handleWaitingApproval = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | void> => {
+    const command = await context.api.latestCommand(run.projectId, run.iid ?? 0, {
+      sinceIso: run.since,
+      commands: ['/ai-approve', '/ai-reject'],
+      minAccessLevel: 30,
+    });
+    if (!command) return;
+    if (command.command === '/ai-reject') {
+      return blockWithComment(
+        run,
+        context,
+        BLOCKED_REASONS.REJECTED,
+        '方案已被拒绝。移除 `ai-blocked` 并重新添加 `ai-ready` 可开始新一轮。',
+      );
+    }
+    const approver = await findAccountForUser(authStore, run.origin, command.userId);
+    if (!approver) {
+      return blockWithComment(
+        run, context, BLOCKED_REASONS.MISSING_CREDENTIAL,
+        '审批者在 OpenChamber 中没有绑定的同实例账号，请由其绑定账号或回复 `/ai-take` 指定。',
+      );
+    }
+    let approverUser: JsonObject | null;
+    try {
+      approverUser = await apiFactory({ origin: run.origin, account: approver }).currentUser();
+    } catch (error) {
+      if (unauthorized(error)) {
+        return blockWithComment(run, context, BLOCKED_REASONS.MISSING_CREDENTIAL, '审批者账号已失效。');
+      }
+      throw error;
+    }
+    const email = isString(approverUser?.email) ? approverUser.email.trim() : '';
+    if (!email) {
+      return blockWithComment(
+        run, context, BLOCKED_REASONS.MISSING_CREDENTIAL,
+        '审批者账号没有可见邮箱，无法写入提交身份。',
+      );
+    }
+    if (run.worktreePath) {
+      await workspace.configureIdentity({
+        cwd: run.worktreePath,
+        name: asText(approverUser?.name ?? approverUser?.username),
+        email,
+      });
+    }
+    const next = await transition(run, PHASES.IMPLEMENTING, {
+      approvalNoteId: command.noteId,
+      actorUserId: command.userId,
+      actorAccountId: approver.credentialId,
+    });
+    await context.api.removeLabels(run.projectId, run.iid ?? 0, ['ai-plan-review'])
+      .catch((error) => warn(`[gitlab-issues] ai-plan-review label failed for #${run.iid}:`, error));
+    await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-working'])
+      .catch((error) => warn(`[gitlab-issues] ai-working label failed for #${run.iid}:`, error));
+    return next;
+  };
+
+  const handleBlocked = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | void> => {
+    if (run.blockedReason === BLOCKED_REASONS.MISSING_CREDENTIAL) {
+      const command = await context.api.latestCommand(run.projectId, run.iid ?? 0, {
+        sinceIso: run.since,
+        commands: ['/ai-take'],
+        minAccessLevel: 30,
+      });
+      if (command) {
+        const taker = await findAccountForUser(authStore, run.origin, command.userId);
+        if (taker) {
+          const next = await transition(run, PHASES.CLAIMED, {
+            actorUserId: command.userId,
+            actorAccountId: taker.credentialId,
+            blockedReason: null,
+          });
+          await context.api.removeLabels(run.projectId, run.iid ?? 0, ['ai-blocked'])
+            .catch((error) => warn(`[gitlab-issues] ai-blocked label failed for #${run.iid}:`, error));
+          await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-working'])
+            .catch((error) => warn(`[gitlab-issues] ai-working label failed for #${run.iid}:`, error));
+          await context.api.postNote(run.projectId, run.iid ?? 0, `已由 @${taker.user.login} 接管。`)
+            .catch((error) => warn(`[gitlab-issues] takeover note failed for #${run.iid}:`, error));
+          return next;
+        }
+      }
+    }
+    const issue = await context.api.getIssue(run.projectId, run.iid ?? 0);
+    if (issue.state === 'opened' && hasLabel(issue, 'ai-ready') && !hasLabel(issue, 'ai-blocked')) {
+      await ledger.remove(keyOf(run));
+    }
+  };
+
+  const handleImplementing = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | void> => {
+    if (!run.sessionId) {
+      const prepared = run.worktreePath ? run : await ensureWorktree(run, context);
+      if (prepared.phase === PHASES.BLOCKED) return prepared;
+      return startSession(prepared, context, 'implement');
+    }
+    const result = await readSessionResult(sessionClient(run), run.sessionId);
+    if (sessionFailed(run, result)) {
+      return failRun(run, context, BLOCKED_REASONS.SESSION_FAILED, SESSION_FAILED_DETAIL);
+    }
+    if (!sessionFinished(run, result)) return;
+    let evidence: EvidenceResult;
+    try {
+      evidence = parseAgentOutput(result.status === 'idle' ? result.text : '', 'implement');
+    } catch (error) {
+      if (!(error instanceof AgentOutputError)) throw error;
+      return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, error.message);
+    }
+    const noteId = await context.api.postNote(run.projectId, run.iid ?? 0, formatEvidenceComment(evidence));
+    return transition(run, PHASES.REVIEWING, {
+      evidenceNoteId: noteId, evidence, sessionId: null, attempts: 0, reviewFindings: null,
+    });
+  };
+
+  const handleReviewing = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | void> => {
+    if (!run.sessionId) {
+      const prepared = run.worktreePath ? run : await ensureWorktree(run, context);
+      if (prepared.phase === PHASES.BLOCKED) return prepared;
+      return startSession(prepared, context, 'review');
+    }
+    const result = await readSessionResult(sessionClient(run), run.sessionId);
+    if (sessionFailed(run, result)) {
+      return failRun(run, context, BLOCKED_REASONS.SESSION_FAILED, SESSION_FAILED_DETAIL);
+    }
+    if (!sessionFinished(run, result)) return;
+    let review;
+    try {
+      review = parseAgentOutput(result.status === 'idle' ? result.text : '', 'review');
+    } catch (error) {
+      if (!(error instanceof AgentOutputError)) throw error;
+      return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, error.message);
+    }
+    const rounds = (run.reviewRounds ?? 0) + (review.verdict === 'request-changes' ? 1 : 0);
+    const findings: Finding[] = [
+      ...(Array.isArray(run.reviewFindings) ? run.reviewFindings : []),
+      ...(review.verdict === 'request-changes' ? review.findings : []),
+    ];
+    const noteId = await context.api.postNote(
+      run.projectId,
+      run.iid ?? 0,
+      formatReviewComment(review, rounds, REVIEW_MAX_REVISIONS),
+    );
+    if (review.verdict === 'approve') {
+      return transition(run, PHASES.VERIFYING, {
+        reviewNoteId: noteId, reviewVerdict: 'approve', sessionId: null, feedbackItems: null,
+      });
+    }
+    if (rounds > REVIEW_MAX_REVISIONS) {
+      return blockWithComment(
+        run,
+        context,
+        BLOCKED_REASONS.REVIEW_REJECTED,
+        [`审核连续 ${REVIEW_MAX_REVISIONS} 轮要求修改，仍未通过。累计审核发现：`, ...findings.map(formatFindingLine)].join('\n'),
+        {
+          reviewNoteId: noteId,
+          reviewVerdict: 'request-changes',
+          reviewRounds: rounds,
+          reviewFindings: findings,
+          sessionId: null,
+        },
+      );
+    }
+    return transition(run, PHASES.IMPLEMENTING, {
+      reviewNoteId: noteId,
+      reviewVerdict: 'request-changes',
+      reviewRounds: rounds,
+      reviewFindings: findings,
+      sessionId: null,
+      attempts: 0,
+    });
+  };
+
+  const scanFeedback = async (run: RunEntry, context: DispatchContext) => {
+    const [issueNotes, mrNotes] = await Promise.all([
+      context.api.listNotes(run.projectId, run.iid ?? 0),
+      context.api.listMergeRequestNotes(run.projectId, run.mrIid ?? 0),
+    ]);
+    const newestId = (notes: JsonObject[]) => notes.reduce((max, note) => (
+      isInteger(note?.id) ? Math.max(max, note.id) : max), 0);
+    const marks = run.noteWatermarks ?? null;
+    if (!marks) {
+      return {
+        // SAFETY: empty arrays are valid empty results of these element types.
+        items: [] as FeedbackScanItem[],
+        // SAFETY: empty arrays are valid empty results of these element types.
+        mentions: [] as { channel: string; iid: number }[],
+        watermarks: { issue: newestId(issueNotes), mergeRequest: newestId(mrNotes) },
+        changed: false,
+      };
+    }
+    const channels = [
+      { name: 'issue', iid: run.iid ?? 0, notes: issueNotes },
+      { name: 'mergeRequest', iid: run.mrIid ?? 0, notes: mrNotes },
+    ];
+    const accessLevels = new Map((await context.api.listMembers(run.projectId))
+      .map((member): [number, number] => [Number(member?.id), Number(member?.access_level)]));
+    const items: FeedbackScanItem[] = [];
+    const mentions: { channel: string; iid: number }[] = [];
+    const nextWatermarks: NoteWatermarks = { ...marks };
+    for (const channel of channels) {
+      // SAFETY: channels only contains the two literal names that index NoteWatermarks.
+      const since = Number(marks[channel.name as keyof NoteWatermarks] ?? 0);
+      const fresh = channel.notes.filter((note) => isInteger(note?.id) && note.id > since);
+      if (!fresh.length) continue;
+      for (const note of fresh) {
+        if (note.system || isBotNoteBody(asText(note.body))) continue;
+        const author = isJsonRecord(note.author) ? note.author : null;
+        if ((accessLevels.get(Number(author?.id)) ?? 0) < FEEDBACK_MIN_ACCESS_LEVEL) continue;
+        const command = parseFeedbackCommand(asText(note.body), context.botUsername);
+        if (command) {
+          items.push({
+            channel: channel.name,
+            noteId: asIid(note.id),
+            userId: Number(author?.id ?? 0),
+            author: isString(author?.username) ? author.username : asText(author?.username),
+            text: command.text ?? '',
+          });
+        } else if (isBareBotMention(asText(note.body), context.botUsername)) {
+          mentions.push({ channel: channel.name, iid: channel.iid });
+        }
+      }
+      // SAFETY: channels only contains the two literal names that index NoteWatermarks.
+      nextWatermarks[channel.name as keyof NoteWatermarks] = newestId(fresh);
+    }
+    return {
+      items,
+      mentions,
+      watermarks: nextWatermarks,
+      changed: nextWatermarks.issue !== marks.issue || nextWatermarks.mergeRequest !== marks.mergeRequest,
+    };
+  };
+
+  const postFeedbackReply = (context: DispatchContext, run: RunEntry, channel: string, iid: number, body: string) => (channel === 'issue'
+    ? context.api.postNote(run.projectId, iid, body)
+    : context.api.postMergeRequestNote(run.projectId, iid, body)
+  ).catch((error) => warn(`[gitlab-issues] feedback reply failed for #${run.iid}:`, error));
+
+  const handleFeedbackScan = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | false> => {
+    let scan;
+    try {
+      scan = await scanFeedback(run, context);
+    } catch (error) {
+      if (errorName(error) !== 'GitlabListOverflowError') throw error;
+      return blockWithComment(run, context, BLOCKED_REASONS.NOTES_LIMIT,
+        '评论数量超出自动化单次读取上限，反馈无法继续解析，请人工处理后续修改。');
+    }
+    for (const mention of scan.mentions) {
+      await postFeedbackReply(
+        context, run, mention.channel, mention.iid,
+        formatBareMentionComment(context.botUsername),
+      );
+    }
+    if (scan.items.length) {
+      const nextRounds = (run.feedbackRounds ?? 0) + 1;
+      if (nextRounds > FEEDBACK_MAX_ROUNDS) {
+        return blockWithComment(
+          run,
+          context,
+          BLOCKED_REASONS.FEEDBACK_LIMIT,
+          `反馈修复已达上限（${FEEDBACK_MAX_ROUNDS} 轮）。`,
+          { noteWatermarks: scan.watermarks },
+        );
+      }
+      const byChannel: { channel: string; iid: number; items: FeedbackScanItem[] }[] = [];
+      for (const item of scan.items) {
+        const last = byChannel[byChannel.length - 1];
+        if (last && last.channel === item.channel) last.items.push(item);
+        else byChannel.push({ channel: item.channel, iid: item.channel === 'issue' ? run.iid ?? 0 : run.mrIid ?? 0, items: [item] });
+      }
+      for (const group of byChannel) {
+        await postFeedbackReply(
+          context, run, group.channel, group.iid,
+          formatFeedbackAckComment({ items: group.items, round: nextRounds, maxRounds: FEEDBACK_MAX_ROUNDS }),
+        );
+      }
+      const last = scan.items[scan.items.length - 1];
+      const next = await transition(run, PHASES.ADDRESSING, {
+        feedbackRounds: nextRounds,
+        lastFeedbackActor: last?.userId ?? null,
+        feedbackItems: scan.items.map(({ author, text }): FeedbackLine => ({ author, text })),
+        noteWatermarks: scan.watermarks,
+        sessionId: null,
+        attempts: 0,
+      });
+      await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-working'])
+        .catch((error) => warn(`[gitlab-issues] ai-working label failed for #${run.iid}:`, error));
+      return next;
+    }
+    if (scan.changed || !run.noteWatermarks) {
+      await ledger.update(keyOf(run), { noteWatermarks: scan.watermarks });
+    }
+    return false;
+  };
+
+  const handleAddressing = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | false> => {
+    if (!run.sessionId) {
+      if (!run.worktreePath) {
+        return blockWithComment(
+          run, context, BLOCKED_REASONS.WORKTREE_MISSING,
+          '反馈修复需要的工作区已不存在，无法从已推送的分支重建评审状态。',
+        );
+      }
+      try {
+        await fs.stat(run.worktreePath);
+      } catch {
+        return blockWithComment(
+          run, context, BLOCKED_REASONS.WORKTREE_MISSING,
+          `反馈修复需要的工作区目录已丢失：\`${run.worktreePath}\`。`,
+        );
+      }
+      return startSession(run, context, 'feedback');
+    }
+    const result = await readSessionResult(sessionClient(run), run.sessionId);
+    if (sessionFailed(run, result)) {
+      return failRun(run, context, BLOCKED_REASONS.SESSION_FAILED, SESSION_FAILED_DETAIL);
+    }
+    if (!sessionFinished(run, result)) return false;
+    let evidence: EvidenceResult;
+    try {
+      evidence = parseAgentOutput(result.status === 'idle' ? result.text : '', 'implement');
+    } catch (error) {
+      if (!(error instanceof AgentOutputError)) throw error;
+      return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, error.message);
+    }
+    const noteId = await context.api.postNote(run.projectId, run.iid ?? 0, formatEvidenceComment(evidence));
+    return transition(run, PHASES.REVIEWING, {
+      evidenceNoteId: noteId, evidence, sessionId: null, attempts: 0, reviewFindings: null,
+    });
+  };
+
+  const buildMrDescription = (run: RunEntry) => [
+    '## 关联 issue',
+    '',
+    `Closes #${run.iid}`,
+    '',
+    '## 根因',
+    '',
+    run.evidence?.rootCause ?? '',
+    '',
+    '## 改动',
+    '',
+    run.evidence?.changes ?? '',
+    '',
+    '## 验证命令与结果',
+    '',
+    ...(run.evidence?.verification ?? []).map((entry) => `- \`${entry.command}\`：${entry.result}`),
+    '',
+    '## 风险与回滚',
+    '',
+    run.evidence?.risks ?? '',
+    '',
+    '## 生成阶段',
+    '',
+    `${run.kind} 自动化`,
+  ].join('\n');
+
+  const handleVerifying = async (run: RunEntry, context: DispatchContext): Promise<RunEntry> => {
+    if (run.reviewVerdict !== 'approve') {
+      return blockWithComment(run, context, BLOCKED_REASONS.REVIEW_REJECTED,
+        '推送前缺少通过的审核结论（可能是审核门加入前的旧运行记录）。');
+    }
+    if (!run.branch?.startsWith(context.config.prefix)) {
+      return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, 'Branch does not start with the configured prefix');
+    }
+    if (!context.endpoint) {
+      return blockWithComment(run, context, BLOCKED_REASONS.MISSING_CREDENTIAL, '主远端不是 HTTPS 地址。');
+    }
+    const actor = await resolveActor(run);
+    if (!actor) {
+      return blockWithComment(run, context, BLOCKED_REASONS.MISSING_CREDENTIAL, '触发者账号不可用。');
+    }
+    let changes: boolean;
+    try {
+      changes = await workspace.hasDiffSince({
+        cwd: run.worktreePath ?? '',
+        baseRef: `${context.primaryRemote}/${run.targetBranch}`,
+      });
+    } catch (error) {
+      if (errorName(error) === 'WorkspaceError') {
+        return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, errorMessage(error));
+      }
+      throw error;
+    }
+    if (!changes) {
+      return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, 'The branch has no diff against the target');
+    }
+    if (!run.evidenceNoteId) {
+      return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, 'Evidence note is missing');
+    }
+
+    const pushCredential = await credentialFor(context, actor.account);
+    let pushed: { branch: string; sha: string };
+    try {
+      pushed = await workspace.pushBranch({
+        cwd: run.worktreePath ?? '',
+        remote: context.primaryRemote,
+        branch: run.branch ?? '',
+        credential: pushCredential,
+      });
+    } catch (error) {
+      if (errorName(error) === 'WorkspaceError') {
+        return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, errorMessage(error));
+      }
+      throw error;
+    }
+
+    let issue: JsonObject;
+    let mr: JsonObject;
+    try {
+      issue = await context.api.getIssue(run.projectId, run.iid ?? 0);
+      const existing = await actor.api.listOpenMergeRequests(run.projectId, run.branch ?? '');
+      mr = existing[0] ?? {};
+      if (!existing[0]) {
+        mr = await actor.api.createMergeRequest(
+          run.projectId,
+          run.branch ?? '',
+          run.targetBranch ?? '',
+          `${asText(issue.title)} (#${run.iid})`,
+          buildMrDescription(run),
+        );
+      }
+    } catch (error) {
+      const status = responseStatus(error);
+      if (unauthorized(error) || status === 403) {
+        return blockWithComment(
+          run, context, BLOCKED_REASONS.MISSING_CREDENTIAL,
+          '触发者账号无权创建合并请求，请确认其 Developer 及以上权限和 token scope。',
+        );
+      }
+      return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED,
+        `无法创建合并请求：${errorMessage(error)}`);
+    }
+    await context.api.postNote(run.projectId, run.iid ?? 0, formatMrComment(mr))
+      .catch((error) => warn(`[gitlab-issues] MR note failed for #${run.iid}:`, error));
+    if ((run.feedbackRounds ?? 0) > 0 && pushed.sha) {
+      await context.api.postMergeRequestNote(
+        run.projectId,
+        asIid(mr.iid),
+        formatFeedbackPushComment({ round: run.feedbackRounds ?? 0, sha: pushed.sha }),
+      ).catch((error) => warn(`[gitlab-issues] push note failed for #${run.iid}:`, error));
+    }
+    const next = await transition(run, PHASES.MR_OPEN, { mrIid: asIid(mr.iid) });
+    await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-review'])
+      .catch((error) => warn(`[gitlab-issues] ai-review label failed for #${run.iid}:`, error));
+    return next;
+  };
+
+  const finishMerged = async (run: RunEntry, context: DispatchContext) => {
+    if (run.targetBranch !== context.defaultBranch) {
+      await context.api.closeIssue(run.projectId, run.iid ?? 0)
+        .catch((error) => warn(`[gitlab-issues] issue close failed for #${run.iid}:`, error));
+    }
+    await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-done'])
+      .catch((error) => warn(`[gitlab-issues] ai-done label failed for #${run.iid}:`, error));
+    const retained = await cleanupWorktree(run, context, `MR 已合并，但工作区有未提交改动，已保留：\`${run.worktreePath}\``);
+    return ledger.update(keyOf(run), {
+      phase: PHASES.DONE,
+      worktreePath: retained,
+      leaseUntil: null,
+      since: isoNow(),
+    });
+  };
+
+  const handleMrOpen = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | false> => {
+    const actor = await resolveActor(run);
+    if (!actor) {
+      return blockWithComment(run, context, BLOCKED_REASONS.MISSING_CREDENTIAL, '触发者账号不可用。');
+    }
+    let mr: JsonObject;
+    try {
+      mr = await actor.api.getMergeRequest(run.projectId, run.mrIid ?? 0);
+    } catch (error) {
+      if (unauthorized(error)) {
+        return blockWithComment(run, context, BLOCKED_REASONS.MISSING_CREDENTIAL, '触发者账号已失效。');
+      }
+      const status = responseStatus(error);
+      if (status === 404) {
+        return blockWithComment(run, context, BLOCKED_REASONS.MR_CLOSED, '合并请求不存在或已被删除。');
+      }
+      throw error;
+    }
+    if (mr.state === 'merged') return finishMerged(run, context);
+    if (mr.state === 'closed') {
+      return blockWithComment(
+        run,
+        context,
+        BLOCKED_REASONS.MR_CLOSED,
+        '合并请求被关闭但未合并。移除 `ai-blocked` 并重新添加 `ai-ready` 可开始新一轮。',
+      );
+    }
+    const issue = await context.api.getIssue(run.projectId, run.iid ?? 0);
+    if (issue.state !== 'opened') {
+      await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-done'])
+        .catch((error) => warn(`[gitlab-issues] ai-done label failed for #${run.iid}:`, error));
+      const retained = await cleanupWorktree(run, context, `issue 已关闭，工作区有未提交改动，已保留：\`${run.worktreePath}\``);
+      return ledger.update(keyOf(run), {
+        phase: PHASES.DONE,
+        worktreePath: retained,
+        leaseUntil: null,
+        since: isoNow(),
+      });
+    }
+    return handleFeedbackScan(run, context);
+  };
+
+  const cancelledByHuman = (run: RunEntry, issue: JsonObject) => {
+    if (issue.state !== 'opened') return true;
+    if (isActivePhase(run.phase) && hasLabel(issue, 'ai-blocked')) return true;
+    const watchers: string[] = [
+      PHASES.TRIAGING, PHASES.PLANNING, PHASES.PREPARING, PHASES.IMPLEMENTING,
+      PHASES.REVIEWING, PHASES.VERIFYING, PHASES.MR_OPEN, PHASES.ADDRESSING,
+    ];
+    return watchers.includes(run.phase) && !hasLabel(issue, 'ai-working');
+  };
+
+  const handleCancellation = async (run: RunEntry, context: DispatchContext) => {
+    const issue = await context.api.getIssue(run.projectId, run.iid ?? 0);
+    if (!cancelledByHuman(run, issue)) return false;
+    if (run.sessionId) {
+      await sessionClient(run).session.interrupt({ sessionID: run.sessionId }).catch(() => {});
+    }
+    await blockWithComment(
+      run,
+      context,
+      BLOCKED_REASONS.CANCELLED,
+      '人工修改了标签或关闭了 issue，本次运行已取消。',
+      { sessionId: null },
+    );
+    return true;
+  };
+
+  const TIMED_PHASES: string[] = [
+    PHASES.TRIAGING, PHASES.PLANNING, PHASES.IMPLEMENTING, PHASES.REVIEWING, PHASES.ADDRESSING,
+  ];
+
+  const handleTimeout = async (run: RunEntry, context: DispatchContext) => {
+    if (!TIMED_PHASES.includes(run.phase)) return false;
+    const elapsed = now() - Date.parse(run.since ?? '');
+    if (!Number.isFinite(elapsed) || elapsed <= context.config.timeoutMinutes * 60_000) return false;
+    if (run.sessionId) {
+      await sessionClient(run).session.interrupt({ sessionID: run.sessionId }).catch(() => {});
+    }
+    await blockWithComment(
+      run,
+      context,
+      BLOCKED_REASONS.TIMEOUT,
+      `当前阶段超过 ${context.config.timeoutMinutes} 分钟，已中止会话。`,
+      { sessionId: null },
+    );
+    return true;
+  };
+
+  const processRun = async (run: RunEntry, context: DispatchContext) => {
+    if (run.phase === PHASES.DONE) return;
+    if (run.phase === PHASES.BLOCKED) return handleBlocked(run, context);
+    if (run.phase === PHASES.MR_OPEN && await handleMrOpen(run, context) !== false) return;
+    if (await handleCancellation(run, context)) return;
+    if (await handleTimeout(run, context)) return;
+    await touch(run);
+    if (run.phase === PHASES.CLAIMED) return handleClaimed(run, context);
+    if (run.phase === PHASES.PREPARING) return handlePreparing(run, context);
+    if (run.phase === PHASES.TRIAGING) return handleTriaging(run, context);
+    if (run.phase === PHASES.PLANNING) return handlePlanning(run, context);
+    if (run.phase === PHASES.WAITING_APPROVAL) return handleWaitingApproval(run, context);
+    if (run.phase === PHASES.IMPLEMENTING) return handleImplementing(run, context);
+    if (run.phase === PHASES.REVIEWING) return handleReviewing(run, context);
+    if (run.phase === PHASES.VERIFYING) return handleVerifying(run, context);
+    if (run.phase === PHASES.ADDRESSING) return handleAddressing(run, context);
+  };
+
+  const recoverRuns = async (runs: RunEntry[], contextFor: (run: RunEntry) => DispatchContext | undefined) => {
+    const sessionPhases: string[] = [PHASES.PLANNING, PHASES.PREPARING, PHASES.IMPLEMENTING];
+    for (const run of runs) {
+      if (!isActivePhase(run.phase) || run.phase === PHASES.MR_OPEN) continue;
+      if (!run.sessionId) continue;
+      const context = contextFor(run);
+      if (!context) continue;
+      const alive = await sessionClient(run).session.get({ sessionID: run.sessionId })
+        .then(() => true)
+        .catch((error) => {
+          if (errorFields(error)?.status === 404) return false;
+          return null;
+        });
+      if (alive === null) continue;
+      if (alive) {
+        await touch(run);
+        continue;
+      }
+      if (run.phase === PHASES.TRIAGING || run.phase === PHASES.REVIEWING || run.phase === PHASES.ADDRESSING) {
+        await ledger.update(keyOf(run), { sessionId: null, since: isoNow(), leaseUntil: null });
+        continue;
+      }
+      if (!sessionPhases.includes(run.phase)) continue;
+      let hasCommits = false;
+      if (run.worktreePath) {
+        hasCommits = await workspace.commitCountSince({
+          cwd: run.worktreePath,
+          baseRef: `${context.primaryRemote}/${run.targetBranch}`,
+        }).catch(() => 0) > 0;
+      } else {
+        const remote = await context.api.showBranch(run.projectId, run.branch ?? '')
+          .then(() => true)
+          .catch((error) => {
+            const status = responseStatus(error);
+            return status === 404 ? false : null;
+          });
+        if (remote === null) continue;
+        hasCommits = remote;
+      }
+      await ledger.update(keyOf(run), {
+        phase: hasCommits ? PHASES.IMPLEMENTING : PHASES.CLAIMED,
+        sessionId: null,
+        leaseUntil: null,
+        since: isoNow(),
+      });
+    }
+  };
+
+  const tick = async () => {
+    if (stopped || ticking) return;
+    ticking = true;
+    tickCount += 1;
+    try {
+      const projects: { project: SettingsProject; config: ProjectConfig }[] = [];
+      for (const project of await listProjects()) {
+        const config = resolveProjectConfig(project);
+        if (config.enabled) projects.push({ project, config });
+      }
+      if (!projects.length) return;
+      if (waitForOpenCodeReady) await waitForOpenCodeReady();
+
+      const projectContexts: DispatchContext[] = [];
+      const contexts = new Map<string, DispatchContext>();
+      const byEntryId = new Map<string, DispatchContext>();
+      for (const { project, config } of projects) {
+        const signature = JSON.stringify({ path: project.path, config });
+        const cached = contextCache.get(project.id);
+        let context = cached && cached.signature === signature && now() - cached.at < contextTtlMs
+          ? cached.context
+          : null;
+        if (!context) {
+          try {
+            context = await resolveContext(project, config);
+            if (context) contextCache.set(project.id, { at: now(), signature, context });
+            else contextCache.delete(project.id);
+          } catch (error) {
+            contextCache.delete(project.id);
+            if (!unauthorized(error)) {
+              logger.warn?.(`[gitlab-issues] context failed (${project.id}):`, errorFields(error)?.message || error);
+            }
+          }
+        }
+        if (context) {
+          projectContexts.push(context);
+          contexts.set(`${context.instance}|${context.projectId}`, context);
+          byEntryId.set(String(context.project.id), context);
+        }
+      }
+      const contextFor = (run: RunEntry) => (run.projectEntryId === undefined
+        ? undefined
+        : byEntryId.get(String(run.projectEntryId)))
+        ?? contexts.get(`${run.origin}|${run.projectId}`);
+
+      let runs = await ledger.list();
+      if (!recovered) {
+        recovered = true;
+        await recoverRuns(runs, contextFor);
+        runs = await ledger.list();
+      }
+
+      for (const run of runs) {
+        if (stopped) return;
+        const context = contextFor(run);
+        if (!context) continue;
+        await processRun(run, context)
+          .catch((error) => {
+            if (unauthorized(error)) return markBotUnauthorized(context);
+            return warn(`[gitlab-issues] run ${run.iid} failed:`, error);
+          });
+      }
+
+      if (tickCount % issueScanEveryTicks !== 0) return;
+      let dispatched = 0;
+      const current = await ledger.list();
+      let active = slotRuns(current);
+      for (const context of projectContexts) {
+        if (stopped || dispatched >= maxPerTick || active.length >= maxActiveGlobal) break;
+        if (active.filter((run) => run.projectId === context.projectId).length >= maxActivePerProject) continue;
+        try {
+          const claimedCount = await scanProject(context);
+          if (claimedCount) {
+            dispatched += claimedCount;
+            active = slotRuns(await ledger.list());
+          }
+        } catch (error) {
+          if (unauthorized(error)) {
+            await markBotUnauthorized(context);
+          } else {
+            warn(`[gitlab-issues] project scan failed (${context.project.id}):`, error);
+          }
+        }
+      }
+    } catch (error) {
+      warn('[gitlab-issues] tick failed:', error);
+    } finally {
+      ticking = false;
+    }
+  };
+
+  const stop = () => {
+    if (startupTimer) { clearTimeout(startupTimer); startupTimer = null; }
+    if (timer) { clearInterval(timer); timer = null; }
+  };
+
+  const sessionStatusOf = async (run: RunEntry) => {
+    if (!run.sessionId || !run.worktreePath) return null;
+    const result = await readSessionResult(sessionClient(run), run.sessionId)
+      .catch(() => null);
+    return result?.status === 'busy' || result?.status === 'idle' ? result.status : null;
+  };
+
+  return {
+    tick,
+    ledger,
+    sessionStatus: sessionStatusOf,
+    start() {
+      if (stopped || timer || startupTimer) return;
+      startupTimer = setTimeout(() => {
+        startupTimer = null;
+        if (stopped) return;
+        timer = setInterval(() => { void tick(); }, tickIntervalMs);
+        timer.unref?.();
+        void tick();
+      }, startupDelayMs);
+      startupTimer.unref?.();
+    },
+    stop,
+    async close() {
+      stopped = true;
+      stop();
+      await ledger.close();
+    },
+  };
+}
