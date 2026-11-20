@@ -40,6 +40,7 @@ export const enterpriseBlockedCapabilities = (guest: Partial<OpenChamberManifest
   if (!policy.enterpriseMode) return [];
   const gated = requestedGuestCapabilities(guest).filter((capability) => ENTERPRISE_GATED_CAPABILITIES.includes(capability));
   if (gated.length === 0) return [];
+  if (source === 'zip') return [];
   if (source === 'git' && isAllowedRepository(gitUrl, policy.allowedExtensions)) return [];
   if (source === 'path' && policy.allowLocalExtensions) return [];
   return gated;

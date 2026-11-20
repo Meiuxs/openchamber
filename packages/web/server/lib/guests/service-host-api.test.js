@@ -287,7 +287,7 @@ describe('sidebar marks', () => {
 
   test('enterprise mode refuses the service, and its marks with it', async () => {
     const guest = marking();
-    const blocked = enterpriseBlockedCapabilities(guest, { source: 'zip' }, { enterpriseMode: true, allowedExtensions: [] });
+    const blocked = enterpriseBlockedCapabilities(guest, { source: 'git', gitUrl: 'https://github.com/other/ext' }, { enterpriseMode: true, allowedExtensions: [] });
     expect(blocked).toEqual(['service']);
     // As the catalog lists it then: the refused capability is no longer granted.
     const listed = { ...guest, enterpriseBlocked: blocked, capabilityGrants: guest.capabilityGrants.filter((capability) => !blocked.includes(capability)) };
