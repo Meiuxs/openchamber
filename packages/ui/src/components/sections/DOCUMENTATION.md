@@ -963,3 +963,7 @@ Jev answers OpenChamber classification requests and the server owns its selectio
 ### Why settings links use text color and not the accent
 
 Underlining identifies links while the accent remains reserved for primary actions. Hover and focus strengthen the underline.
+
+## Repositories: binding visibility and repair
+
+`integrations/RepositoryBindingsPage.tsx` lists the Git repositories in the OpenChamber project list and their provider bindings. Non-Git projects stay out of the table. A Git project without a binding stays in the list with the unbound status and a Bind action that infers the provider, instance, and primary remote from its remotes. A duplicate group joins projects with the same provider, instance, account, and normalized project path. The group is a visibility hint; the resolver keeps the folder the user selects and resets the others with per-folder failure reporting. Reset and rebind call the existing binding APIs with captured authority. Undo reapplies a captured provider binding against the new revision in the same session. VS Code hides the page because it has no binding API.
