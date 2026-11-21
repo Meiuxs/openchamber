@@ -50,6 +50,7 @@ import { omniSearchI18n } from './omni-search.i18n';
 import { overviewI18n } from './overview.i18n';
 import { isolatedSpacesI18n } from './isolated-spaces.i18n';
 import { sourceBoardI18n } from './source-board.i18n';
+import { repositoryBindingsI18n } from './repository-bindings.i18n';
 import { stacksI18n } from './stacks.i18n';
 import { prReviewI18n } from './pr-review.i18n';
 import { changeReviewI18n } from './change-review.i18n';
@@ -254,6 +255,7 @@ export const dict: Record<I18nKey, string> = {
   ...overviewI18n['pt-BR'],
   ...isolatedSpacesI18n['pt-BR'],
   ...sourceBoardI18n['pt-BR'],
+  ...repositoryBindingsI18n['pt-BR'],
   ...stacksI18n['pt-BR'],
   ...prReviewI18n['pt-BR'],
   ...changeReviewI18n['pt-BR'],

@@ -49,6 +49,7 @@ import { omniSearchI18n } from './omni-search.i18n';
 import { overviewI18n } from './overview.i18n';
 import { isolatedSpacesI18n } from './isolated-spaces.i18n';
 import { sourceBoardI18n } from './source-board.i18n';
+import { repositoryBindingsI18n } from './repository-bindings.i18n';
 import { stacksI18n } from './stacks.i18n';
 import { prReviewI18n } from './pr-review.i18n';
 import { changeReviewI18n } from './change-review.i18n';
@@ -243,6 +244,7 @@ export const dict = {
   ...overviewI18n.nl,
   ...isolatedSpacesI18n.nl,
   ...sourceBoardI18n.nl,
+  ...repositoryBindingsI18n.nl,
   ...stacksI18n.nl,
   ...prReviewI18n.nl,
   ...changeReviewI18n.nl,
