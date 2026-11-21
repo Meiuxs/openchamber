@@ -70,6 +70,13 @@ const createTestHelpersWithRealSanitizers = () => {
 };
 
 describe('settings helpers', () => {
+  it('sanitizes the log level setting', () => {
+    const helpers = createTestHelpers();
+    expect(helpers.sanitizeSettingsUpdate({ logLevel: ' debug ' })).toEqual({ logLevel: 'debug' });
+    expect(helpers.sanitizeSettingsUpdate({ logLevel: 'normal' })).toEqual({ logLevel: 'normal' });
+    expect(helpers.sanitizeSettingsUpdate({ logLevel: 'verbose' })).toEqual({});
+  });
+
   it('sanitizes the optional GitLab OAuth client ID', () => {
     const helpers = createTestHelpers();
     expect(helpers.sanitizeSettingsUpdate({ gitlabClientId: ' client-id ' })).toEqual({ gitlabClientId: 'client-id' });
@@ -434,6 +441,23 @@ describe('settings helpers', () => {
     expect(helpers.formatSettingsResponse({ inputHistoryLimit: 100 })).toMatchObject({
       inputHistoryLimit: 100,
     });
+  });
+
+  it('defaults voice input to off in enterprise mode and keeps an explicit choice', () => {
+    const helpers = createTestHelpers();
+    const previousEnterpriseMode = process.env.OPENCHAMBER_ENTERPRISE_MODE;
+
+    expect(helpers.formatSettingsResponse({}).dictationEnabled).toBeUndefined();
+
+    process.env.OPENCHAMBER_ENTERPRISE_MODE = '1';
+    try {
+      expect(helpers.formatSettingsResponse({}).dictationEnabled).toBe(false);
+      expect(helpers.formatSettingsResponse({ dictationEnabled: true }).dictationEnabled).toBe(true);
+      expect(helpers.formatSettingsResponse({ dictationEnabled: false }).dictationEnabled).toBe(false);
+    } finally {
+      if (previousEnterpriseMode === undefined) delete process.env.OPENCHAMBER_ENTERPRISE_MODE;
+      else process.env.OPENCHAMBER_ENTERPRISE_MODE = previousEnterpriseMode;
+    }
   });
 
   it('sanitizes the persisted terminal shell', () => {
@@ -1012,7 +1036,7 @@ describe('settings registry gate', () => {
     stickyUserHeader: true, promptNavigatorEnabled: true, chatWidth: 'wider', wideChatLayoutEnabled: true, showSplitAssistantMessageActions: true, showToolFileIcons: true,
     selectionApprovalText: 'Agreed.',
     codeBlockLineWrap: true, tableCellWrap: true, copyMessagesAsPlainText: true, showTurnChangedFiles: true, toolJsonViewMode: 'raw',
-    timeFormatPreference: '24h', weekStartPreference: 'monday', messageStreamTransport: 'ws', diffLayoutPreference: 'inline', diffWrapLines: true, diffHideWhitespace: true,
+    timeFormatPreference: '24h', weekStartPreference: 'monday', messageStreamTransport: 'ws', logLevel: 'debug', diffLayoutPreference: 'inline', diffWrapLines: true, diffHideWhitespace: true,
     gitChangesViewMode: 'tree', gitmojiEnabled: true, allowedInsecureGitOrigins: 'http://git.internal', defaultFileViewerPreview: true, directoryShowHidden: true, filesViewShowGitignored: true,
     fileEditorKeymap: 'vim', fileEditorVimMappings: 'inoremap jk <Esc>', autoSaveEnabled: true, fileEditorWrapLines: false, confirmFileTreeMove: false, layoutAnimations: false, openLinksInBrowserPanel: true, liveBrowserTabLimit: 8, agentBrowserSharesLogins: true, openTrackerLinksOnBoard: true, fileTreeSide: 'left', autoCreateWorktree: true, sessionTabsEnabled: true, sessionTabsPerWorkspace: true, commandPaletteShowArchivedSessions: true,
     allowPromptingSubagentSessions: true, inputSpellcheckEnabled: true, enterToSend: true, enterToSendConfigured: true, mobileReturnKeySends: true,

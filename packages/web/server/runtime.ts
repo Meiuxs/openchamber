@@ -29,6 +29,7 @@ import {
   readAdvertisedLanUrl,
 } from './lib/security/bind-host.js';
 import { isEnterpriseMode, isNetworkAccessBlocked, NETWORK_ACCESS_BLOCKED_ERROR, readEnterprisePolicy, watchEnterprisePolicy } from './lib/enterprise-mode.js';
+import { isDebugLogging, setDebugLogging } from './lib/log-level.js';
 import {
   TUNNEL_MODE_MANAGED_LOCAL,
   TUNNEL_MODE_MANAGED_REMOTE,
@@ -593,6 +594,9 @@ const readSettingsFromDisk: typeof settingsRuntime.readSettingsFromDisk = (...ar
 const readSettingsFromDiskStrict: typeof settingsRuntime.readSettingsFromDiskStrict = (...args) => settingsRuntime.readSettingsFromDiskStrict(...args);
 const writeSettingsToDisk: typeof settingsRuntime.writeSettingsToDisk = (...args) => settingsRuntime.writeSettingsToDisk(...args);
 const persistSettings: typeof settingsRuntime.persistSettings = (...args) => settingsRuntime.persistSettings(...args);
+void readSettingsFromDiskMigrated().then((settings) => {
+  setDebugLogging(settings.logLevel === 'debug');
+}, () => {});
 
 const requestSecurityRuntime = createRequestSecurityRuntime({
   readSettingsFromDiskMigrated,
@@ -2781,7 +2785,9 @@ async function main(options: WebUiServerOptions = {}) {
       return Number.isFinite(port) && port > 0 ? port : null;
     },
     getTunnelUrl: () => tunnelRuntimeContextHolder?.tunnelService?.getPublicUrl?.() ?? null,
-    verboseRequestLogs: OPENCHAMBER_VERBOSE_REQUEST_LOGS,
+    get verboseRequestLogs() {
+      return OPENCHAMBER_VERBOSE_REQUEST_LOGS || isDebugLogging();
+    },
     uiPassword,
     tunnelAuthController,
     remoteClientAuthRuntime,

@@ -42,6 +42,7 @@ export const createInitialConfigState: ConfigSlice<
     | 'settingsDefaultFileViewerPreview'
     | 'settingsZenModel'
     | 'settingsMessageStreamTransport'
+    | 'logLevel'
 > = () => ({
     activeDirectoryKey: resolveInitialDirectoryKey(),
     directoryScoped: {},
@@ -82,4 +83,5 @@ export const createInitialConfigState: ConfigSlice<
     settingsDefaultFileViewerPreview: true,
     settingsZenModel: undefined,
     settingsMessageStreamTransport: 'auto',
+    logLevel: 'normal',
 });

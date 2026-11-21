@@ -74,7 +74,6 @@ export const createBootstrapRuntime = (dependencies: BootstrapDependencies) => {
       readOpenCodeLoad,
       getServerPort,
       getTunnelUrl,
-      verboseRequestLogs,
       uiPassword,
       tunnelAuthController,
       remoteClientAuthRuntime,
@@ -153,7 +152,14 @@ export const createBootstrapRuntime = (dependencies: BootstrapDependencies) => {
       readOpenCodeLoad,
     });
 
-    registerCommonRequestMiddleware(app, { express, verboseRequestLogs, skipBodyParsing });
+    registerCommonRequestMiddleware(app, {
+      express,
+      verboseRequestLogs: () => {
+        const value = options.verboseRequestLogs;
+        return typeof value === 'function' ? value() : value ?? false;
+      },
+      skipBodyParsing,
+    });
 
     registerAgentToolRoutes(app, { express, agentToolRuntime });
     limitFailoverRuntime?.registerRoutes(app, express);

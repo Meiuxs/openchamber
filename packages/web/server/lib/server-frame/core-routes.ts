@@ -1,4 +1,8 @@
 import { buildExternalManualRestartResponse } from '../opencode/config-mutation-response.js';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { policyFilePaths } from '../enterprise-mode.js';
 import { ThemeImportStorageError } from '../appearance/theme-runtime.js';
 import { registerThemeCatalogRoutes } from '../appearance/theme-catalog.js';
 import { collectLocalFileDiagnostics } from '../diagnostics/local-files.js';
@@ -79,7 +83,7 @@ export interface SettingsUtilityDependencies {
 
 export interface CommonRequestDependencies {
   express: ExpressFactory;
-  verboseRequestLogs?: boolean;
+  verboseRequestLogs?: boolean | (() => boolean);
   skipBodyParsing?: (req: Request) => boolean;
 }
 
@@ -492,6 +496,29 @@ export const registerServerStatusRoutes = (app: Application, dependencies: Serve
       info.tunnelUrl = getTunnelUrl();
     }
     res.json(info);
+  });
+
+  app.get('/api/system/diagnostics', async (req, res) => {
+    if (!await isRequestAuthorized(req, res, { tunnelAuthController, uiAuthController }).catch(() => false)) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const configuredDataDir = process.env.OPENCHAMBER_DATA_DIR?.trim();
+    const dataDir = configuredDataDir ? path.resolve(configuredDataDir) : path.join(os.homedir(), '.config', 'openchamber');
+    const candidates = policyFilePaths();
+    let activePolicyFile = candidates[0] ?? path.join(dataDir, 'policy.json');
+    for (const candidate of candidates) {
+      try {
+        await fs.access(candidate);
+        activePolicyFile = candidate;
+        break;
+      } catch {
+        void 0;
+      }
+    }
+    return res.json({
+      logDirectory: path.join(dataDir, 'logs'),
+      enterpriseConfigDirectory: path.dirname(activePolicyFile),
+    });
   });
 
   app.get('/api/system/free-port', async (_req, res) => {
@@ -1285,7 +1312,8 @@ export const registerCommonRequestMiddleware = (app: Application, dependencies: 
   });
 
   app.use((req, _res, next) => {
-    if (verboseRequestLogs) {
+    const shouldLog = typeof verboseRequestLogs === 'function' ? verboseRequestLogs() : verboseRequestLogs;
+    if (shouldLog) {
       console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     }
     next();

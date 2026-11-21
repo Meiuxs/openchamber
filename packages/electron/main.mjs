@@ -150,7 +150,7 @@ import { mintOutsideFileGrant } from '@openchamber/web/server/lib/fs/routes.js';
 import { fetchUpdateNotes } from '@openchamber/web/server/lib/changelog/update-notes.js';
 import { compareVersions } from '@openchamber/web/server/lib/version-order.js';
 import { applyConnectAttemptTimeout } from '@openchamber/web/server/lib/network-defaults.js';
-import { isNetworkAccessBlocked } from '@openchamber/web/server/lib/enterprise-mode.js';
+import { isNetworkAccessBlocked, policyFilePaths } from '@openchamber/web/server/lib/enterprise-mode.js';
 import { assignInjectedEnv } from '@openchamber/web/server/lib/injected-env.js';
 
 const execFileAsync = promisify(execFile);
@@ -169,6 +169,14 @@ log.initialize();
 log.transports.file.maxSize = 5 * 1024 * 1024;
 log.transports.file.level = 'info';
 log.transports.console.level = isDev ? 'debug' : 'warn';
+try {
+  if (readSettingsRoot().logLevel === 'debug') {
+    log.transports.file.level = 'debug';
+    log.transports.console.level = 'debug';
+  }
+} catch {
+  void 0;
+}
 
 Object.assign(console, log.functions);
 
@@ -4620,6 +4628,28 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
 
     case 'desktop_get_update_channel': {
       return { channel: readUpdateChannel() };
+    }
+
+    case 'desktop_set_log_level': {
+      const level = args?.level === 'debug' ? 'debug' : 'normal';
+      log.transports.file.level = level === 'debug' ? 'debug' : 'info';
+      log.transports.console.level = level === 'debug' ? 'debug' : (isDev ? 'debug' : 'warn');
+      return { level };
+    }
+
+    case 'desktop_get_diagnostics': {
+      const candidates = policyFilePaths();
+      let activePolicyFile = candidates[0] || '';
+      for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+          activePolicyFile = candidate;
+          break;
+        }
+      }
+      return {
+        logDirectory: path.dirname(log.transports.file.getFile().path),
+        enterpriseConfigDirectory: activePolicyFile ? path.dirname(activePolicyFile) : '',
+      };
     }
 
     case 'desktop_set_update_channel': {

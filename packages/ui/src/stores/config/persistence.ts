@@ -93,6 +93,7 @@ const partializeConfig = (state: ConfigStore) => ({
     settingsDefaultFileViewerPreview: state.settingsDefaultFileViewerPreview,
     settingsZenModel: state.settingsZenModel,
     settingsMessageStreamTransport: state.settingsMessageStreamTransport,
+    logLevel: state.logLevel,
     dictationEnabled: state.dictationEnabled,
     dictationAutoSend: state.dictationAutoSend,
     speechRate: state.speechRate,

@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { isOverviewFeatureAvailable } from '../overview/feature-flag.js';
 import { isPermissionMode } from '../permission-auto-accept/modes.js';
 import type { PermissionMode } from '../permission-auto-accept/modes.js';
-import { normalizeInsecureGitOrigin } from '../enterprise-mode.js';
+import { isEnterpriseMode, normalizeInsecureGitOrigin } from '../enterprise-mode.js';
 import { asNonEmptyString } from '../shared/guards.js';
 import { isBoolean, isString } from '../shared/object-guards.js';
 import type { JsonValue } from '../shared/json-values.js';
@@ -247,7 +247,7 @@ type StringSettingsKey =
   | 'terminalShell' | 'openInAppId' | 'globalBehaviorPrompt' | 'responseStylePreset' | 'responseStyleCustomInstructions'
   | 'sttServerUrl' | 'sttModel' | 'sttEndpointPath' | 'sttLocalModel' | 'sttLanguage' | 'sidebarProjectDisplayMode'
   | 'sidebarViewMode' | 'sidebarListSessionGrouping' | 'sidebarGrouping' | 'sidebarProjectSortOrder'
-  | 'selectionApprovalText' | 'allowedInsecureGitOrigins';
+  | 'selectionApprovalText' | 'allowedInsecureGitOrigins' | 'logLevel';
 
 type ClearableStringSettingsKey =
   | 'managedRemoteTunnelHostname' | 'managedRemoteTunnelSelectedPresetId' | 'defaultModel' | 'defaultVariant'
@@ -1172,6 +1172,12 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
         result.messageStreamTransport = mode;
       }
     }
+    if (isString(candidate.logLevel)) {
+      const level = candidate.logLevel.trim();
+      if (level === 'normal' || level === 'debug') {
+        result.logLevel = level;
+      }
+    }
     if (isString(candidate.activityRenderMode)) {
       const mode = candidate.activityRenderMode.trim();
       if (mode === 'collapsed' || mode === 'summary') {
@@ -1552,6 +1558,9 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
     const mobileKeyboardMode = normalizeMobileKeyboardMode(settings?.mobileKeyboardMode, 'native');
     const inputHistoryScope = sanitized.inputHistoryScope ?? DEFAULT_INPUT_HISTORY_SCOPE;
     const inputHistoryLimit = sanitized.inputHistoryLimit ?? DEFAULT_INPUT_HISTORY_LIMIT;
+    const dictationDefault = !isBoolean(settings.dictationEnabled) && isEnterpriseMode()
+      ? { dictationEnabled: false }
+      : {};
 
     const appNameFields: AppNameFields = {};
     if (pwaAppName) appNameFields.pwaAppName = pwaAppName;
@@ -1567,6 +1576,7 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
 
     return {
       ...sanitized,
+      ...dictationDefault,
       hasManagedRemoteTunnelToken,
       hasDesktopUiPassword,
       agentMemoryFeatureAvailable: true,

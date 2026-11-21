@@ -493,6 +493,9 @@
     "messageStreamTransport": {
       "scope": "profile"
     },
+    "logLevel": {
+      "scope": "profile"
+    },
     "diffLayoutPreference": {
       "scope": "profile"
     },

@@ -23,6 +23,7 @@ import {
   type PreferenceFields,
   VSCODE_SETTINGS_SURFACE,
 } from './settings-files';
+import { isEnterpriseMode } from '../../web/server/lib/enterprise-mode.js';
 
 const SETTINGS_KEY = 'openchamber.settings';
 const OPENCHAMBER_SHARED_SETTINGS_PATH = path.join(os.homedir(), '.config', 'openchamber', 'settings.json');
@@ -351,8 +352,13 @@ export const readSettings = (ctx?: BridgeContext): Record<string, unknown> => {
       ? 'light'
       : 'dark';
 
+  const dictationDefault = typeof persisted.dictationEnabled === 'boolean' || !isEnterpriseMode()
+    ? {}
+    : { dictationEnabled: false };
+
   return {
     ...persisted,
+    ...dictationDefault,
     themeVariant,
     lastDirectory: workspaceFolder,
     opencodeBinary: persistedOpencodeBinary || undefined,

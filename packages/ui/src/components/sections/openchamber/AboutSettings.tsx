@@ -3,6 +3,7 @@ import { checkConnectedServerForUpdates, useUpdateStore } from '@/stores/useUpda
 import type { UpdateInfo } from '@/lib/desktop';
 import { getClientPlatform, isCapacitorApp } from '@/lib/platform';
 import { openExternalUrl } from '@/lib/url';
+import { getRevealLabelKey } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 import { UpdateDialog } from '@/components/ui/UpdateDialog';
 import { useDeviceInfo } from '@/lib/device';
@@ -12,7 +13,8 @@ import { AboutLogo } from '@/components/ui/AboutLogo';
 import { Icon } from "@/components/icon/Icon";
 import { Spinner } from '@/components/ui/spinner';
 import { getCurrentIntlLocale, useI18n } from '@/lib/i18n';
-import { getDesktopUpdateChannel, setDesktopUpdateChannel } from '@/lib/desktop';
+import { getDesktopDiagnostics, getDesktopUpdateChannel, setDesktopLogLevel, setDesktopUpdateChannel } from '@/lib/desktop';
+import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { formatCanaryBuild, parseCanaryVersion, type UpdateChannel } from '@/lib/updateChannel';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { loadDesktopSettings, updateDesktopSettings } from '@/lib/persistence';
@@ -271,6 +273,63 @@ export const AboutSettings: React.FC<AboutSettingsProps> = ({ initialUpdateDialo
   const openCodeVersion = openCode.status?.currentVersion ?? null;
   const openCodeUpdateVersion = openCode.phase.kind === 'installed' ? null : openCode.status?.availableVersion ?? null;
   const [commandCopied, setCommandCopied] = React.useState(false);
+  const filesRuntime = useRuntimeAPIs().files;
+  const [logLevel, setLogLevel] = React.useState<'normal' | 'debug'>('normal');
+  const [diagnostics, setDiagnostics] = React.useState<{ logDirectory: string; enterpriseConfigDirectory: string } | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      loadDesktopSettings(),
+      (isDesktopApp
+        ? getDesktopDiagnostics()
+        : runtimeFetch('/api/system/diagnostics').then((response) => response.ok ? response.json() : null).catch(() => null)),
+    ]).then(([settings, paths]) => {
+      if (cancelled) return;
+      if (settings?.logLevel === 'debug' || settings?.logLevel === 'normal') setLogLevel(settings.logLevel);
+      if (paths && typeof paths.logDirectory === 'string' && typeof paths.enterpriseConfigDirectory === 'string') setDiagnostics(paths);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const chooseLogLevel = async (level: 'normal' | 'debug') => {
+    if (level === logLevel) return;
+    const previous = logLevel;
+    setLogLevel(level);
+    const result = await updateDesktopSettings({ logLevel: level });
+    if (result.ok && isDesktopApp && !await setDesktopLogLevel(level)) {
+      toast.error(t('settings.openchamber.about.toast.saveLogLevelFailed'));
+    }
+    if (!result.ok) {
+      setLogLevel(previous);
+      toast.error(t('settings.openchamber.about.toast.saveLogLevelFailed'));
+    }
+  };
+
+  const copyPath = async (targetPath: string) => {
+    const result = await copyTextToClipboard(targetPath);
+    if (!result.ok) toast.error(t('sessions.sidebar.project.copyPath.error'));
+  };
+
+  const revealPath = (targetPath: string) => {
+    if (!filesRuntime.revealPath) return;
+    void filesRuntime.revealPath(targetPath).catch(() => {
+      toast.error(t('sidebarFilesTree.toast.revealFailed'));
+    });
+  };
+
+  const pathActions = (targetPath: string) => (
+    <span className="flex items-center gap-1">
+      <Button type="button" variant="ghost" size="icon" className="size-8" aria-label={t('sidebarFilesTree.menu.copyPath')} onClick={() => void copyPath(targetPath)}>
+        <Icon name="clipboard" className="size-4" />
+      </Button>
+      {filesRuntime.revealPath && (
+        <Button type="button" variant="ghost" size="icon" className="size-8" aria-label={t(getRevealLabelKey())} onClick={() => revealPath(targetPath)}>
+          <Icon name="folder-received" className="size-4" />
+        </Button>
+      )}
+    </span>
+  );
 
   const serverUpdateLabel = (info: UpdateInfo | null) => {
     const version = describeVersion(info?.version || '', info?.currentVersion);
@@ -806,6 +865,32 @@ export const AboutSettings: React.FC<AboutSettingsProps> = ({ initialUpdateDialo
           <InstanceServiceUrls label={t('settings.openchamber.about.field.instanceUrls')} />
         </div>
         {notes.length > 0 && <div className="space-y-3">{notes}</div>}
+      </SettingsSection>
+
+      <SettingsSection title={t('settings.openchamber.about.section.diagnostics')} contentClassName="space-y-2">
+        <SettingsFieldRow label={t('settings.openchamber.about.field.logLevel')} {...valueRow}>
+          <SettingsChipGroup
+            value={logLevel}
+            onChange={(level) => void chooseLogLevel(level)}
+            aria-label={t('settings.openchamber.about.field.logLevel')}
+            options={[
+              { value: 'normal', label: t('settings.openchamber.about.option.logLevel.normal') },
+              { value: 'debug', label: t('settings.openchamber.about.option.logLevel.debug') },
+            ]}
+          />
+        </SettingsFieldRow>
+        <SettingsFieldRow label={t('settings.openchamber.about.field.logDirectory')} {...valueRow}>
+          <span className="typography-meta break-all font-mono text-muted-foreground">
+            {diagnostics?.logDirectory ?? t('settings.openchamber.about.state.unknown')}
+          </span>
+          {diagnostics && pathActions(diagnostics.logDirectory)}
+        </SettingsFieldRow>
+        <SettingsFieldRow label={t('settings.openchamber.about.field.enterpriseConfigDirectory')} {...valueRow}>
+          <span className="typography-meta break-all font-mono text-muted-foreground">
+            {diagnostics?.enterpriseConfigDirectory ?? t('settings.openchamber.about.state.unknown')}
+          </span>
+          {diagnostics && pathActions(diagnostics.enterpriseConfigDirectory)}
+        </SettingsFieldRow>
       </SettingsSection>
 
       {releaseNotes}

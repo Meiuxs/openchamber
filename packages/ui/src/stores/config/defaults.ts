@@ -17,6 +17,7 @@ interface OpenChamberDefaults {
     defaultFileViewerPreview?: boolean;
     zenModel?: string;
     messageStreamTransport?: 'auto' | 'ws' | 'sse';
+    logLevel?: 'normal' | 'debug';
     dictationEnabled?: boolean;
     dictationAutoSend?: boolean;
     sttProvider?: 'local' | 'openai-compatible';
@@ -83,6 +84,7 @@ const toOpenChamberDefaults = (data: DesktopSettings): OpenChamberDefaults => {
         defaultFileViewerPreview: data.defaultFileViewerPreview,
         zenModel: zenModel.length > 0 ? zenModel : undefined,
         messageStreamTransport: data.messageStreamTransport,
+        logLevel: data.logLevel,
         dictationEnabled: data.dictationEnabled,
         dictationAutoSend: data.dictationAutoSend,
         sttProvider: data.sttProvider,
@@ -134,6 +136,7 @@ export const createSettingsDefaults: ConfigSlice<
     | 'setSettingsDefaultFileViewerPreview'
     | 'setSettingsZenModel'
     | 'setSettingsMessageStreamTransport'
+    | 'setLogLevel'
     | 'getResolvedGitGenerationModel'
 > = (set, get) => ({
     loadSessionDefaults: async () => {
@@ -155,6 +158,7 @@ export const createSettingsDefaults: ConfigSlice<
                 settingsDefaultFileViewerPreview: defaults.defaultFileViewerPreview ?? true,
                 settingsZenModel: defaults.zenModel,
                 settingsMessageStreamTransport: defaults.messageStreamTransport ?? state.settingsMessageStreamTransport,
+                logLevel: defaults.logLevel ?? state.logLevel,
                 dictationEnabled: typeof defaults.dictationEnabled === 'boolean' ? defaults.dictationEnabled : state.dictationEnabled,
                 dictationAutoSend: defaults.dictationAutoSend ?? state.dictationAutoSend,
                 sttProvider: defaults.sttProvider ?? state.sttProvider,
@@ -217,6 +221,10 @@ export const createSettingsDefaults: ConfigSlice<
 
     setSettingsMessageStreamTransport: (transport: 'auto' | 'ws' | 'sse') => {
         set({ settingsMessageStreamTransport: transport });
+    },
+
+    setLogLevel: (level: 'normal' | 'debug') => {
+        set({ logLevel: level });
     },
 
     getResolvedGitGenerationModel: () => {

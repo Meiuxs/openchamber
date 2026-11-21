@@ -1,5 +1,6 @@
 import { createProjectIdFromPath, projectConfigFileStemOf } from '../projects/project-id.js';
 import { isMessageSearchEnabled } from './settings-helpers.js';
+import { setDebugLogging } from '../log-level.js';
 import type { SettingsDocument, createSettingsHelpers } from './settings-helpers.js';
 import type { SettingsProject, createSettingsNormalizationRuntime } from './settings-normalization-runtime.js';
 import type { createManagedTunnelConfigRuntime } from '../tunnels/managed-config.js';
@@ -1183,6 +1184,9 @@ export const createSettingsRuntime = (deps: SettingsRuntimeDependencies) => {
       }
       if (changedKeys.includes('lastDirectory') && next.lastDirectory !== current.lastDirectory) {
         onLastDirectoryChanged(next.lastDirectory);
+      }
+      if (changedKeys.includes('logLevel')) {
+        setDebugLogging(next.logLevel === 'debug');
       }
       return formatSettingsResponse(next);
     });

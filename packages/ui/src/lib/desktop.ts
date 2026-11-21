@@ -258,6 +258,25 @@ export const setDesktopUpdateChannel = async (channel: UpdateChannel): Promise<U
   }
 };
 
+export const getDesktopDiagnostics = async (): Promise<{ logDirectory: string; enterpriseConfigDirectory: string } | null> => {
+  if (!canUseElectronDesktopIPC() || !isDesktopLocalOriginActive()) return null;
+  try {
+    return await invokeDesktop('desktop_get_diagnostics');
+  } catch {
+    return null;
+  }
+};
+
+export const setDesktopLogLevel = async (level: 'normal' | 'debug'): Promise<boolean> => {
+  if (!canUseElectronDesktopIPC() || !isDesktopLocalOriginActive()) return false;
+  try {
+    await invokeDesktop('desktop_set_log_level', { level });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const getDesktopMinimizeToTray = async (): Promise<MinimizeToTrayStatus | null> => {
   if (!canUseElectronDesktopIPC() || !isDesktopLocalOriginActive()) {
     return null;

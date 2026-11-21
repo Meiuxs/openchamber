@@ -8,15 +8,19 @@ mock.module('vscode', () => ({
     workspaceFolders: [],
     getConfiguration: () => ({ get: () => undefined }),
   },
+  window: { activeColorTheme: { kind: 2 } },
+  ColorThemeKind: { Light: 1, Dark: 2, HighContrastLight: 3, HighContrastDark: 4 },
 }));
 
 // Keep any import-time config materialisation out of the real OpenChamber
 // config, mirroring bridge-config-runtime.test.js.
 const scratchConfigRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'openchamber-vscode-settings-'));
 process.env.XDG_CONFIG_HOME = path.join(scratchConfigRoot, 'xdg');
+process.env.HOME = scratchConfigRoot;
+process.env.USERPROFILE = scratchConfigRoot;
 process.env.OPENCODE_CONFIG_DIR = '';
 
-const { fetchOpenCodeSkillsFromApi } = await import('./bridge-settings-runtime.ts');
+const { fetchOpenCodeSkillsFromApi, readSettings } = await import('./bridge-settings-runtime.ts');
 
 const originalFetch = globalThis.fetch;
 
@@ -129,5 +133,20 @@ describe('fetchOpenCodeSkillsFromApi payload mapping', () => {
 
   test('returns null when the context exposes no API url', async () => {
     expect(await fetchOpenCodeSkillsFromApi({ manager: { getApiUrl: () => null } }, 'dir')).toBeNull();
+  });
+});
+
+describe('readSettings enterprise defaults', () => {
+  test('defaults voice input off in enterprise mode and keeps an explicit choice', () => {
+    const previousEnterpriseMode = process.env.OPENCHAMBER_ENTERPRISE_MODE;
+    try {
+      process.env.OPENCHAMBER_ENTERPRISE_MODE = '1';
+      expect(readSettings().dictationEnabled).toBe(false);
+      expect(readSettings({ context: { globalState: { get: () => ({ dictationEnabled: true }) } } }).dictationEnabled).toBe(true);
+      expect(readSettings({ context: { globalState: { get: () => ({ dictationEnabled: false }) } } }).dictationEnabled).toBe(false);
+    } finally {
+      if (previousEnterpriseMode === undefined) delete process.env.OPENCHAMBER_ENTERPRISE_MODE;
+      else process.env.OPENCHAMBER_ENTERPRISE_MODE = previousEnterpriseMode;
+    }
   });
 });
