@@ -15,6 +15,8 @@ every source, the repository's provider, each tracker and each extension, as its
 
 - A close, reopen or merge through the app ends the item's label hold immediately, so the changed state can remove it from the list. A label hold restores a dropped item only in a label-filtered list; a drop from an unfiltered list is authoritative.
 - Repository cache keys include the binding revision and resolved read context. An in-flight answer for an earlier binding fills only its earlier key.
+- An across-repository list with no readable repository names that scope and points at the omission disclosure. It never says that one project has no remote when several folders were left out.
+- Across-repository search takes one provider and one kind per request. Both GitHub and GitLab publish `referencesAcross`; folders on another provider stay in the omission disclosure with their reason. GitLab reads are paged with a scoped cursor and bounded concurrency, so changing filters or folder bindings cannot reuse a stale page position.
 - A forced value read waits for any read already running before asking again, so an answer from before a write cannot replace its follow-up.
 - A batch read supplies an outcome for every requested key. An omitted key becomes an error, so it cannot remain pending indefinitely.
 - The label panel reads once per opening even when the binding changes its reader's identity. Treating each new reader as another opening can loop reads.
