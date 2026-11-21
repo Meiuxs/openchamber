@@ -18,6 +18,7 @@ const SETTINGS_PAGE_TITLE_KEYS = {
   'skills.catalog': 'settings.page.skillsCatalog.title',
   git: 'settings.page.git.title',
   integrations: 'settings.page.integrations.title',
+  repositories: 'settings.page.repositories.title',
   extensions: 'settings.page.extensions.title',
   appearance: 'settings.page.appearance.title',
   chat: 'settings.page.chat.title',

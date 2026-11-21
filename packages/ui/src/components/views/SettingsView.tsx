@@ -45,6 +45,7 @@ import { SnippetsSidebar } from '@/components/sections/snippets/SnippetsSidebar'
 import { SnippetsPage } from '@/components/sections/snippets/SnippetsPage';
 import { GitPage } from '@/components/sections/git-identities/GitPage';
 import { IntegrationsPage } from '@/components/sections/integrations/IntegrationsPage';
+import { RepositoryBindingsPage } from '@/components/sections/integrations/RepositoryBindingsPage';
 import { RoutingPage } from '@/components/sections/routing/RoutingPage';
 import { ExtensionsPage } from '@/components/sections/extensions/ExtensionsPage';
 import type { OpenChamberSection } from '@/components/sections/openchamber/types';
@@ -124,6 +125,7 @@ const pageOrder: SettingsPageSlug[] = [
   'shortcuts',
   'voice',
   'integrations',
+  'repositories',
   'extensions',
   'usage',
   'about',
@@ -666,6 +668,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
         return <GitPage />;
       case 'integrations':
         return <IntegrationsPage />;
+      case 'repositories':
+        return <RepositoryBindingsPage />;
       case 'routing':
         return <RoutingPage />;
       case 'extensions':

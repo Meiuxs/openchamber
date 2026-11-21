@@ -31,6 +31,7 @@ export type SettingsPageSlug =
   | 'isolated-spaces'
   | 'about'
   | 'integrations'
+  | 'repositories'
   | 'extensions';
 
 type SettingsPageGroup =
@@ -235,6 +236,7 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
   },
   { slug: 'about', title: 'About', group: 'general', kind: 'single', keywords: ['about', 'version', 'updates', 'release', 'changelog', 'canary', 'channel'], isAvailable: (ctx) => !ctx.isVSCode },
   { slug: 'integrations', title: 'Integrations', group: 'general', kind: 'single', keywords: ['integration', 'connect', 'oauth', 'github', 'linear', 'extension', 'claude', 'plugin'], isAvailable: (ctx) => !ctx.isVSCode },
+  { slug: 'repositories', title: 'Repositories', group: 'general', kind: 'single', keywords: ['repository', 'repositories', 'binding', 'gitlab', 'github', 'project', 'duplicate', 'reset'], isAvailable: (ctx) => !ctx.isVSCode },
   {
     slug: 'extensions',
     title: 'Extensions',
@@ -331,6 +333,8 @@ export function getSettingsNavIcon(slug: SettingsPageSlug): IconName | null {
 
     case 'integrations':
       return 'plug';
+    case 'repositories':
+      return 'git-branch';
     case 'extensions':
       return 'puzzle';
 
