@@ -18,6 +18,12 @@ import {
 type ExecGitResult = { stdout: string; stderr: string; exitCode: number };
 
 const BRIDGE_GIT_GENERATION_TIMEOUT_MS = 2 * 60 * 1000;
+const SESSION_CLEANUP_TIMEOUT_MS = 2_000;
+let sessionCleanupTimeoutMs = SESSION_CLEANUP_TIMEOUT_MS;
+
+export const setBridgeGitSessionCleanupTimeoutForTest = (timeoutMs = SESSION_CLEANUP_TIMEOUT_MS): void => {
+  sessionCleanupTimeoutMs = timeoutMs;
+};
 
 const UNAVAILABLE_RETRY_DELAYS_MS = [500, 1_000, 2_000, 4_000, 8_000, 16_000];
 let unavailableRetryDelaysMs = UNAVAILABLE_RETRY_DELAYS_MS;
@@ -30,6 +36,36 @@ const isCatalogNotReady = (
   (error?._tag === 'ModelNotFoundError' && error.providerID === providerID && error.modelID === modelID)
   || (error?._tag === 'ServiceUnavailableError' && error.service === 'plugin')
 );
+
+const readableErrorFields = (value: unknown) => value !== null && value !== undefined && (typeof value === 'object' || typeof value === 'function')
+  ? value as { statusCode?: unknown; status?: unknown; cause?: unknown; error?: unknown; _tag?: unknown; name?: unknown; reason?: unknown; type?: unknown }
+  : null;
+
+const readHttpStatus = (value: unknown): number | undefined => {
+  const fields = readableErrorFields(value);
+  if (!fields) return undefined;
+  const cause = readableErrorFields(fields.cause);
+  for (const candidate of [fields.statusCode, fields.status, cause?.statusCode, cause?.status]) {
+    if (candidate === 401 || candidate === '401') return 401;
+  }
+  return undefined;
+};
+
+const isProviderAuthRefusal = (error: unknown): boolean => {
+  const fields = readableErrorFields(error);
+  if (!fields) return false;
+  for (const candidate of [fields, readableErrorFields(fields.cause), readableErrorFields(fields.error)]) {
+    if (!candidate) continue;
+    if (readHttpStatus(candidate) === 401) return true;
+    if (
+      candidate._tag === 'ProviderAuthError'
+      || candidate.name === 'ProviderAuthError'
+      || candidate.reason === 'ProviderAuthError'
+      || candidate.type === 'ProviderAuthError'
+    ) return true;
+  }
+  return false;
+};
 
 export const setUnavailableRetryDelaysForTest = (delays: number[] = UNAVAILABLE_RETRY_DELAYS_MS): void => {
   unavailableRetryDelaysMs = delays;
@@ -129,6 +165,30 @@ const resolveBridgeGitGenerationModel = async (
   return chooseBridgeGitGenerationModel(payloadModel, settings, hasModel, configuredModel, hasVariant);
 };
 
+const generateBridgeGitTextInSession = async (
+  client: OpenCodeClient,
+  prompt: string,
+  model: { id: string; providerID: string; variant?: string },
+  signal: AbortSignal,
+): Promise<string> => {
+  const created = await client.session.create({ model }, { signal });
+  const rawSessionID = created?.id
+    ?? (created as unknown as { data?: { id?: unknown } })?.data?.id;
+  if (typeof rawSessionID !== 'string' || !rawSessionID.trim()) {
+    throw new Error('OpenCode did not return a session for Git generation');
+  }
+  const sessionID = rawSessionID.trim();
+  try {
+    const result = await client.session.generate({ sessionID, prompt }, { signal });
+    return result.text.trim();
+  } finally {
+    await client.session.remove(
+      { sessionID },
+      { signal: AbortSignal.timeout(sessionCleanupTimeoutMs) },
+    ).catch(() => {});
+  }
+};
+
 const generateBridgeGitText = async ({
   apiUrl,
   prompt,
@@ -151,11 +211,19 @@ const generateBridgeGitText = async ({
   const model = variant
     ? { id: modelID, providerID, variant }
     : { id: modelID, providerID };
+  let useSessionTransport = false;
   for (let attempt = 0; ; attempt += 1) {
     try {
+      if (useSessionTransport) {
+        return await generateBridgeGitTextInSession(client, prompt, model, signal);
+      }
       const result = await client.experimental.generate.text({ prompt, model }, { signal });
       return result.text.trim();
     } catch (error) {
+      if (isProviderAuthRefusal(error) && !useSessionTransport) {
+        useSessionTransport = true;
+        continue;
+      }
       const tagged = error as { _tag?: unknown; providerID?: unknown; modelID?: unknown; service?: unknown } | null;
       if (!isCatalogNotReady(tagged, providerID, modelID) || attempt >= unavailableRetryDelaysMs.length) {
         throw error;

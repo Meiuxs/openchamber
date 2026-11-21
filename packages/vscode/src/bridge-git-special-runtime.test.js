@@ -18,6 +18,11 @@ const sdkClient = {
   agent: {
     get: mock(),
   },
+  session: {
+    create: mock(),
+    generate: mock(),
+    remove: mock(),
+  },
 };
 
 const make = mock(() => sdkClient);
@@ -28,7 +33,7 @@ const rawFetch = mock(async () => {
 mock.module('./gitService', () => gitService);
 mock.module('@opencode/client', () => ({ OpenCode: { make } }));
 
-const { generateBridgeCommitMessage, resetBridgeGitModelCatalogForTest, setUnavailableRetryDelaysForTest } = await import('./bridge-git-special-runtime');
+const { generateBridgeCommitMessage, resetBridgeGitModelCatalogForTest, setUnavailableRetryDelaysForTest, setBridgeGitSessionCleanupTimeoutForTest } = await import('./bridge-git-special-runtime');
 
 // The SCM title-bar command runs the same generator on the extension host; the
 // bridge handler that once wrapped it is gone.
@@ -47,12 +52,16 @@ const generate = (options = {}) => generateBridgeCommitMessage({
 describe('bridge git commit message generator', () => {
   beforeEach(() => {
     resetBridgeGitModelCatalogForTest();
+    setBridgeGitSessionCleanupTimeoutForTest();
     gitService.getGitStatus.mockReset();
     gitService.getGitLog.mockReset();
     gitService.getGitDiff.mockReset();
     sdkClient.model.list.mockReset();
     sdkClient.experimental.generate.text.mockReset();
     sdkClient.agent.get.mockReset();
+    sdkClient.session.create.mockReset();
+    sdkClient.session.generate.mockReset();
+    sdkClient.session.remove.mockReset();
     make.mockReset();
     rawFetch.mockClear();
 
@@ -80,6 +89,66 @@ describe('bridge git commit message generator', () => {
     expect(message).toEqual({ subject: 'feat: add a line', highlights: ['adds a line'] });
     expect(sdkClient.experimental.generate.text).toHaveBeenCalledTimes(1);
     expect(sdkClient.experimental.generate.text.mock.calls[0][0].prompt).toContain('+new line');
+  });
+
+  it('uses a directory-scoped OpenCode session when the one-shot route rejects an injected key', async () => {
+    gitService.getGitLog.mockImplementation(async () => ({ all: [] }));
+    gitService.getGitDiff.mockImplementation(async () => ({ kind: 'diff', diff: 'diff --git a/src/a.ts b/src/a.ts\n+new line', submodule: null }));
+    sdkClient.experimental.generate.text.mockImplementation(async () => {
+      throw Object.assign(new Error('no key'), { _tag: 'ProviderAuthError', statusCode: 401 });
+    });
+    sdkClient.session.create.mockImplementation(async () => ({ id: 'ses_small_model' }));
+    sdkClient.session.generate.mockImplementation(async () => ({ text: '{"subject":"feat: add a line","highlights":[]}' }));
+    sdkClient.session.remove.mockImplementation(async () => {});
+
+    const message = await generate({ payloadModel: { providerId: 'anthropic', modelId: 'claude-sonnet-4-5' } });
+
+    expect(message.subject).toBe('feat: add a line');
+    expect(sdkClient.session.create.mock.calls[0][0].model).toEqual({ id: 'claude-sonnet-4-5', providerID: 'anthropic' });
+    expect(sdkClient.session.generate.mock.calls[0][0].sessionID).toBe('ses_small_model');
+    expect(sdkClient.session.generate.mock.calls[0][0].prompt).toContain('+new line');
+    expect(sdkClient.session.remove.mock.calls[0][0]).toEqual({ sessionID: 'ses_small_model' });
+    expect(make.mock.calls.some(([options]) => options?.headers?.['x-opencode-directory'] === encodeURIComponent('/repo'))).toBe(true);
+  });
+
+  it('recognizes a wrapped provider auth refusal', async () => {
+    gitService.getGitLog.mockImplementation(async () => ({ all: [] }));
+    gitService.getGitDiff.mockImplementation(async () => ({ kind: 'diff', diff: 'diff --git a/src/a.ts b/src/a.ts\n+new line', submodule: null }));
+    sdkClient.experimental.generate.text.mockImplementation(async () => {
+      throw Object.assign(new Error('UnexpectedStatus: 401'), { cause: { _tag: 'ProviderAuthError', statusCode: 401 } });
+    });
+    sdkClient.session.create.mockImplementation(async () => ({ id: 'ses_small_model' }));
+    sdkClient.session.generate.mockImplementation(async () => ({ text: '{"subject":"feat: add a line","highlights":[]}' }));
+    sdkClient.session.remove.mockImplementation(async () => {});
+
+    const message = await generate({ payloadModel: { providerId: 'anthropic', modelId: 'claude-sonnet-4-5' } });
+
+    expect(message.subject).toBe('feat: add a line');
+    expect(sdkClient.session.generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not wait for a stalled session cleanup', async () => {
+    setBridgeGitSessionCleanupTimeoutForTest(20);
+    gitService.getGitLog.mockImplementation(async () => ({ all: [] }));
+    gitService.getGitDiff.mockImplementation(async () => ({ kind: 'diff', diff: 'diff --git a/src/a.ts b/src/a.ts\n+new line', submodule: null }));
+    sdkClient.experimental.generate.text.mockImplementation(async () => {
+      throw Object.assign(new Error('no key'), { _tag: 'ProviderAuthError', statusCode: 401 });
+    });
+    sdkClient.session.create.mockImplementation(async () => ({ id: 'ses_small_model' }));
+    sdkClient.session.generate.mockImplementation(async () => ({ text: '{"subject":"feat: add a line","highlights":[]}' }));
+    sdkClient.session.remove.mockImplementation(async (_input, options) => new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, 200);
+      options?.signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(new Error('cleanup aborted'));
+      });
+    }));
+
+    const startedAt = Date.now();
+    const message = await generate({ payloadModel: { providerId: 'anthropic', modelId: 'claude-sonnet-4-5' } });
+
+    expect(message.subject).toBe('feat: add a line');
+    expect(Date.now() - startedAt).toBeLessThan(150);
   });
 
   it('reads the prompts of the directory it commits in and uses an empty instructions override as written', async () => {
