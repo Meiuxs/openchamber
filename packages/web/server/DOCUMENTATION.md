@@ -132,7 +132,8 @@ it imports.
   outgoing or received shared pages require the pinned self-hosted relay;
   uploads and link opening cannot choose another relay. External tunnels are
   refused, speech stays on this machine, push omits conversation content and
-  update checks omit usage reporting.
+  update checks omit usage reporting. Voice input starts off for users who have
+  not chosen; they can turn it on in Settings → Voice.
 - Settings and service environment overlays do not reach managed OpenCode,
   because a variable can add a provider key. Git, terminals and exec still
   receive them. Image generation and the Claude Code provider plugin remain

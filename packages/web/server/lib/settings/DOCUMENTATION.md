@@ -14,6 +14,7 @@ This module owns OpenChamber's settings persistence: the instance and profile fi
 - Settings logs contain changed field names only because values can include credentials. Device keys remain local to the client, and each failed queued save rejects only its own caller so later saves can still run.
 - A missing model-variant entry means the client never sent a selection; explicit null means Default. A variant without its model is discarded, and an empty dreaming-model selection remains a choice of the default model. Model IDs can contain slashes after the provider separator.
 - Sidebar-order saves from older clients preserve omitted built-in sections beside their stored neighbours. The generated settings registry remains authoritative for writable keys; its JSON snapshot is loaded with `createRequire` because the server runs plain ESM across Node versions with differing import-attribute support.
+- A formatted response supplies a default only for a setting the user has not stored. In enterprise mode `dictationEnabled` defaults to false; an explicit choice passes through unchanged.
 
 ## Decisions
 

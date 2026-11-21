@@ -233,6 +233,7 @@ environment:
 - 源代码管理卡片只显示已有账户登记过的实例。内置默认值（例如 `gitlab.com`）不再显示为空白行；你仍可通过“添加实例”添加实例。
 - [分类提供方（Jev）](/zh-cn/classification-providers/)保持关闭，有人在设置里填写的自定义端点也一样。安全网和 Auto 不会提供，进行中的会话也不会出现"看起来已完成"的提示。要通过你自己的基础设施使用 Jev，请用策略文件中的 `jev` 或用 `OPENCHAMBER_JEV_URL` 固定一个端点（再加上 `OPENCHAMBER_JEV_MODEL`，如有需要还有 `OPENCHAMBER_JEV_API_KEY`）。它会成为默认选项，仍然可以关闭，但不能选择其他任何来源。
 - 通过 OpenAI 朗读的功能会关闭。自定义的语音合成或转写服务器必须运行在同一台机器上。本地语音和本地口述模型照常工作。
+- 企业模式下语音输入默认关闭。可以在设置中开启。
 - 发往手机和浏览器的推送通知只带一个通用标题，例如“Agent response is ready”，不含消息文本或会话名称。桌面通知留在你的机器上，保留完整文本。
 - 更新检查照常运行，安全修复仍能送达，但它从不上报使用情况，连匿名安装 ID 也不上报。
 - [外部隧道](/zh-cn/tunnels/)（Cloudflare、ngrok、Tailscale）会关闭。Cloudflare 和 ngrok 会在其边缘解密流量，能以明文看到每一个请求；Tailscale Serve 和 Funnel 会把这台电脑开放给其他设备。
