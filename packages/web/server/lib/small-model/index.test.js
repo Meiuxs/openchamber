@@ -11,7 +11,7 @@ import { GUEST_GENERATE_PROMPT_MAX, GUEST_GENERATE_SYSTEM_MAX, GUEST_GENERATE_TI
 const TEMP_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'small-model-settings-'));
 process.env.OPENCHAMBER_DATA_DIR = TEMP_DATA_DIR;
 
-const { generateSmallModelText, describeSmallModel, listAuthenticatedProviders, setUnavailableRetryDelaysForTest, generationBudgetMs } = await import('./index.js');
+const { generateSmallModelText, describeSmallModel, listAuthenticatedProviders, setUnavailableRetryDelaysForTest, setSessionCleanupTimeoutForTest, generationBudgetMs } = await import('./index.js');
 const { configureOpenCodeRuntimeProviders, resetOpenCodeRuntimeProviders } = await import('./client.js');
 
 // A real OpenCode stub over HTTP. The module talks to OpenCode through
@@ -27,6 +27,7 @@ const state = {
   // OpenCode answers 404 for `title` while a cold location loads its agents.
   titleMissing: false,
   generate: () => ({ text: 'generated' }),
+  sessionGenerate: () => ({ text: 'session-generated' }),
   requests: [],
   generateErrors: [],
   trustRefusal: false,
@@ -34,6 +35,7 @@ const state = {
   // Holds each /api/experimental/generate/text response open, so a client-side
   // deadline can fire mid-request.
   generateDelayMs: 0,
+  removeDelayMs: 0,
 };
 
 const MODEL = (overrides = {}) => ({
@@ -102,11 +104,23 @@ beforeAll(async () => {
       }
       const error = state.generateErrors.shift();
       if (error) {
-        res.writeHead({ ModelNotFoundError: 404, ServiceUnavailableError: 503 }[error._tag] ?? 400, { 'content-type': 'application/json' });
+        res.writeHead(error.statusCode ?? ({ ModelNotFoundError: 404, ServiceUnavailableError: 503 }[error._tag] ?? 400), { 'content-type': 'application/json' });
         return res.end(JSON.stringify(error));
       }
       if (state.generateDelayMs) await new Promise((resolve) => setTimeout(resolve, state.generateDelayMs));
       return send({ location: LOCATION, data: state.generate(body) });
+    }
+    if (url.pathname === '/api/session' && req.method === 'POST') {
+      return send({ location: LOCATION, data: { id: 'ses_small_model' } });
+    }
+    const sessionGenerate = /^\/api\/session\/([^/]+)\/generate$/.exec(url.pathname);
+    if (sessionGenerate && req.method === 'POST') {
+      return send({ location: LOCATION, data: state.sessionGenerate(body) });
+    }
+    const sessionRemove = /^\/api\/session\/([^/]+)$/.exec(url.pathname);
+    if (sessionRemove && req.method === 'DELETE') {
+      if (state.removeDelayMs) await new Promise((resolve) => setTimeout(resolve, state.removeDelayMs));
+      return send({ location: LOCATION, data: {} });
     }
     res.writeHead(404).end('{}');
   });
@@ -127,11 +141,14 @@ beforeEach(() => {
   state.titleModel = null;
   state.titleMissing = false;
   state.generate = () => ({ text: 'generated' });
+  state.sessionGenerate = () => ({ text: 'session-generated' });
   state.requests = [];
   state.generateErrors = [];
   state.trustRefusal = false;
   state.trustAll = false;
   state.generateDelayMs = 0;
+  state.removeDelayMs = 0;
+  setSessionCleanupTimeoutForTest();
   configureOpenCodeRuntimeProviders({
     buildOpenCodeUrl: (requestPath) => `${baseUrl}${requestPath.startsWith('/') ? requestPath : `/${requestPath}`}`,
     getOpenCodeAuthHeaders: () => ({ Authorization: 'Basic test' }),
@@ -188,6 +205,42 @@ describe('generateSmallModelText', () => {
     state.generateErrors = [{ _tag: 'InvalidRequestError', message: 'Invalid prompt' }];
     await expect(generateSmallModelText(options)).rejects.toMatchObject({ message: 'Invalid prompt' });
     expect(state.requests.filter((entry) => entry.path === '/api/experimental/generate/text')).toHaveLength(1);
+  });
+
+  it('uses a directory-scoped OpenCode session when the one-shot route rejects an injected key', async () => {
+    state.generateErrors = [{ _tag: 'ProviderAuthError', statusCode: 401, message: 'no key' }];
+
+    const result = await generateSmallModelText({ prompt: 'write a commit', directory: '/proj', model: 'anthropic/claude-haiku-4-5' });
+
+    expect(result).toMatchObject({ text: 'session-generated', providerID: 'anthropic', modelID: 'claude-haiku-4-5' });
+    const created = state.requests.find((entry) => entry.method === 'POST' && entry.path === '/api/session');
+    expect(created?.body.model).toEqual({ id: 'claude-haiku-4-5', providerID: 'anthropic' });
+    expect(created?.headers['x-opencode-directory']).toBe(encodeURIComponent('/proj'));
+    const generated = state.requests.find((entry) => entry.method === 'POST' && entry.path === '/api/session/ses_small_model/generate');
+    expect(generated?.body.prompt).toBe('write a commit');
+    expect(generated?.headers['x-opencode-directory']).toBe(encodeURIComponent('/proj'));
+    expect(state.requests.some((entry) => entry.method === 'DELETE' && entry.path === '/api/session/ses_small_model')).toBe(true);
+  });
+
+  it('recognizes a wrapped provider auth refusal', async () => {
+    state.generateErrors = [{ message: 'UnexpectedStatus: 401', cause: { _tag: 'ProviderAuthError', statusCode: 401 } }];
+
+    const result = await generateSmallModelText({ prompt: 'write a commit', directory: '/proj' });
+
+    expect(result.text).toBe('session-generated');
+    expect(state.requests.some((entry) => entry.path === '/api/session/ses_small_model/generate')).toBe(true);
+  });
+
+  it('does not wait for a stalled session cleanup', async () => {
+    setSessionCleanupTimeoutForTest(20);
+    state.generateErrors = [{ _tag: 'ProviderAuthError', statusCode: 401, message: 'no key' }];
+    state.removeDelayMs = 200;
+
+    const startedAt = Date.now();
+    const result = await generateSmallModelText({ prompt: 'write a commit', directory: '/proj' });
+
+    expect(result.text).toBe('session-generated');
+    expect(Date.now() - startedAt).toBeLessThan(150);
   });
 
   it('does not retry provider failures with the same message', async () => {
