@@ -33,7 +33,7 @@ export const gitlabDescriptor = Object.freeze({
     stacks: true,
     changeRequestPatch: true,
     liveSummaries: true,
-    referencePicker: false,
+    referencePicker: true,
     multipleAccounts: true,
   }),
   authMethods: Object.freeze({ device: true, pat: true, cli: Object.freeze({ tool: 'glab' }) }),
@@ -89,7 +89,7 @@ export const gitlabDescriptor = Object.freeze({
       user: Object.freeze(['/{user}']),
     }),
     features: Object.freeze({
-      referenceSearch: false, referenceDetail: false, listStatuses: false, referencesAcross: false,
+      referenceSearch: false, referenceDetail: false, listStatuses: false, referencesAcross: true,
       startThread: true, reviewDrafts: true, reviewDraftFileComments: true, authorCanReview: true, projectUploads: true, issueCloseReason: false,
       issueEdit: true, changeRequestEdit: true, commentEdit: true,
       changeRequestTemplates: Object.freeze(['.gitlab/merge_request_templates/Default.md']),

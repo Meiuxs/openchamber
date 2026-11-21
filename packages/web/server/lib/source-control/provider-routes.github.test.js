@@ -65,7 +65,7 @@ describe('POST /api/source-control/github/references/across', () => {
       owner: 'acme', repo: directory === '/alias' ? 'A' : directory.slice(1), url: `https://github.com/acme/${directory.slice(1)}`,
     } }));
     network = vi.fn(async (_octokit, directory, _remote, options) => {
-      expect(options).toEqual({ strictErrors: true });
+      expect(options).toMatchObject({ strictErrors: true });
       return [{ owner: 'acme', repo: directory === '/alias' ? 'A' : directory.slice(1), source: 'origin' }];
     });
     app = express();
@@ -124,6 +124,12 @@ describe('POST /api/source-control/github/references/across', () => {
     expect(calls[0].variables.q.match(/repo:/g)).toHaveLength(1);
     expect(result.body.items).toEqual([expect.objectContaining({ directory: '/a' })]);
     expect(result.body.repositories.map((repo) => repo.directory)).toEqual(['/a', '/alias', '/a']);
+  });
+
+  it('reuses the resolved repo for network detection', async () => {
+    await search([context('/a')]).expect(200);
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(network.mock.calls[0][3]).toMatchObject({ strictErrors: true, repo: { owner: 'acme', repo: 'a' } });
   });
 
   it('invalidates only the unauthorized account and retains the other group', async () => {

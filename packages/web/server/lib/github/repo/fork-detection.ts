@@ -7,6 +7,7 @@ type RepoMetadata = Awaited<ReturnType<Octokit['rest']['repos']['get']>>['data']
 
 export interface RepoNetworkOptions {
   strictErrors?: boolean;
+  repo?: GitHubRepository | null;
 }
 
 export interface NetworkRepository extends GitHubRepository {
@@ -77,7 +78,9 @@ const getRepoMetadata = async (octokit: Octokit, repo: GitHubRepository, options
 };
 
 export async function resolveRepoNetwork(octokit: Octokit, directory: string, remoteName = 'origin', options: RepoNetworkOptions = {}): Promise<NetworkRepository[] | null> {
-  const resolved = resolveGitHubRepoFromDirectory(directory, remoteName);
+  const resolved = options.repo !== undefined
+    ? Promise.resolve({ repo: options.repo, remoteUrl: '' })
+    : resolveGitHubRepoFromDirectory(directory, remoteName);
   const { repo } = options.strictErrors ? await resolved : await resolved.catch(() => ({ repo: null }));
   if (!repo) return null;
 

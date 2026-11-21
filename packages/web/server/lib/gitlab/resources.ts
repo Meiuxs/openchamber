@@ -1,5 +1,7 @@
 import { documentDataUrl } from '../source-control/document-versions.js';
 import { createHash } from 'node:crypto';
+import { ACROSS_PAGE_SIZE, issueToReference, mergeRequestToReference } from './reference-search.js';
+import type { GitLabAcrossRequestCache } from './reference-search.js';
 import { pairedDiffLine } from '../source-control/review-position.js';
 import { changeRequestNetworkTarget } from '../source-control/repository-network.js';
 import { mapGitLabCI, mapGitLabCommit, mapGitLabDiff, mapGitLabIssue, mapGitLabMergeRequest, mapGitLabNote, mapGitLabProject, mapGitLabUser, mapGitLabVerdictNote } from './mappers.js';
@@ -19,6 +21,7 @@ type Field = JsonValue | undefined;
 type Selector = Pick<SourceControlProjectRef, 'owner' | 'name'> | null | undefined;
 type Remote = string | undefined;
 type Project = { raw: JsonObject & { id: number }; project: GitLabMappedProject };
+export type GitLabResourceProject = Project;
 type Projects = [Project, ...Project[]];
 type ReadOptions = { remote?: Remote; linked?: boolean | undefined; requireComplete?: boolean | undefined;
   constrainToPrimary?: boolean | undefined; requireNetwork?: boolean | undefined; project?: Selector };
@@ -1498,6 +1501,56 @@ export function createGitLabResourceService({ origin, client, download, resolveP
           return mapped ? [mapped] : [];
         }),
       };
+    },
+
+    async referencesAcrossPage(context: ProviderReadContext, page: number | null, options: { kind: 'issue' | 'pull'; state?: string | undefined; people?: string | undefined; labels: string[]; query: string }, requestCache: GitLabAcrossRequestCache) {
+      const resolved = await resolveProjects(context.directory, origin, context.primaryRemote, { exactRemote: true });
+      const candidate = resolved.projects[0];
+      if (!candidate) return { status: 'no-repo' as const };
+      const projectKey = JSON.stringify([origin, context.accountId, candidate.projectPath.toLowerCase()]);
+      let loadingProject = requestCache.projects.get(projectKey);
+      if (!loadingProject) {
+        loadingProject = showProject(candidate.projectPath, candidate.remoteName);
+        requestCache.projects.set(projectKey, loadingProject);
+      }
+      const target = await loadingProject;
+      const repo = { owner: target.project.owner, repo: target.project.name, url: candidate.url || target.project.url };
+      if (page === null) return { status: 'included' as const, target: repo, items: [], hasMore: false };
+      const pageKey = JSON.stringify([
+        origin, context.accountId, target.project.id, options.kind, options.state ?? 'open', options.people ?? 'any',
+        options.labels, options.query ?? '', page,
+      ]);
+      let loadingPage = requestCache.pages.get(pageKey);
+      if (!loadingPage) {
+        loadingPage = (async () => {
+          const filter = await listFilter({ state: options.state === 'unanswered' ? 'open' : options.state, people: options.people, labels: options.labels }, options.kind);
+          if (options.kind === 'issue') {
+            const result = readPage(await client.Issues.all({
+              projectId: target.project.id, ...filter, page, perPage: ACROSS_PAGE_SIZE,
+              maxPages: 1, search: options.query, showExpanded: true, withLabelsDetails: true,
+            }));
+            if (canonicalReads && !Array.isArray(result.items)) throw new Error('GitLab returned an invalid issue list');
+            return {
+              items: asArray(result.items).flatMap((value) => {
+                const raw = obj(value);
+                if (raw?.issue_type === 'incident' || raw?.issue_type === 'test_case') return [];
+                return [issueToReference(requireIssue(value, target.project))];
+              }),
+              hasMore: result.hasMore,
+            };
+          }
+          const result = readPage(await listProjectMRs(target.project.id, {
+            ...filter, page, perPage: ACROSS_PAGE_SIZE, search: options.query, showExpanded: true,
+          }));
+          const rawItems = readMergeRequestList(result.items, target.project);
+          return {
+            items: rawItems.map((value) => mergeRequestToReference(requireMergeRequest(value, target.project, true))),
+            hasMore: result.hasMore,
+          };
+        })();
+        requestCache.pages.set(pageKey, loadingPage);
+      }
+      return { status: 'included' as const, target: repo, ...await loadingPage };
     },
 
     async listIssues(directory: string, options: ListOptions = {}) {

@@ -794,7 +794,7 @@ export function createGitHubResources({
             const { octokit } = accountOf(await resolveSession(trusted));
             const { repo } = await resolveRepo(directory, trusted.primaryRemote);
             if (!repo) return { directory, status: 'no-repo' };
-            const network = requireGitHubRepoNetwork(await resolveNetwork(octokit, directory, trusted.primaryRemote, { strictErrors: true }), repo);
+            const network = requireGitHubRepoNetwork(await resolveNetwork(octokit, directory, trusted.primaryRemote, { strictErrors: true, repo }), repo);
             return { directory, status: 'included', repo, repos: network ?? [{ ...repo, source: 'origin' }], octokit, trusted };
           } catch (error) {
             return { directory, status: await folderFailure(error) };

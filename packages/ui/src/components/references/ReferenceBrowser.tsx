@@ -504,7 +504,7 @@ export const ReferenceBrowserList: React.FC<{
     notice?: React.ReactNode;
 }> = ({ browser, label, multiselectable, onOpenSettings, rowSelection, onActivate, onShow, notice }) => {
     const { t } = useI18n();
-    const { source, sourceStatus, list, items, term, descriptor, isMobile, directory, debouncedQuery, repositoryKind, tracker } = browser;
+    const { source, sourceStatus, list, items, term, descriptor, isMobile, directory, debouncedQuery, repositoryKind, tracker, across } = browser;
 
     const sentinelRef = React.useRef<HTMLDivElement>(null);
     const { hasMore, loadMore, loadingMore, error } = list;
@@ -547,7 +547,7 @@ export const ReferenceBrowserList: React.FC<{
         return (
             <>
                 {notice}
-                {centered(t('references.picker.empty.noRepo'))}
+                {centered(t(across ? 'references.picker.empty.noRepoAcross' : 'references.picker.empty.noRepo'))}
             </>
         );
     }

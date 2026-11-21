@@ -11,6 +11,7 @@ import { createRoot, type Root } from 'react-dom/client';
 
 import type {
   Label,
+  RepositoryReferencesAcrossResult,
   RuntimeAPIs,
   SourceControlBindingRead,
 } from '@/lib/api/types';
@@ -118,7 +119,11 @@ const flush = async () => {
 };
 
 /** `directory` keeps each test's lists apart: the list cache outlives a mount. */
-const show = async (directory: string, { isMobile = false }: { isMobile?: boolean } = {}): Promise<void> => {
+const show = async (directory: string, { isMobile = false, directories = null, acrossResult = null }: {
+  isMobile?: boolean;
+  directories?: string[] | null;
+  acrossResult?: RepositoryReferencesAcrossResult | null;
+} = {}): Promise<void> => {
   const [{ useReferenceBrowser }, { ReferenceBrowserList, ReferenceBrowserSearch }, { I18nProvider }, { RuntimeAPIContext }, { createWebAPIs }, { useSourceControlProviderRegistry }, { githubLikeDescriptor }] = await Promise.all([
     import('./useReferenceBrowser'),
     import('./ReferenceBrowser'),
@@ -140,11 +145,12 @@ const show = async (directory: string, { isMobile = false }: { isMobile?: boolea
       ...base.sourceControl,
       repositoryBinding: async () => bindingRead,
       referenceLabels: async () => LABELS,
+      referencesAcross: async () => acrossResult ?? { items: [], cursor: null, hasMore: false, total: 0, repositories: [] },
     },
   };
 
   const Harness: React.FC = () => {
-    const referenceBrowser = useReferenceBrowser({ source: 'repository', directory, directories: null, isMobile });
+    const referenceBrowser = useReferenceBrowser({ source: 'repository', directory, directories, isMobile });
     shown = referenceBrowser;
     return (
       <>
@@ -256,5 +262,25 @@ describe("the phone's filter", () => {
 
     await click(document.querySelector<HTMLButtonElement>('[role="dialog"][aria-label="Filter"] button[aria-label="Close"]'));
     expect(document.querySelector('[role="dialog"][aria-label="Filter"]')).toBeNull();
+  });
+});
+
+describe('an across-repository list where every folder was left out', () => {
+  test('says no repository could be read instead of blaming one project', async () => {
+    answer = () => ({ items: [], hasMore: false });
+    const directories = ['/work/across/first', '/work/across/second'];
+    await show('/work/across', {
+      directories,
+      acrossResult: {
+        items: [],
+        cursor: null,
+        hasMore: false,
+        total: 0,
+        repositories: directories.map((directory) => ({ directory, status: 'no-repo' as const })),
+      },
+    });
+
+    expect(host.textContent).toContain('None of the repositories in this folder can be read.');
+    expect(host.textContent).not.toContain('This project has no GitHub or GitLab remote.');
   });
 });

@@ -3,6 +3,7 @@ import { getGlabToken, getGlabTokenResult } from './glab-credential.js';
 import { classifyGitLabFailure } from './network.js';
 import { createGitLabClient, createGitLabDownloader } from './client.js';
 import { createGitLabResourceService } from './resources.js';
+import { readGitLabAcrossRequest, runAcrossSearch } from './reference-search.js';
 import { reviewDraftEntries } from '../source-control/review-position.js';
 import { verifyGitLabToken } from './verify.js';
 import { isString } from './validation.js';
@@ -10,10 +11,11 @@ import { gitlabDescriptor } from './descriptor.js';
 import { digestMutationInput } from '../source-control/mutation-executor.js';
 import { ownedOriginInstance } from '../source-control/origin-instance.js';
 import type { SourceControlJson, SourceControlJsonObject, SourceControlMutationTarget } from '@openchamber/sdk';
-import type { AccountEvents, AccountIdentity, ProviderDescriptor, ProviderMutationContext, ProviderReadContext, ProviderSession } from '../source-control/provider-contract.js';
+import type { AccountEvents, AccountIdentity, ProviderDescriptor, ProviderMutationContext, ProviderReadContext, ProviderSession, ReadContextRequest } from '../source-control/provider-contract.js';
 import type { AuthCredential, createSourceControlAuthStore } from '../source-control/auth-storage.js';
 import type { MutationContextInput } from '../source-control/binding-service-contracts.js';
 import type { MutationRecord } from '../source-control/mutation-storage.js';
+import type { GitLabAcrossRequestCache } from './reference-search.js';
 import type { GitLabResourceOptions } from './resources.js';
 import type { GlabLookupOptions } from './glab-credential.js';
 import type { GitLabUser } from './user.js';
@@ -886,6 +888,24 @@ export function createProvider(options: GitLabProviderOptions) {
         }),
       listIssues: ({ session, directory, page, query, state, people, labels, remote }: ReadInput & NonNullable<Parameters<Service['listIssues']>[1]>) => serviceFor(session)
         .listIssues(directory, { page, query, state, people, labels, remote }),
+      referencesAcross: async ({ body, validateReadContext }: {
+        body: SourceControlJson;
+        validateReadContext: (context: ReadContextRequest) => Promise<ProviderReadContext | null>;
+      }) => {
+        const input = readGitLabAcrossRequest(body);
+        if (!input) throw Object.assign(new Error('Invalid references request; at most 100 unique contexts are allowed'), { status: 400 });
+        const requestCache: GitLabAcrossRequestCache = { projects: new Map(), pages: new Map() };
+        return runAcrossSearch({
+          input,
+          validateContext: validateReadContext,
+          readPage: async (context, page) => {
+            const session = await resolveAccount({ instance: context.instance, accountId: context.accountId });
+            return serviceFor(session).referencesAcrossPage(context, page, {
+              kind: input.kind, state: input.state, people: input.people, labels: input.labels, query: input.query ?? '',
+            }, requestCache);
+          },
+        });
+      },
       getIssue: ({ session, context, directory, number, project, remote }: NumberedRead & LinkedRead) => serviceFor(session).getIssue(directory, number, project, remote, { linked: context?.linked }),
       issueComments: ({ session, context, directory, number, project, remote }: NumberedRead & LinkedRead) => serviceFor(session).issueComments(directory, number, project, remote, { linked: context?.linked }),
       projectUpstream: ({ session, directory, remote }: ReadInput) => serviceFor(session).projectUpstream(directory, remote),

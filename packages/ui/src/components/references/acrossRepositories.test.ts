@@ -63,6 +63,15 @@ describe('partitionAcrossContexts', () => {
     ]);
   });
 
+  test('keeps a GitLab-only workspace on GitLab even when GitHub can also search across', () => {
+    const gitlab = gitlabLikeDescriptor();
+    const both = [githubLike, { ...gitlab, features: { ...gitlab.features, ...across } }];
+    const result = partitionAcrossContexts([{ directory: '/w/a', state: context('/w/a', 'gitlab') }], both);
+    expect(result.provider).toBe('gitlab');
+    expect(result.asked.map((entry) => entry.directory)).toEqual(['/w/a']);
+    expect(result.excluded).toEqual([]);
+  });
+
   test('asks the lowest-order provider among those present that can search across repositories', () => {
     const gitlab = gitlabLikeDescriptor();
     const searchingGitLab = [githubLikeDescriptor(), { ...gitlab, features: { ...gitlab.features, ...across } }];

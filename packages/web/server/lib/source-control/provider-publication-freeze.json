@@ -190,7 +190,7 @@
         "referenceSearch": false,
         "referenceDetail": false,
         "listStatuses": false,
-        "referencesAcross": false,
+        "referencesAcross": true,
         "reviewDraftFileComments": true,
         "reviewDrafts": true,
         "startThread": true,

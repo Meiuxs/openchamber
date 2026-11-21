@@ -93,6 +93,7 @@ export const BUILT_IN_SOURCE_CONTROL_PROVIDERS: readonly PublishedSourceControlP
     },
     features: {
       ...BUILT_IN_FEATURES_OFF,
+      referencesAcross: true,
       startThread: true, authorCanReview: true, projectUploads: true, changeRequestPatch: true,
       changeRequestTemplates: ['.gitlab/merge_request_templates/Default.md'],
     },
