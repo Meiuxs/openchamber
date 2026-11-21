@@ -43,6 +43,8 @@ source:
 | `openchamber.checkout` | the directory and branch the session works on |
 | `openchamber.response-style` | the user's current response style |
 | `openchamber.extensions` | what active extensions add: their UI block components and their instructions (`../guests/agent-context.js`) |
+| `openchamber.lead` | for a lead only: how a lead works (`../session-lead/`) |
+| `openchamber.lead-brief` | for a lead only: its brief, also written right after `lead.brief` saves it |
 
 `sync` writes all of them right before a message goes out: the UI awaits it
 before the prompt request, the queue, scheduled tasks and dispatched sessions
@@ -147,8 +149,8 @@ tool, so it never linked anything. It goes into `openchamber.guidance`.
 
 The same sessions are told how to hand work to another session
 (`DISPATCH_GUIDANCE`). Every guidance line that names an action of the
-`openchamber` tool writes the call path out as `tools.openchamber` inside
-`execute`. Told only "the openchamber tool", an agent looked for a direct tool
+`openchamber` tool names `tools.openchamber` inside `execute`, and the direct
+`openchamber` tool when `execute` is unavailable. Told only "the openchamber tool", an agent looked for a direct tool
 of that name, found `openchamber_secret` and `openchamber_render`, and called
 those again and again (#6608). The guidance also sends part of the
 agent's own task to its subagent tool, so a dispatch stays something the user
@@ -263,7 +265,8 @@ most expensive one, and dozens of those cost many times a cheap model.
 
 The tools whose call the chat draws (`openchamber_render`,
 `openchamber_secret`, `openchamber_workflow`) are direct tools; the rest sit
-behind Code Mode (`../agent-tool/DOCUMENTATION.md`). A session that has any of
+behind Code Mode when `execute` is available and are direct tools otherwise
+(`../agent-tool/DOCUMENTATION.md`). A session that has any of
 the direct ones is told, by name, that they are called directly and never from
 inside a Code Mode `execute` script (`directToolsGuidance`). OpenCode's Code
 Mode teaches the model that tools live in `execute`'s catalog: a model that

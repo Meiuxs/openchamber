@@ -123,6 +123,7 @@ interface SortableProjectItemProps extends ProjectIdentityProps {
   alwaysShowActions: boolean;
   onToggle: () => void;
   onNewSession: () => void;
+  onNewLead?: () => void;
   onNewWorktreeSession?: () => void;
   onManageWorktrees?: () => void;
   onManageSpaces?: () => void;
@@ -146,6 +147,27 @@ interface SortableProjectItemProps extends ProjectIdentityProps {
   onProjectSelect?: (projectId: string) => void;
 }
 
+const NewSessionMenu: React.FC<{ onNewSession: () => void; onNewLead: (() => void) | undefined; children: React.ReactNode }> = ({ onNewSession, onNewLead, children }) => {
+  const { t } = useI18n();
+  const position = 'absolute inset-e-0.5 top-1/2 z-10 -translate-y-1/2';
+  if (!onNewLead) return <div className={position}>{children}</div>;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={<div className={position} />}>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="min-w-[160px]">
+        <ContextMenuItem onClick={onNewSession}>
+          <Icon name="add" className="me-1.5 h-4 w-4" />
+          {t('sessions.sidebar.project.actions.newSession')}
+        </ContextMenuItem>
+        <ContextMenuItem onClick={onNewLead}>
+          <Icon name="lead-flag" className="me-1.5 h-4 w-4" />
+          {t('sessions.sidebar.project.actions.newLead')}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+};
+
 export const SortableProjectItem: React.FC<SortableProjectItemProps> = ({
   id,
   disabled = false,
@@ -164,6 +186,7 @@ export const SortableProjectItem: React.FC<SortableProjectItemProps> = ({
   alwaysShowActions,
   onToggle,
   onNewSession,
+  onNewLead,
   onNewWorktreeSession,
   onManageWorktrees,
   onManageSpaces,
@@ -227,6 +250,12 @@ export const SortableProjectItem: React.FC<SortableProjectItemProps> = ({
         <Item onClick={onNewSession}>
           <Icon name="add" className="me-1.5 h-4 w-4" />
           {t('sessions.sidebar.project.actions.newSession')}
+        </Item>
+      )}
+      {showCreateButtons && !hideDirectoryControls && onNewLead && (
+        <Item onClick={onNewLead}>
+          <Icon name="lead-flag" className="me-1.5 h-4 w-4" />
+          {t('sessions.sidebar.project.actions.newLead')}
         </Item>
       )}
       {isRepo && !hideDirectoryControls && onManageWorktrees && (
@@ -499,7 +528,7 @@ export const SortableProjectItem: React.FC<SortableProjectItemProps> = ({
               </div>
 
               {showCreateButtons && onNewSession ? (
-                <div className="absolute inset-e-0.5 top-1/2 z-10 -translate-y-1/2">
+                <NewSessionMenu onNewSession={onNewSession} onNewLead={hideDirectoryControls ? undefined : onNewLead}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
@@ -525,7 +554,7 @@ export const SortableProjectItem: React.FC<SortableProjectItemProps> = ({
                         : t('sessions.sidebar.project.actions.newSession')}</p>
                     </TooltipContent>
                   </Tooltip>
-                </div>
+                </NewSessionMenu>
               ) : null}
             </div>
             </ContextMenuTrigger>

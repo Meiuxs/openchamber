@@ -20,6 +20,7 @@ OpenChamber's own server features live beside it: settings persistence in `../se
 - Agent and command names are relative paths inside their owned directories. Express decodes encoded separators, so validation accepts nested names while refusing absolute paths and traversal. The disabled-agent catalog has a separate route so an agent named `disabled` remains addressable.
 - MCP conversion preserves handwritten protocol and startup-timeout fields even though the editor has no controls for them. Agent markdown bodies override frontmatter `system`, matching OpenCode's reader.
 - The minimum OpenCode version agrees with `engines.opencode` in the web package manifest. A future major remains unsupported until its contract is checked.
+- A managed OpenCode, in the web server and the VS Code extension alike, starts with `OPENCODE_CLIENT=openchamber` (`managed-opencode-env.ts`), so its model requests carry `x-opencode-client: openchamber` and the `openchamber` user-agent suffix, and OpenCode can tell OpenChamber's traffic apart. An external OpenCode keeps its own name.
 - An external connection requires explicit host, port, or skip-start configuration. Automatic attachment to a default port can take over a user's independent OpenCode instance and couple unrelated lifecycles.
 - A pending restart with a stopped-process task runs that task in its own restart, even if another restart is already in flight. Task failure is reported after the managed server starts again so a failed upgrade does not leave it stopped.
 - Process-registry cleanup considers only recorded children, verifies their current executable and known port against PID reuse, and requires evidence that the owner is gone. EPERM means a PID still exists; an identity that cannot be verified stays untouched.
@@ -216,7 +217,7 @@ OpenCode 2 loads the user config, then `OPENCODE_CONFIG`, then project `opencode
 - `packages/web/server/lib/opencode/managed-plugin-config.js`: the `OPENCODE_CONFIG_CONTENT` merge used only on the fallback path, when the user's own environment owns `OPENCODE_CONFIG`; it appends managed plugin directories, plugin-switch policies and permission rules.
 - `packages/web/server/lib/opencode/managed-config-file.js`: the managed OpenCode config layer — materializes the enabled OpenChamber plugins (agent tools, the limit failover reporter from `../limit-failover/` while a fallback model or an account switch is set, and the session title prompt, always), writes the plugin-switch denials into `policies`, and publishes them in a file OpenCode watches.
 - `packages/web/server/lib/opencode/plugin-switches.js`: OpenChamber's own record of the plugins switched off in its UI, stored under `<data-dir>/plugin-switches.json` and applied only to the managed OpenCode child.
-- `packages/web/server/lib/opencode/session-title-plugin.js`: the plugin that gives OpenCode's hidden `title` agent OpenChamber's title style and names a session started with attached context alone from that context. See "Session title prompt" below.
+- `packages/web/server/lib/opencode/session-title-plugin.ts`: the plugin that gives OpenCode's hidden `title` agent OpenChamber's title style and names a session started with attached context alone from that context. See "Session title prompt" below.
 - `packages/web/server/lib/opencode/instance-dir.js`: this server's own folder under `<data-dir>/run/instances/<pid>/` for the files its managed OpenCode reads, and removal of folders left by servers that are gone.
 
 ### Managed plugins on OpenCode 2.x
@@ -258,6 +259,27 @@ in that user's sessions. On the fallback path the same rules are merged into
 - `packages/web/server/lib/opencode/worktree-directory.js`: resolves OpenCode's `worktree.directory` into the absolute parent directory for new worktrees. Relative paths start at the canonical checkout, absolute paths are used as-is, and a leading `~` means home. Both the web server and VS Code's `gitService.ts` call `readWorktreeDirectorySetting` in `config-files.js`, which merges the global files, `OPENCODE_CONFIG`, and every discovered folder config in OpenCode order. Invalid JSONC or an unreadable file rejects the read; null means the setting is unset and keeps the data-dir default.
 - `packages/web/server/lib/ui-auth/ui-auth.js`: UI session authentication runtime (outside OpenCode module).
 - `packages/web/server/lib/ui-auth/ui-passkeys.js`: UI passkey storage and WebAuthn registration/authentication helpers (outside OpenCode module).
+
+### Why unrecognized model modalities are kept
+
+Model discovery (`model-discovery.ts`), provider config projection
+(`config-v2.ts`) and the custom-provider validator (`providers.ts`) use
+`model-modalities.ts` to map MIME types to the categories the form edits:
+`text`, `image`, `audio`, `video`, and `pdf`. A MIME type maps by its top-level
+type, with `application/pdf` mapping to `pdf`. Entries keep their first-seen
+order without repeats.
+
+An entry that names no category, such as `application/json`, stays as written,
+the way OpenCode's own catalog keeps it, and an explicit empty list stays empty.
+Modern capability blocks leave missing fields unset for OpenCode to resolve.
+Dropping or defaulting either kind of reported list would
+change the capabilities a provider declared on an unrelated edit, or show an
+all-unknown list as Text and Image support. A save accepts such an entry only
+when the stored model already lists it in that field, so the form round-trips
+what it cannot edit and a request cannot add a new one. The form uses only
+editable categories in newly discovered or inherited lists. The save merges
+`tools`, `input`, and `output` individually, keeping stored values for any
+omitted fields. An unrecognized entry is written back exactly as stored.
 
 ### Why worktree discovery has a separate config reader
 
@@ -303,7 +325,10 @@ exists in OpenCode's store.
 - `readOpenCodeCredentials()`: each integration's active credential, keyed by
   integration id (the provider id for providers), in the legacy `auth.json`
   entry shape (`{ type: 'api', key }` /
-  `{ type: 'oauth', access, refresh, expires, accountId?, enterpriseUrl?, server?, orgID? }`).
+  `{ type: 'oauth', methodID, access, refresh, expires, accountId?, enterpriseUrl?, server?, orgID? }`),
+  plus the row's display `label` when OpenCode has one. OpenCode Go quota
+  results use it as `accountLabel`.
+  The method ID identifies the login method for consumers that need to distinguish plugin credentials.
   The OAuth projection keeps only `server` and `orgID` from OpenCode Console
   credential metadata, so quota providers can identify a Console sign-in
   without carrying account names or emails.
@@ -372,10 +397,10 @@ Hard rules, verified against v2.0.8 (the completion stamp against v2.0.16)
   avoiding that needs an upstream import route that takes explicit ids.
 
 ## Public exports (providers.js)
-- `getProviderSources(providerId, workingDirectory)`: Resolves which OpenCode config layers define a provider. The user layer is both global files: when `opencode.jsonc` sits beside `opencode.json`, OpenCode loads both and the `.jsonc` wins, so `user.path` is the file that holds the provider (the `.jsonc` when the entry lives there, else the primary file). `upsertProviderConfig` and `removeProviderConfig` with scope `user` edit that same file, so a provider defined only in `opencode.jsonc` gets Edit in Settings and is changed in place; a new provider still goes to the primary file. Saving such a provider also takes it off `disabled_providers` in the primary file, where `setProviderDisabled` records it.
+- `getProviderSources(providerId, workingDirectory)`: Resolves which OpenCode config layers define a provider. The user layer is both global files: when `opencode.jsonc` sits beside `opencode.json`, OpenCode loads both and the `.jsonc` wins, so `user.path` is the file that holds the provider (the `.jsonc` when the entry lives there, else the primary file). `upsertProviderConfig` and `removeProviderConfig` with scope `user` edit that same file, so a provider defined only in `opencode.jsonc` gets Edit in Settings and is changed in place; a new provider still goes to the primary file. Saving such a provider also takes it off `disabled_providers` in the primary file, where `setProviderDisabled` records it. `inheritedCanonical` is the `canonical` a layer under the one holding the entry sets, with that file's path (`readInheritedProviderCanonical`): OpenCode folds provider layers and has no way to unset `canonical` from a higher one, so the edit form says which provider still applies with None there. The VS Code bridge sends the same field.
 - `listProviderConfigs(workingDirectory)`: Every provider a config layer defines, projected into the canonical v2 `ProviderEntity` shape, with `legacy` marking entries still stored under the v1 `provider` key.
-- `upsertProviderConfig(providerId, config, workingDirectory, scope?, options?)`: Validates and writes a custom provider block into the user/project/custom config layer. The payload may use the v2 spelling (`package`, `settings.baseURL`, `headers`) or the v1 spelling (`npm`, `options.baseURL`); what lands on disk is always a v2 `providers` entry with `settings.baseURL`. AI SDK package names carry `aisdk:`; bundled `@opencode/ai/*` provider and model packages stay bare. The adapter may be OpenAI Chat Completions, OpenAI Responses, or Anthropic Messages. Existing provider, option, and retained-model fields not managed by the form are preserved, as far as the v2 projection (`toProviderEntity`) carries them; it carries a model's `type`, so a model marked `image` by hand stays an image model after a form save. A model `type` in the payload (the form's image generation checkbox sends `image` or `chat`, and a loaded type such as `decision` as it was) is written without checking its value: OpenCode's set of types is open-ended. Omitted models, headers, and env credentials remain explicit removals. A model's `variants` (reasoning levels) are replaced when the payload carries the array, cleared when it carries an empty one, and kept when the key is absent. Updating an entry still stored under the legacy `provider` key rewrites it under `providers` in the same file, dropping the fields v2 accepts but ignores; unrelated legacy siblings are untouched. Does not store API keys. Requires `config.env` or `options.hasStoredAuth`. OpenCode 2 keeps credentials in its own store, so `PUT /api/provider` sets `hasStoredAuth` from the request's `hasCredential` (the form is about to store a key, or the edited provider keeps its credential) as well as a credential OpenCode already stores for the provider. The key itself goes through `integration.connect.key` after this write, because OpenCode registers a custom provider's key method only once the provider is in config. Edit flows must pass the provider's effective existing layer (`custom` > `project` > `user`) so updates do not create a global user override.
-- `validateCustomProviderConfig(providerId, config, options?)`: Structural validation for custom provider payloads (id format, the three supported AI SDK adapters and their bundled OpenCode Chat Completions, Responses and Anthropic counterparts, http(s) base URL, models, credentials via `env` or `hasStoredAuth`). Accepts both spellings and returns the normalized v2 value. An `aisdk:`-prefixed bundled package is refused.
+- `upsertProviderConfig(providerId, config, workingDirectory, scope?, options?)`: Validates and writes a custom provider block into the user/project/custom config layer. The payload may use the v2 spelling (`package`, `settings.baseURL`, `headers`) or the v1 spelling (`npm`, `options.baseURL`); what lands on disk is always a v2 `providers` entry with `settings.baseURL`. AI SDK package names carry `aisdk:`; bundled `@opencode/ai/*` provider and model packages stay bare. The adapter may be OpenAI Chat Completions, OpenAI Responses, or Anthropic Messages. Existing provider, option, and retained-model fields not managed by the form are preserved, as far as the v2 projection (`toProviderEntity`) carries them; it carries a model's `type`, so a model marked `image` by hand stays an image model after a form save. A model `type` in the payload (the form's image generation checkbox sends `image` or `chat`, and a loaded type such as `decision` as it was) is written without checking its value: OpenCode's set of types is open-ended. Omitted models, headers, and env credentials remain explicit removals. A model's `variants` (reasoning levels) are replaced when the payload carries the array, cleared when it carries an empty one, and kept when the key is absent. The provider's `canonical` (the catalog provider OpenCode copies model defaults from) follows the client certificate's rule: a string replaces it, null removes it, absent keeps it, so a form that never read the stored entry cannot erase it; anything other than a provider ID without spaces is refused. Updating an entry still stored under the legacy `provider` key rewrites it under `providers` in the same file, dropping the fields v2 accepts but ignores; unrelated legacy siblings are untouched. Does not store API keys. Requires `config.env` or `options.hasStoredAuth`. OpenCode 2 keeps credentials in its own store, so `PUT /api/provider` sets `hasStoredAuth` from the request's `hasCredential` (the form is about to store a key, or the edited provider keeps its credential) as well as a credential OpenCode already stores for the provider. The key itself goes through `integration.connect.key` after this write, because OpenCode registers a custom provider's key method only once the provider is in config. Edit flows must pass the provider's effective existing layer (`custom` > `project` > `user`) so updates do not create a global user override.
+- `validateCustomProviderConfig(providerId, config, options?)`: Structural validation for custom provider payloads (id format, the three supported AI SDK adapters and their bundled OpenCode Chat Completions, Responses and Anthropic counterparts, http(s) base URL, models, credentials via `env` or `hasStoredAuth`). Accepts both spellings and returns the normalized v2 value. A model's `capabilities` keep only the fields the payload sets (`tools`, `input`, `output`), and `toProviderEntity` reads a stored block the same way: OpenCode fills a missing field from the canonical provider's model, so a default written in its place would replace what the model inherits. An `aisdk:`-prefixed bundled package is refused. With `options.layers`, a newly chosen `canonical` whose config entry in any layer sets `settings`, `headers` or `body` is refused (`canonicalSourceConnectionError`): OpenCode copies those into the provider before its own values, so a gateway's TLS certificate or auth header would reach this provider's endpoint. A canonical the provider already names in some layer stays accepted.
 - `mergeCustomProviderConfig(existingValue, normalizedConfig)`: The merge `upsertProviderConfig` writes: the stored entry, read through the v2 projection, under the validated form payload. Unmanaged provider and model fields stay; an empty `variants` list removes the levels; omitted headers and env are removals. `settings.tls` is the client certificate a gateway with mutual TLS asks for (OpenCode 2.3.0+): `cert` and `key` both or neither, usually `{file:path}` references that are stored, never read, here, and an optional `passphrase` kept byte for byte. `tls: null` removes it and an absent `tls` keeps it, because the edit form leaves it out while the stored entry is unknown (its read pending or failed), and a save then must not drop a certificate written by hand. The VS Code extension's `upsertProviderConfig` calls this function and `validateCustomProviderConfig` directly, so a change here changes what both runtimes write; run the extension's `opencodeConfig.providers.test.ts` too.
 - `removeProviderConfig(providerId, workingDirectory, scope?)`: Removes a provider block from the selected config layer.
 
@@ -479,7 +504,7 @@ Nullish body destructuring retains the original Node error message.
   - `PUT /api/config/settings`
   - `GET /api/config/opencode-resolution`
   - `POST /api/opencode/upgrade` (enforces the active runtime's upgrade capability, shares concurrent upgrade requests and runs the resolved CLI with `upgrade`; the existing Reload action restarts managed OpenCode afterwards)
-  - `GET /api/opencode/upgrade-status` (returns version availability plus the authoritative `upgrade.supported`, `upgrade.manager`, and `upgrade.reason` capability)
+  - `GET /api/opencode/upgrade-status` (returns version availability plus the authoritative `upgrade.supported`, `upgrade.manager`, and `upgrade.reason` capability). The npm registry lookup fails soft: an unreachable registry still answers 200 with the installed `currentVersion` and `available: null` and `latestVersion: null`, so a failed update check never renders the local version as unknown; clients read the missing `latestVersion` as an indeterminate check and retry it.
   - `GET /api/provider/:providerId/source`
   - `PUT /api/provider` (create/update custom OpenAI-compatible provider config in OpenCode user/project/custom layers via `scope`; secrets stay in auth via the OpenCode auth API)
   - `POST /api/provider/discover-models` (user-initiated custom-provider model discovery; fetches the configured `/models` path server-side and optionally enriches exact model matches from the shared models.dev cache). A form with a client certificate (`tls`) presents it on an `https` endpoint as OpenCode would: `{file:...}` and `{env:...}` are resolved here, the request goes through `node:https` on a connection of its own (the global fetch takes no certificate in Node, and the shared agent pools sockets without the passphrase in its key), and redirects are not followed.
@@ -846,7 +871,13 @@ directory up to the worktree root, so a definition in a parent directory of a
 monorepo package counts; a nested id (`team/reviewer`) maps onto the path.
 Only files in the v2 `plugins/` directory are editable through the plugins
 page; a package directory or a v1 `plugin/` file is listed as a package that
-OpenCode loads and OpenChamber does not touch.
+OpenCode loads and OpenChamber does not touch. A symlink is listed as the file
+or package it points at, the way OpenCode loads it. Broken links are skipped.
+A file already in a plugin directory is listed, read, saved, deleted and
+switched under its exact on-disk name, mixed case included
+(`isExistingPluginFileName` in `plugin-paths.ts`), because OpenCode loads any
+`.js` or `.ts` name there. Only a new file has to match the lowercase naming
+rule.
 
 The plugins page lists entries from every config file OpenCode takes plugins
 from: both global files (`opencode.json` and `opencode.jsonc`),
@@ -1497,7 +1528,7 @@ setting; VS Code's separate extension bridge does not.
 - Project config: `<workingDirectory>/.opencode/opencode.json(c)` first, else `<workingDirectory>/opencode.json(c)`.
 - Custom config: `OPENCODE_CONFIG` env var path.
 - Origins (`../security/request-security.js`): CORS with credentials and socket upgrades trust the request's own host, `publicOrigin`, and the packaged clients (`openchamber-ui://app`, `capacitor://localhost`, `https://localhost`). Any other loopback port is trusted only on a development server (`OPENCHAMBER_ELECTRON_DEV=1` or `OPENCHAMBER_ALLOW_DEV_ORIGINS=1`, which the dev scripts set). Without a UI password a socket that names an `Origin` must still come from one of these (`isPasswordlessSocketOriginAllowed`): nothing else would stop a website open in the user's browser from reaching the terminal on the loopback port. Clients that send no `Origin` are not pages and pass.
-- Rate limit config: `OPENCHAMBER_RATE_LIMIT_MAX_ATTEMPTS`, `OPENCHAMBER_RATE_LIMIT_NO_IP_MAX_ATTEMPTS` env vars. Login and tunnel-connect limits key on `req.ip`. `server/index.js` sets `trust proxy` to loopback and private ranges, so `X-Forwarded-For` counts only when a proxy on this machine or a private network sent it; from anyone else it is ignored and cannot open a fresh bucket per attempt.
+- Rate limit config: `OPENCHAMBER_RATE_LIMIT_MAX_ATTEMPTS`, `OPENCHAMBER_RATE_LIMIT_NO_IP_MAX_ATTEMPTS` env vars. Login and tunnel-connect limits key on the client that `../security/client-address.ts` resolves: `X-Forwarded-For` counts only through loopback peers and addresses in `OPENCHAMBER_TRUSTED_PROXIES` (comma-separated addresses or CIDR ranges); relay-dispatched sign-ins share one bucket. They do not use `req.ip`: `server/runtime.ts` sets `trust proxy` to loopback, link-local and private ranges, which would let a LAN peer open a fresh bucket per attempt.
 
 ## Notes for contributors
 - This module serves as foundation for OpenCode-related server utilities.
@@ -1589,9 +1620,10 @@ under a running child.
 OpenCode names a new session with its hidden `title` agent. Its built-in prompt
 keeps file names and issue numbers and tends to restate the request, so the
 first title often reads like a summary of the prompt and gets cut off in the
-sidebar. `session-title-plugin.js` replaces that agent's `system` prompt with
+sidebar. `session-title-plugin.ts` replaces that agent's `system` prompt with
 the folder-label style the UI's own regeneration uses
-(`packages/ui/src/lib/sessionTitle.ts`); the two prompts change together.
+(`packages/ui/src/lib/sessionTitle.ts`). The two prompts change together
+unless a decision below says why one differs.
 
 - The plugin is listed on every managed launch, with no setting. External
   OpenCode and the VS Code extension's own OpenCode get no managed plugins, so
@@ -1645,6 +1677,35 @@ one Ukrainian, and a Chinese first message still produced English titles (drift
 varied per request on the same input). The prompt now states that only the
 user's message decides the language and adds a Chinese example, the same
 pinning idiom `packages/ui/src/lib/smallModel.ts` uses for its notes.
+
+#### Why the language rule says when a path's words count
+
+A first message of one English word and a path, such as
+`Read ~/.config/openchamber/projects/<id>/plans/<plan>.md`, often got a Chinese
+title on GitHub Copilot's `gpt-6-luna`, taken from the Chinese example about a
+project's plans (#7225). The prompt now tells the model that the words inside
+a path or file name count only when the message has no other words, with three
+examples: an English word before a path, a Chinese word before a path, and a
+path alone. This is an instruction, not a guarantee: it asks the model to take
+the language of the words around a path, and the language of the path's words
+when the message is only a path.
+
+The rule was measured on `gpt-6-luna` through a managed OpenCode 2.3.1, with
+English, Chinese and Ukrainian words before plan paths, paths alone, and plain
+sentences (#7227). There, an English example of a command and a path also
+fixed the English messages, but it pulled a Ukrainian word before an English
+path toward English about one time in ten. A rule without the path-alone
+example fixed them too, but a message that was only an English path then got
+a Chinese title about one time in fifteen; that is why the path-alone example
+stays. The `opencode/*-free` title models, where the plugin moves the prompt
+into the user turn, were not measured. The Chinese example stays, because
+without it a Chinese first message got English titles (#5654).
+
+The Rename with AI prompt (`packages/ui/src/lib/sessionTitle.ts`) keeps its
+own rule, because it names the session from finished turns rather than from
+the first message alone. With a `Read <path>` turn and an English reply it gave
+English titles in 40 of 40 runs on `gpt-6-luna` and `gemini-3.8-flash`, a
+Chinese current title included.
 
 #### Why the prompt is short and every example fits four words
 

@@ -503,7 +503,7 @@ const SourceBoardBody: React.FC<{
         trackerContainerId,
         initialGitHubKind: initialRepositoryKind,
         pinnedItem,
-        onScreen,
+        onScreen, crossReferences: true,
     });
     // The item a link asked to show is followed like a listed one; a lookup
     // that fell back to a search lists others, which are not.

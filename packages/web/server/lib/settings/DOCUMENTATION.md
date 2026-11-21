@@ -18,6 +18,12 @@ This module owns OpenChamber's settings persistence: the instance and profile fi
 
 ## Decisions
 
+### Why settings preserve the transcription prompt as typed
+
+`settings-dictation.ts` keeps `sttPrompt` untrimmed because the client applies
+the save response to the field as the user types. Dictation trims it when
+starting a transcription.
+
 ### Why request values and sanitized settings have separate types
 
 `settings-helpers.ts` keeps unchecked settings fields schema-derived and unknown;
@@ -99,6 +105,13 @@ The `allowedInsecureGitOrigins` setting is one origin per line, as typed in Sett
   - `readSettingsFromDiskMigrated()`
   - `writeSettingsToDisk(settings)`
   - `persistSettings(changes)`
+  - `updateSettingsFromDisk(mutate)`: read-modify-write for a server-side feature
+    writer that owns one field, such as the relay config or the VAPID keys. The
+    mutation receives the current document inside the same write queue as
+    `persistSettings`, so a feature write and a user save cannot revert each
+    other. A mutation that returns the document it received writes nothing.
+    Writing a whole document with `writeSettingsToDisk` outside that
+    queue can overwrite a concurrent save.
   - `registerSessionProject(resolveProject)`: resolves one project against the
     latest registry inside the settings write queue and appends only if absent.
     It preserves unrelated keys and navigation pointers, writes only the instance

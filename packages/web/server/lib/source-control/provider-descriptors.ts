@@ -126,6 +126,7 @@ export function publicProviderDescriptor(
       changeRequestPatch: descriptor.capabilities.changeRequestPatch === true,
     },
   };
+  if (presentation.urls.resolve) published.urls.resolve = presentation.urls.resolve;
   if (legacyFlow) published.instances.legacyFlow = { instance: legacyFlow.instance, kind: legacyFlow.kind };
   if (descriptor.instance.form === 'origin' && insecureOrigins.length > 0) {
     published.instances.insecureOrigins = [...new Set(insecureOrigins)];

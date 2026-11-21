@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePendingSharedDraftContent } from '@/hooks/usePendingSharedDraftContent';
 import { useI18n } from '@/lib/i18n';
 import type { ChatInputProps } from './composer/input/chatInputProps';
 import { createComposerKeyHandler } from './composer/input/createComposerKeyHandler';
@@ -98,7 +99,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     const referencePickerState = useComposerReferencePickerState();
     const mobileShell = useComposerMobileShell({
         preferences, expansion, referencePickerState, editorState, mobilePanels, historySearchState,
-        dropState,
+        dropState, largePasteState,
     });
     const referenceDrafts = useComposerReferenceDrafts({ draftText, sessionScope });
     const queueState = useComposerQueueState({ sessionScope });
@@ -121,8 +122,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         mobilePanels, referencePickerState, language, sessionScope, referenceDrafts,
     });
     const sending = useComposerSending({
-        inlineContext, attachmentWork, i18n, draftText, editorState, sendAvailability, sessionScope,
-        queueState, language, selection, mentionAttachments, props, referenceDrafts, preferences,
+        inlineContext, attachmentWork, largePasteState, i18n, draftText, editorState, sendAvailability,
+        sessionScope, queueState, language, selection, mentionAttachments, props, referenceDrafts, preferences,
         historySearchState, column, parallelRun, sessionLifecycle, expansion, permissionSettings,
         runtime, draftHistory,
     });
@@ -141,6 +142,14 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     });
     const fileIntake = useComposerFileIntake({
         editorState, draftText, i18n, attachmentWork, editorActions, selection, sessionScope,
+        largePasteState, mobileShell,
+    });
+    usePendingSharedDraftContent({
+        composerText: draftText.composerText,
+        setMessage: draftText.setMessage,
+        chatDraftIdentity: sessionScope.chatDraftIdentity,
+        attachSharedFiles: fileIntake.attachSharedFiles,
+        restoreDraft: draftHistory.restoreDraft,
     });
     const paste = useComposerPaste({
         sessionScope, language, editorState, draftText, largePasteState, attachmentWork, i18n,
@@ -170,7 +179,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         mobileShell, preferences, sessionScope, inlineContext, draftHistory,
     });
     const rows = useComposerRows({
-        draftText, editorState, i18n, preferences, mobileShell, inlineContext, referenceActions,
+        props, draftText, editorState, i18n, preferences, mobileShell, inlineContext, referenceActions,
         sendAvailability, sessionScope, queueState, draftTarget, selection, queueActions: sending,
         sessionLifecycle, editorActions, referencePicker,
     });

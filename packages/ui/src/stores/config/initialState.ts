@@ -35,6 +35,9 @@ export const createInitialConfigState: ConfigSlice<
     | 'settingsDefaultsLoaded'
     | 'settingsDefaultVariant'
     | 'settingsDefaultAgent'
+    | 'chatsDefaultModel'
+    | 'chatsDefaultVariant'
+    | 'chatsDefaultAgent'
     | 'opencodeDefaultAgent'
     | 'opencodeDefaultModel'
     | 'settingsAutoCreateWorktree'
@@ -76,6 +79,9 @@ export const createInitialConfigState: ConfigSlice<
     settingsDefaultsLoaded: false,
     settingsDefaultVariant: undefined,
     settingsDefaultAgent: undefined,
+    chatsDefaultModel: undefined,
+    chatsDefaultVariant: undefined,
+    chatsDefaultAgent: undefined,
     opencodeDefaultAgent: undefined,
     opencodeDefaultModel: undefined,
     settingsAutoCreateWorktree: false,

@@ -78,17 +78,24 @@ Server → client: `ready`, `ack {ackSeq}`, `partial {text}`,
 
 `options` in `start` carries the client-selected provider config:
 `{ provider: 'local' | 'openai-compatible', language?, localModel?,
-openaiCompatible?: { baseUrl, model, apiKey, endpointPath }, correct? }`. With
+openaiCompatible?: { baseUrl, model, apiKey, endpointPath, prompt }, correct? }`. With
 `correct: true` the final text goes through the correction pass first, and
 `finish_accepted.timeoutMs` includes its budget (`CORRECTION_TIMEOUT_MS`).
 An empty or
-absent `endpointPath` keeps the OpenAI `/v1/audio/transcriptions` path.
+absent `endpointPath` keeps the OpenAI `/v1/audio/transcriptions` path. A
+non-empty `prompt` goes out as the multipart `prompt` field on every committed
+segment; an empty or absent one sends no field. The local provider takes no
+prompt.
 
 ## Segmentation
 
-A dictation is one segment unless it runs long. Past `segmentMinSeconds`
-(15 s) the manager cuts inside the first pause it finds, so cuts land between
-words; `segmentMaxSeconds` (25 s) is a hard cap for speech with no pause in it.
+A dictation is one segment unless it runs long. For local models the manager
+cuts at the first pause after 15 s, or at 25 s without a pause. For the
+OpenAI-compatible provider those bounds are 60 s and 120 s, so its transcription
+has more context. At 16 kHz PCM16, 120 s is under 4 MB of WAV audio, below
+OpenAI's 25 MB upload limit. Other compatible servers may have lower limits.
+The finalization deadline includes audio already committed but still awaiting a
+transcript, as well as the uncommitted tail.
 
 Pauses are found inside each ~1 s client chunk, not at chunk boundaries: the
 chunk is scored in 50 ms RMS frames; a frame is quiet when it is close to the
@@ -261,6 +268,15 @@ failure, a missing Small Model or the 10 s cap returns the text as heard, so
 the pass never costs the user the dictation. The prompt names colloquial
 forms ("шо", "gonna") as speech to keep, because small models otherwise
 "correct" them into the literary form.
+
+### Why the transcription prompt is sent to any model and not gated by model name
+
+The server model is free text, and the same name can mean different engines on
+different servers, so OpenChamber cannot tell which models accept a prompt.
+The prompt goes out whenever the user filled it; a model without prompt
+support ignores it or the server rejects the request, and that error reaches
+the user like any other transcription error. A model catalog or an automatic
+retry without the prompt would guess and hide what the server answered.
 
 ### Why the language hint is part of the engine key
 

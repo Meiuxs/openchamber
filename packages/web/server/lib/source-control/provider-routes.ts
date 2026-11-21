@@ -163,7 +163,7 @@ function readListFilter(query: Query) {
   return filter;
 }
 
-const UPLOAD_SECRET_RE = /^[0-9a-f]{32}$/;
+const UPLOAD_SECRET_RE = /^[A-Za-z0-9_-]{16,8192}$/;
 const UPLOAD_MEDIA_TYPE_RE = /^(?:image\/(?:png|jpeg|gif|webp|avif)|video\/(?:mp4|webm|quicktime))$/;
 const UPLOAD_EXTENSION_TYPES = new Map([
   ['png', 'image/png'], ['jpg', 'image/jpeg'], ['jpeg', 'image/jpeg'], ['gif', 'image/gif'], ['webp', 'image/webp'], ['avif', 'image/avif'],
@@ -909,7 +909,7 @@ export function registerProviderRoutes(app: Router, {
         project,
         number,
         host: requestText(req.query?.host),
-        kind,
+        kind, includeReferences: req.query?.references === '1',
       }));
     }, {
       validate: (req) => (!requestText(req.query?.directory) || !namesProject(req)
@@ -1011,7 +1011,7 @@ export function registerProviderRoutes(app: Router, {
         number,
         includeDiff: req.query?.diff === '1',
         includeCIDetails: req.query?.checkDetails === '1',
-        includeTimeline: req.query?.timeline === '1',
+        includeTimeline: req.query?.timeline === '1', includeReferences: req.query?.references === '1',
         project: optionalProject(req),
         context: trustedContext, remote: trustedContext.primaryRemote,
       }, revision)));
@@ -1045,7 +1045,7 @@ export function registerProviderRoutes(app: Router, {
           directory,
           number,
           project: optionalProject(req),
-          context: trustedContext, remote: trustedContext.primaryRemote,
+          context: trustedContext, remote: trustedContext.primaryRemote, includeReferences: method === 'getIssue' && req.query?.references === '1',
         }));
       }, {
         validate: (req) => (!requestIssueNumber(req.query?.number)

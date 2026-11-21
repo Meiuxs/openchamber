@@ -83,6 +83,10 @@ keeps the original empty-string sentinel and bounded mutable fragments.
 
 ## Decisions
 
+### Why PowerShell aliases need a launch probe
+
+Windows Store execution aliases can reject `stat` with `EACCES` while remaining launchable. Shell discovery probes those PowerShell candidates, and only ones inside a `WindowsApps` directory or one of its package folders, with a bounded, profile-free command in PATH order; other executables keep the normal file check. Auto resolves fallback shells as the PTY needs them, so a PowerShell probe cannot delay an earlier usable shell. Explicit selection only probes candidates for that shell. A bare `pwsh` with no PATH match still falls back to the plain executable check.
+
 ### Why events and not polling
 
 The runtime broadcasts `openchamber:terminal-sessions-changed` after creation,
@@ -119,7 +123,9 @@ Resetting the parser at the size limit would expose control payload as printable
 
 ## Security And Relay
 
-The WebSocket path must remain in both `isUrlAuthWebSocketPath` and relay `ALLOWED_WS_PATHS`. The client must use `getRuntimeUrlResolver().websocket()` and `openRuntimeWebSocket`; direct local URLs or raw browser WebSockets break relay and URL-token authentication.
+`socket-upgrade.ts` admits host-terminal sockets. A socket from the hosted tunnel UI uses the same live tunnel session as terminal HTTP. Its origin must also match the active tunnel's public origin, even if the server allows a second origin for other UI clients. Expiry, tunnel revocation and replacement disconnect that socket without stopping the PTY. Local UI and paired clients keep their existing credentials; space upgrades have a separate owner.
+
+The WebSocket path must remain in both `isUrlAuthWebSocketPath` and relay `ALLOWED_WS_PATHS`. The client uses the runtime resolver's `sameOriginCookieWebSocket()` for a confirmed hosted tunnel session and `websocket()` otherwise. Both paths use `openRuntimeWebSocket`; direct local URLs or raw browser WebSockets break relay and URL-token authentication.
 
 ## Verification
 

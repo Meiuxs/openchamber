@@ -231,7 +231,7 @@ export const registerOpenCodeRoutes = <Settings extends { opencodeBinary?: unkno
           headers: { Accept: 'application/json', ...getOpenCodeAuthHeaders() },
           signal: AbortSignal.timeout(OPENCODE_INFO_TIMEOUT_MS),
         }),
-        fetchLatestOpenCodeVersion(),
+        fetchLatestOpenCodeVersion().catch(() => null),
       ]);
       const rawInfo: unknown = await healthResponse.json().catch(() => null);
       const info = routeInputFields(rawInfo);
@@ -395,6 +395,7 @@ export const registerOpenCodeRoutes = <Settings extends { opencodeBinary?: unkno
         providerId,
         sources: sources.sources,
         config: sources.config,
+        inheritedCanonical: sources.inheritedCanonical,
       });
     } catch (error) {
       console.error('Failed to get provider sources:', error);
