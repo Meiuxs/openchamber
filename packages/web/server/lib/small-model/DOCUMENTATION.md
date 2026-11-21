@@ -24,6 +24,27 @@ an already unwrapped refusal. The shared lookup returns that refusal so routes
 read its message, code and directory together; a boolean check would still
 leave each caller responsible for choosing the right error object.
 
+## Injected-key providers
+
+A provider whose API key is filled in at request time can answer chat turns and
+refuse `POST /api/experimental/generate/text` with 401, because the one-shot
+route sends the configured placeholder straight through. `generateSmallModelText`
+retries that refusal once through a throwaway OpenCode session: it creates the
+session with the resolved model, calls `POST /api/session/:id/generate`, and
+removes the session in `finally`. The session carries the same directory header
+and model as the one-shot call, so the fallback keeps the selected model and the
+provider the caller was already using. Once a provider has refused, the rest of
+that generation, including a structured-output retry, uses the session route.
+Session cleanup has its own two-second timeout so a stalled removal cannot
+outlive the caller's deadline.
+
+### Why the fallback is a session and not a different credential
+
+OpenChamber never reads a provider's API key and cannot refresh an injected one.
+The session route uses the same provider pipeline as a chat turn, where the
+injection happens. Sending a literal key from this server would both fail for
+rotating credentials and put a provider secret on a new path.
+
 ## Files
 
 - `client.ts` — the connection to the running OpenCode. `server/index.js` wires
