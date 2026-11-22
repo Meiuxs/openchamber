@@ -450,7 +450,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     const response = await client.session.active();
     const active = isJsonRecord(response) && isJsonRecord(response.data) ? response.data : response;
     if (isJsonRecord(active) && Object.hasOwn(active, sessionID)) return { status: 'busy' };
-    const listed = await client.message.list({ sessionID, limit: 10, order: 'desc' });
+    const listed = await client.message.list({ sessionID, limit: 50, order: 'desc' });
     const records = (isJsonRecord(listed) && Array.isArray(listed.data) ? listed.data : [])
       .map((item) => (isJsonRecord(item) ? item : {}));
     const latestAssistant = records.find((record) => record?.type === 'assistant');
@@ -597,7 +597,21 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       return blockWithComment(run, context, BLOCKED_REASONS.MISSING_CREDENTIAL, '触发者账号不可用。');
     }
     const title = `#${run.iid}: ${String(issue?.title ?? '').replace(/\s+/g, ' ').trim()} · ${sessionStageLabel(stage, run.feedbackRounds)}`;
-    const payload: JsonObject = { title, location: { directory: run.worktreePath } };
+    const payload: JsonObject = {
+      title,
+      location: { directory: run.worktreePath },
+      // Automation sessions stay out of the main session list; the runs page
+      // and the automation archive open them by ID from the ledger.
+      metadata: {
+        hidden: true,
+        openchamber: {
+          kind: 'gitlab-automation',
+          origin: run.origin,
+          projectEntryId: run.projectEntryId ?? null,
+          iid: run.iid,
+        },
+      },
+    };
     const usesReviewModel = stage === 'review' && Boolean(context.config.reviewModel);
     const modelValue = isString(usesReviewModel ? context.config.reviewModel : context.project.defaultModel)
       ? String(usesReviewModel ? context.config.reviewModel : context.project.defaultModel).trim()
@@ -1253,6 +1267,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
         noteWatermarks: scan.watermarks,
         sessionId: null,
         attempts: 0,
+        reviewRounds: 0,
       });
       await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-working'])
         .catch((error) => warn(`[gitlab-issues] ai-working label failed for #${run.iid}:`, error));
@@ -1502,7 +1517,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
   };
 
   const TIMED_PHASES: string[] = [
-    PHASES.TRIAGING, PHASES.PLANNING, PHASES.IMPLEMENTING, PHASES.REVIEWING, PHASES.ADDRESSING,
+    PHASES.PREPARING, PHASES.TRIAGING, PHASES.PLANNING, PHASES.IMPLEMENTING, PHASES.REVIEWING, PHASES.ADDRESSING,
   ];
 
   const handleTimeout = async (run: RunEntry, context: DispatchContext) => {
@@ -1516,7 +1531,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       run,
       context,
       BLOCKED_REASONS.TIMEOUT,
-      `当前阶段超过 ${context.config.timeoutMinutes} 分钟，已中止会话。`,
+      `当前阶段超过 ${context.config.timeoutMinutes} 分钟，已中止${run.sessionId ? '会话' : '该阶段的等待'}。`,
       { sessionId: null },
     );
     return true;

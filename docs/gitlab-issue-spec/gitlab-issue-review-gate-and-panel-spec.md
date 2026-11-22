@@ -60,7 +60,7 @@ UI 原稿：`work-panel-mockup.html`（维护者已过目）；实现稿必须�
 
 ### 3.2 超时
 
-`reviewing` 与 `planning` 均纳入 `gitlabIssueTimeoutMinutes` 预算（基础规格原本只覆盖 implementing）。超时中止会话，`ai-blocked`，`blockedReason` 记 `timeout`。`waiting-approval` 维持无超时（等人的阶段不计时）。
+`preparing` 的 setup 等待、`reviewing` 与 `planning` 均纳入 `gitlabIssueTimeoutMinutes` 预算（基础规格原本只覆盖 implementing）。超时中止 setup 或会话，`ai-blocked`，`blockedReason` 记 `timeout`。`waiting-approval` 维持无超时（等人的阶段不计时）。
 
 ### 3.3 对既有路径的影响
 
@@ -150,7 +150,7 @@ implementing -> reviewing | blocked          （原：implementing -> verifying�
 reviewing    -> implementing | verifying | blocked
 ```
 
-`SLOT_PHASES` 增加 `reviewing`。`blockedReason` 新增取值：`review-rejected`、`label-events-unavailable`。台账字段新增 `reviewRounds`（认领归零）、`reviewNoteId`、`reviewVerdict`、`reviewFindings`、`blockedFrom`（阻塞前所处阶段，供面板画轨道）、`title`、`projectPath`（供面板拼链接，免再查 API）；`sessionId` 语义不变，始终是当前活跃会话（实现或审核）。`attempts` 只计基础设施重试：进入 `reviewing` 时归零，审核轮次不计入。
+`SLOT_PHASES` 增加 `reviewing`。`blockedReason` 新增取值：`review-rejected`、`label-events-unavailable`。台账字段新增 `reviewRounds`（认领归零）、`reviewNoteId`、`reviewVerdict`、`reviewFindings`、`blockedFrom`（阻塞前所处阶段，供面板画轨道）、`title`、`projectPath`（供面板拼链接，免再查 API）；`sessionId` 语义不变，始终是当前活跃会话（实现或审核）。`attempts` 只计基础设施重试：进入 `reviewing` 时归零，审核轮次不计入。进入 `addressing`（反馈轮开始）时 `reviewRounds` 归零，反馈轮拥有自己的 3 轮审核回路，不受主轨道已用轮次影响。
 
 ## 8. 基础行为修正（同批交付）
 
@@ -171,7 +171,7 @@ reviewing    -> implementing | verifying | blocked
 - 状态机含 `reviewing` 的全转移与非法转移矩阵。
 - 审核输出的字段校验：verdict 枚举、findings 结构、空 summary 拒绝。
 - 回路：第 3 轮 request-changes 回灌，第 4 轮进 `review-rejected` 且 block 评论含累计发现。
-- `planning`、`reviewing` 超时各自中止会话并阻塞。
+- `preparing`、`planning`、`reviewing` 超时各自中止 setup 或会话并阻塞。
 - 标签事件失败：`ai-blocked`、评论、无重试churn。
 - 动作路由：phase 不匹配 409、bot 账号拒绝、权限不足拒绝、未绑定账号拒绝。
 - 读路由：台账损坏返回错误而非空列表，enrich 失败降级 `null`。

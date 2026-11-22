@@ -236,7 +236,7 @@ async function harness({
       },
     },
     message: {
-      list: async () => ({ data: state.idle ? state.messages : [] }),
+      list: async ({ limit }) => ({ data: state.idle ? state.messages.slice(0, limit ?? state.messages.length) : [] }),
     },
   };
 
@@ -394,6 +394,24 @@ describe('GitLab issue dispatcher worktree setup', () => {
 
     const run = (await ledger.list())[0];
     expect(run.phase).toBe('blocked');
+  });
+
+  it('blocks a preparing run whose setup never reports ready', async () => {
+    const worktreeSetupState = vi.fn(async () => 'pending');
+    const { dispatcher, ledger, state } = await harness({ worktreeSetupState });
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    await ledger.put(runEntry({
+      phase: 'preparing', worktreePath: 'D:/wt/17', attempts: 0,
+      since: new Date(NOW - 31 * 60_000).toISOString(),
+    }));
+
+    await dispatcher.tick();
+
+    expect((await ledger.list())[0]).toMatchObject({
+      phase: 'blocked', blockedReason: 'timeout',
+    });
+    expect(state.calls.sessionCreates).toBe(0);
+    expect(state.notes.some((note) => note.body.includes('timeout'))).toBe(true);
   });
 });
 
@@ -639,6 +657,25 @@ describe('GitLab issue dispatcher session start and outcome', () => {
 
     expect((await ledger.list())[0].phase).toBe('implementing');
     expect(state.calls.labels).not.toContainEqual(['add', ['ai-blocked']]);
+  });
+
+  it('reads the final answer when a long turn left it past the first message page', async () => {
+    const { dispatcher, ledger, state } = await harness();
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    await ledger.put(runEntry({
+      phase: 'implementing', sessionId: 'ses_impl', worktreePath: 'D:/wt/17', attempts: 1,
+    }));
+    // The record page is read newest first. A turn with more tool records than
+    // the page size would hide the assistant text that carries the result.
+    state.messages = [
+      ...Array.from({ length: 10 }, (_, index) => ({ type: 'tool', id: `msg_tool_${index}` })),
+      message(evidenceJson),
+    ];
+
+    await dispatcher.tick();
+
+    expect((await ledger.list())[0].phase).toBe('reviewing');
+    expect(state.notes.some((note) => note.body.includes('### 实现结果'))).toBe(true);
   });
 
   it('stamps every event it records with the time it happened', async () => {
@@ -1183,6 +1220,50 @@ describe('GitLab issue dispatcher feedback rounds', () => {
     // the title, never the run.
     expect(state.calls.sessionCreate).toMatchObject({
       title: expect.stringContaining('#17: Fix login · 反馈修复第 1 轮'),
+    });
+  });
+
+  it('keeps the lines after the command as the feedback the session receives', async () => {
+    const wt = await fs.mkdtemp(path.join(os.tmpdir(), 'gitlab-wt-'));
+    dirs.push(wt);
+    const { dispatcher, ledger, state } = await harness();
+    state.issue.labels = ['ai-ready', 'ai-working', 'ai-review'];
+    state.mrs = [{ iid: 5, state: 'opened', web_url: `${INSTANCE}/mr/5` }];
+    state.notes.push(commentNote(200, '@bot 修复:\n1. 登录页样式塌了\n2. 保存后不刷新'));
+    await ledger.put(mrOpenRun({ worktreePath: wt }));
+
+    await dispatcher.tick();
+    expect((await ledger.list())[0].feedbackItems).toEqual([
+      { author: 'sam', text: '1. 登录页样式塌了\n2. 保存后不刷新' },
+    ]);
+
+    await dispatcher.tick();
+    expect(state.calls.prompts[0]).toContain('1. 登录页样式塌了\n2. 保存后不刷新');
+  });
+
+  it('gives a feedback round its own review budget', async () => {
+    const wt = await fs.mkdtemp(path.join(os.tmpdir(), 'gitlab-wt-'));
+    dirs.push(wt);
+    const { dispatcher, ledger, state } = await harness();
+    state.issue.labels = ['ai-ready', 'ai-working', 'ai-review'];
+    state.mrs = [{ iid: 5, state: 'opened', web_url: `${INSTANCE}/mr/5` }];
+    state.notes.push(commentNote(200, '@bot 修复: tighten the check'));
+    // The main track already used the whole review budget before the round.
+    await ledger.put(mrOpenRun({ worktreePath: wt, reviewRounds: 3 }));
+
+    await dispatcher.tick();
+    expect((await ledger.list())[0]).toMatchObject({ phase: 'addressing', reviewRounds: 0 });
+
+    await dispatcher.tick();
+    state.messages = [message(evidenceJson)];
+    await dispatcher.tick();
+    expect((await ledger.list())[0].phase).toBe('reviewing');
+
+    await dispatcher.tick();
+    state.messages = [message(reviewChangesJson)];
+    await dispatcher.tick();
+    expect((await ledger.list())[0]).toMatchObject({
+      phase: 'implementing', reviewRounds: 1,
     });
   });
 

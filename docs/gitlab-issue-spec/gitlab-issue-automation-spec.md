@@ -165,7 +165,7 @@ MR 字段：关联 issue、根因、改动、验证命令与结果、风险与�
 | `autoDispatchGitlabIssues` | boolean | false | 项目开关，和本地议题开关独立 |
 | `gitlabIssueBranchPrefix` | string | `openchamber/` | 必须以 `/` 结尾，按 Git ref 规则校验 |
 | `gitlabIssueBotAccountId` | string | 空 | 项目绑定实例上的 bot 账号，空则流程不启动 |
-| `gitlabIssueTimeoutMinutes` | number | 30 | implementing 阶段超时，超时中止会话并阻塞 |
+| `gitlabIssueTimeoutMinutes` | number | 30 | 各会话阶段与 worktree setup（`preparing`）的超时，超时中止并阻塞 |
 
 校验失败时设置页显示错误，不启动该项目轮询。
 
@@ -265,7 +265,7 @@ done 终态
 
 超时与租约：
 
-- triaging、planning、implementing、reviewing、addressing 超过配置时长（默认 30 分钟）中止会话，标 `blocked`，`blockedReason` 记 `timeout`。
+- `preparing`、`triaging`、`planning`、`implementing`、`reviewing`、`addressing` 超过配置时长（默认 30 分钟）中止会话或 setup，标 `blocked`，`blockedReason` 记 `timeout`。
 - 租约 5 分钟，会话存活期间每轮续租，过期走恢复规则。
 
 分支复用：远端分支按 `<前缀>issue-<iid>-` 匹配。匹配就复用已有分支继续跑，标题改过导致旧分支名不同也不冲突；前缀不匹配才报错。复用时的 worktree 基于 `origin/<已有分支>`。
@@ -299,11 +299,11 @@ done 终态
 - 台账原子写、损坏文件恢复、租约过期、done 记录清理。
 - 类型行解析、目标分支解析与 ref 校验、前缀校验、slug 规则（中文标题、空 slug）。
 - 触发者解析、审批权限判断、凭据缺失分支、Developer 权限不足。
-- 取消检查（标签变化、issue 关闭）、implementing 超时。
+- 取消检查（标签变化、issue 关闭）、implementing 超时、`preparing` 的 setup 永不就绪时按超时阻塞。
 - `/ai-take` 换绑和人工重置后的重新认领。
-- 反馈命令解析（大小写、冒号并入正文、裸 @ 忽略、非成员、bot 自评、system note）。
+- 反馈命令解析（大小写、冒号并入正文、命令首行之后的多行正文、裸 @ 忽略、非成员、bot 自评、system note）。
 - 双水位线推进、同 tick 多条反馈合并、MR merged/closed 不触发。
-- `addressing` 转移、worktree 丢失阻塞、5 轮上限进入 `feedback-limit`。
+- `addressing` 转移、worktree 丢失阻塞、5 轮上限进入 `feedback-limit`、反馈轮自己的 3 轮审核预算。
 - 判定输出契约：三值枚举、`not-an-issue` 缺 `evidence` 拒绝、`insufficient-info` 缺 `missing` 拒绝、空 summary 拒绝。
 - 判定结果分流：`valid` 进对应轨道、`insufficient-info` 阻塞且 issue 保持打开、`not-an-issue` 关单加 `ai-done` 进 `done`、bot 无权关单时落 `not-an-issue` 阻塞。
 - `triaging` 会话丢失后留在原阶段重开，不按分支提交推断。
@@ -341,7 +341,7 @@ mr-open 之后由评论驱动的新一轮修复。2026-11-15 评审定案，本�
 ### 12.1 触发与命令解析
 
 - 双通道轮询：issue notes 与 MR notes 都查，各自水位线用 note id（台账 `noteWatermarks.issue` / `noteWatermarks.mergeRequest`），每轮处理完推进水位线。
-- 命令形态：首行 `@<bot 用户名> 修复` 或 `@<bot 用户名> fix`，大小写不敏感。bot 用户名动态取项目绑定的 bot 账号，不硬编码。同一行命令后接冒号（中英文均可）的内容并入反馈正文，如 `@ai-bot 修复: 登录页样式塌了`。
+- 命令形态：首行 `@<bot 用户名> 修复` 或 `@<bot 用户名> fix`，大小写不敏感。bot 用户名动态取项目绑定的 bot 账号，不硬编码。命令行后接冒号（中英文均可）的内容，以及命令行之后的其余评论内容，都并入反馈正文，如 `@ai-bot 修复: 登录页样式塌了`，或 `@ai-bot 修复:` 后换行列出多条问题。
 - 仅 @ bot 不带指令的评论忽略；触发者的评论回复里说明"裸 @ 不会触发，请用 `@<bot> 修复`"。
 - 门槛与过滤：只认 Developer 及以上、非 bot 账号发出的；system notes 与 bot 代发的评论一律过滤。issue 侧复用 `latestCommand`，MR 侧补 `MergeRequestNotes` 封装。
 - 同一 tick 内的多条反馈合并为一批，共用一轮 addressing。

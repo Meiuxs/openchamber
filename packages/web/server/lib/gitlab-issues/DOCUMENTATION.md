@@ -69,7 +69,9 @@ The cap exists to bound the number of issues the automation holds at once, and a
 
 A worktree is a fresh checkout, and a second install underneath its own, longer path is what the automation could not survive: the package store passed the Windows path limit and the install failed after minutes (`../git/DOCUMENTATION.md`, *Why a shared dependency link replaces the install*). The creation is asked for the checkout's `node_modules` by link (`reuseNodeModules`) and the install is skipped; the project's own setup commands are what runs when there is nothing to share. They are the commands the project already declares for a worktree a person makes (`../projects/worktree-setup.js`), merged by the same rule, so a shared command nobody trusted is skipped here too: the automation may run on a machine where nobody is present to accept a pull's commands.
 
-The wait is per tick, never a deadline. An install that takes minutes is slow, not broken, and holding a tick behind it would stall every other project's dispatch. The run stays in `preparing` until the bootstrap reports `setup-ready`. A setup command that fails ends the bootstrap as failed, so the run blocks with that reason and the person reads it on the issue rather than in a log.
+The wait is per tick, and a tick never waits behind the install: holding it would stall every other project's dispatch. The run stays in `preparing` until the bootstrap reports `setup-ready`, bounded by the run's configured timeout (`preparing` is a timed phase), so a setup that never finishes is blocked with `timeout` instead of holding the project slot forever. A setup command that fails ends the bootstrap as failed, so the run blocks with that reason and the person reads it on the issue rather than in a log.
+
+The link points at the checkout's own `node_modules`, so a process in the worktree writes through it into the checkout and every worktree sharing it; a changed dependency file is visible to the main checkout and to parallel runs. The link is kept because a second install does not fit under the Windows path limit.
 
 ### Why mr-open is polled before the cancellation check
 
@@ -103,10 +105,6 @@ Removing it would discard work that may be the only copy of the change. The clea
 
 A verifying run's session is already finished; its state belongs to the branch and the merge request, not to the session. Recovery therefore only checks `planning`, `preparing`, and `implementing`. A lost session returns to `implementing` when the branch has commits and to `claimed` when it does not. Waiting-approval and verifying continue from their stored phase. `triaging`, `reviewing` and `addressing` take a third path: the session is cleared and the same phase opens a fresh one next tick, because what those phases decide — is the report real, does the diff pass, are the feedback items answered — is not recorded anywhere on the branch.
 
-### Why the bot account is re-read every tick instead of a paused-project set
-
-A paused set survives the credential update that fixes the problem, so the project would never resume without a restart. Re-reading the account costs one credential-store read per enabled project and lets the next tick resume as soon as the settings point at a valid account.
-
 ### Why the review is a separate session, not the implementer's own check
 
 An agent that reviews its own change confirms its own reasoning. A second session reads the diff with a reviewer prompt and only that prompt, so the verdict is independent of the implementation transcript. It still cannot push: `verifying` re-checks the diff, and an approve produces no commit.
@@ -119,9 +117,9 @@ Findings come from a session that itself read untrusted issue text, so they can 
 
 An instance without `resource_label_events` would leave every `ai-ready` issue in a permanent claim-retry loop with no comment on the issue explaining it. The run is blocked once with `label-events-unavailable` and a comment, so the GitLab side says what is wrong and the reset path the comment names works.
 
-### Why planning and reviewing share the implementing timeout
+### Why preparing and the working phases share the timeout
 
-A session that never finishes holds the project slot and one of the three global slots. Before the timeout covered them, three hung plans stalled every project until a human removed a label. The timeout is the only automatic exit from a stuck session that is not a crash. Triage runs under the same budget for the same reason: it is the first session every run opens, so a hung one now stalls the run before any other work exists.
+A run that never moves holds the project slot and one of the three global slots, whether it is stuck in a session or in the worktree setup. Before the timeout covered planning and reviewing, three hung plans stalled every project until a human removed a label. `preparing` joined for the same reason: a setup command that never reports ready is a hung run even though no session exists. Triage and addressing run under the same budget. The timeout is the only automatic exit from a stuck run that is not a crash.
 
 ### Why a session that ends without an answer blocks the run
 
@@ -171,6 +169,8 @@ The spec enumerates the reasons for blocked runs but has no value for a missing 
 
 GitLab 12.7 answers 400 to an issue update whose body carries only `add_labels` or `remove_labels`; it accepts those parameters from 12.10 on. The dispatcher reads the issue, computes the resulting set, and sends `labels`, which every version accepts. The read costs one request per label change and removes the version split entirely.
 
+The read and the write are two requests, so a label a person adds or removes between them is overwritten by the set the bot computed. The window is one request and cannot be closed without atomic add support. A human's `ai-blocked` lost this way is not seen by the cancellation check until the person acts again; the ledger stays the authority for the automation's own moves.
+
 ### Why a loopback remote may be plain HTTP
 
 The push credential lease hands git a one-time helper for the remote host, and the endpoint is built from the remote URL. Local development runs the instance over plain HTTP on loopback, an origin the provider already accepts through `allowLoopbackHttp`, so that case gets an endpoint too. Every other remote still needs TLS before the lease is issued.
@@ -181,7 +181,9 @@ The intranet often cannot spare an account for the bot, so the bot account is fr
 
 ### Why a feedback round is a comment command with per-channel watermarks
 
-A person reads the MR and types `@<bot> 修复` in the MR or the issue; the bot polls both note lists once per mr-open tick. Each channel carries its own watermark stored as a note id, so a comment that lands mid-round is either part of the next batch or waits for it — a shared time-based watermark would split or double-read comments whose clocks differ between channels. The command is a first-line mention of the bound bot username, never a hard-coded one, and only Developer-and-above authors count, the same bar the approval commands use. A mention without the command word is not a trigger; the bot answers it with usage so the silence a person would read as a broken bot is instead a one-line instruction.
+A person reads the MR and types `@<bot> 修复` in the MR or the issue; the bot polls both note lists once per mr-open tick. Each channel carries its own watermark stored as a note id, so a comment that lands mid-round is either part of the next batch or waits for it — a shared time-based watermark would split or double-read comments whose clocks differ between channels. The command is a first-line mention of the bound bot username, never a hard-coded one, and only Developer-and-above authors count, the same bar the approval commands use. The feedback text is the rest of the comment after the command line, so a reviewer can put several items on the lines below it. A mention without the command word is not a trigger; the bot answers it with usage so the silence a person would read as a broken bot is instead a one-line instruction.
+
+Both note lists are read in full each tick, up to 20 pages of 100. A channel that grows past 2000 notes blocks the run with `notes-limit`, because the automation cannot page past its cap and a watermark cannot recover comments it never read.
 
 ### Why the first mr-open poll only sets the watermarks
 
@@ -206,6 +208,10 @@ The mr-open worktree is the state the reviewer commented on. Rebuilding it from 
 ### Why a run stops after five feedback rounds
 
 Unbounded rounds let a two-person disagreement hold a session slot and burn model quota forever, with no point where the run says "this needs a human". Five rounds, counted in `feedbackRounds`, bound the loop; the block names `feedback-limit` and the blocked comment already carries the reset path.
+
+### Why a feedback round gets its own review budget
+
+`reviewRounds` counts request-changes rounds, and a feedback round is a new review circuit: it starts after the previous circuit already approved. Carrying the old count forward left a round that had used two revisions with only one before `review-rejected`. Entering `addressing` therefore resets `reviewRounds` to zero, and the five-round `feedbackRounds` cap bounds the total work.
 
 ### Why triage runs after the worktree instead of at claim time
 

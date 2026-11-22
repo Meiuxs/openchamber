@@ -121,10 +121,13 @@ const escapeRegExp = (value: string) => String(value).replace(/[.*+?^${}()|[\]\\
 export const parseFeedbackCommand = (body: string | null | undefined, botUsername: string | null | undefined) => {
   const username = escapeRegExp(String(botUsername ?? '').trim());
   if (!username) return null;
-  const first = String(body ?? '').trim().split(/\r?\n/, 1)[0]?.trim() ?? '';
+  const lines = String(body ?? '').trim().split(/\r?\n/);
+  const first = lines[0]?.trim() ?? '';
   const match = new RegExp(`^@${username}\\s*(?:修复|fix)(?:\\s*[:：]\\s*(.*))?$`, 'i').exec(first);
   if (!match) return null;
-  return { text: (match[1] ?? '').trim() || null };
+  const sameLine = (match[1] ?? '').trim();
+  const rest = lines.slice(1).join('\n').trim();
+  return { text: [sameLine, rest].filter(Boolean).join('\n') || null };
 };
 
 export const isBareBotMention = (body: string | null | undefined, botUsername: string | null | undefined) => {

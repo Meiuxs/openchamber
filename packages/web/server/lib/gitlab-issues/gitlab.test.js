@@ -33,7 +33,15 @@ describe('GitLab feedback command parsing', () => {
     expect(parseFeedbackCommand('@bot 修复：样式塌了', 'bot')).toEqual({ text: '样式塌了' });
     expect(parseFeedbackCommand('@bot FIX', 'bot')).toEqual({ text: null });
     expect(parseFeedbackCommand('@bot fix: crash on save', 'bot')).toEqual({ text: 'crash on save' });
-    expect(parseFeedbackCommand('  @bot 修复  \nlater lines are body', 'bot')).toEqual({ text: null });
+    expect(parseFeedbackCommand('  @bot 修复  \nlater lines are body', 'bot')).toEqual({ text: 'later lines are body' });
+  });
+
+  it('keeps the whole comment after the command line as the feedback body', () => {
+    expect(parseFeedbackCommand('@bot 修复:\n1. 登录页样式塌了\n2. 保存后不刷新', 'bot'))
+      .toEqual({ text: '1. 登录页样式塌了\n2. 保存后不刷新' });
+    expect(parseFeedbackCommand('@bot 修复: first line\r\nsecond line', 'bot'))
+      .toEqual({ text: 'first line\nsecond line' });
+    expect(parseFeedbackCommand('@bot 修复\n\n  trailing text  ', 'bot')).toEqual({ text: 'trailing text' });
   });
 
   it('refuses everything that is not the trigger', () => {
@@ -70,10 +78,12 @@ describe('GitLab issue branch names', () => {
     const branches = [
       { name: 'openchamber/issue-17-old-title' },
       { name: 'openchamber/issue-170-x' },
+      { name: 'openchamber/x-issue-17' },
       { name: 'other/issue-17-x' },
     ];
     expect(matchReusableBranch(branches, 'openchamber/', 17)).toBe('openchamber/issue-17-old-title');
     expect(matchReusableBranch(branches, 'other/', 17)).toBe('other/issue-17-x');
+    expect(matchReusableBranch([{ name: 'openchamber/x-issue-17' }], 'openchamber/', 17)).toBeNull();
     expect(matchReusableBranch([], 'openchamber/', 17)).toBeNull();
   });
 
