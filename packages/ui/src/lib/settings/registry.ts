@@ -430,6 +430,21 @@ export const SETTINGS_REGISTRY = {
     parse: parseNpmRegistryText,
     ui: uiStore('npmRegistry', setUi('npmRegistry')),
   }),
+  modelRateLimitRequests: field({
+    scope: 'profile',
+    parse: parseIntegerInRange(1, 10000),
+    ui: uiStore('modelRateLimitRequests', setUi('modelRateLimitRequests')),
+  }),
+  modelRateLimitWindowMinutes: field({
+    scope: 'profile',
+    parse: parseIntegerInRange(1, 1440),
+    ui: uiStore('modelRateLimitWindowMinutes', setUi('modelRateLimitWindowMinutes')),
+  }),
+  modelRateLimitGateways: field({
+    scope: 'profile',
+    parse: parseTextUpTo(10_000),
+    ui: uiStore('modelRateLimitGateways', setUi('modelRateLimitGateways')),
+  }),
   defaultFileViewerPreview: field({ scope: 'profile', parse: parseBoolean }),
   directoryShowHidden: field({
     scope: 'profile',

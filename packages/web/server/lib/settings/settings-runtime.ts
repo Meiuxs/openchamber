@@ -1,5 +1,6 @@
 import { createProjectIdFromPath, projectConfigFileStemOf } from '../projects/project-id.js';
 import { isMessageSearchEnabled } from './settings-helpers.js';
+import { MANAGED_PLUGIN_SETTINGS_KEYS } from './managed-plugin-settings.js';
 import { setDebugLogging } from '../log-level.js';
 import type { SettingsDocument, createSettingsHelpers } from './settings-helpers.js';
 import type { SettingsProject, createSettingsNormalizationRuntime } from './settings-normalization-runtime.js';
@@ -111,23 +112,6 @@ const normalizeNotificationTemplates = (templates: SettingsDocument[string]) => 
 
   return { templates: next, changed };
 };
-
-const MANAGED_PLUGIN_SETTINGS_KEYS = new Set([
-  'agentControlToolEnabled',
-  'agentScheduleToolEnabled',
-  'agentWebToolEnabled',
-  'agentMemoryToolEnabled',
-  'agentKnowledgeToolEnabled',
-  'agentNotifyToolEnabled',
-  'agentRenderToolEnabled',
-  'agentImageToolEnabled',
-  'agentSecretToolEnabled',
-  'agentUsageToolEnabled',
-  'agentTerminalToolEnabled',
-  'agentWorkflowToolEnabled',
-  'fallbackModel',
-  'accountSwitchProviders',
-]);
 
 export const createSettingsRuntime = (deps: SettingsRuntimeDependencies) => {
   const {

@@ -95,6 +95,9 @@ export const createPreferenceActions: UIStoreSlice<
   | 'setFileEditorVimMappings'
   | 'setAllowedInsecureGitOrigins'
   | 'setNpmRegistry'
+  | 'setModelRateLimitRequests'
+  | 'setModelRateLimitWindowMinutes'
+  | 'setModelRateLimitGateways'
 > = (set) => ({
   setTerminalShell: (shell) => {
     set({ terminalShell: shell });
@@ -472,15 +475,23 @@ export const createPreferenceActions: UIStoreSlice<
   },
 
   setAllowedInsecureGitOrigins: (value) => {
-    // Raw text while typing; the registry's parser keeps only whole
-    // plain-HTTP origins in what persists. Same cap as that field.
     set({ allowedInsecureGitOrigins: value.slice(0, 10_000) });
   },
 
   setNpmRegistry: (value) => {
-    // Raw text while typing; the registry's parser keeps only a whole
-    // registry URL in what persists. Same cap as that field.
     set({ npmRegistry: value.slice(0, 512) });
+  },
+
+  setModelRateLimitRequests: (value) => {
+    set({ modelRateLimitRequests: Math.max(1, Math.min(10000, Math.round(value))) });
+  },
+
+  setModelRateLimitWindowMinutes: (value) => {
+    set({ modelRateLimitWindowMinutes: Math.max(1, Math.min(1440, Math.round(value))) });
+  },
+
+  setModelRateLimitGateways: (value) => {
+    set({ modelRateLimitGateways: value.slice(0, 10_000) });
   },
 
 });

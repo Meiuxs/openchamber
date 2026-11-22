@@ -6,6 +6,7 @@ export const WORK_STATUS_SECTION_IDS = [
   'session',
   'repository',
   'usage',
+  'rateLimit',
   'contextSources',
   'telemetry',
   'subagents',
@@ -21,6 +22,7 @@ export const WORK_STATUS_SECTION_LABEL_KEYS = {
   session: 'chat.workStatus.section.session',
   repository: 'chat.workStatus.section.project',
   usage: 'chat.workStatus.section.usage',
+  rateLimit: 'chat.workStatus.section.rateLimit',
   telemetry: 'chat.workStatus.section.telemetry',
   subagents: 'chat.workStatus.section.subagents',
   tasks: 'chat.workStatus.section.tasks',
@@ -55,12 +57,12 @@ const DEFAULT_ORDER_WITH_CONTEXT_SOURCES_LAST: readonly WorkStatusPanelSectionId
 ];
 
 const isDefaultOrderWithContextSourcesLast = (order: readonly WorkStatusPanelSectionId[]): boolean => {
-  const placed = order.filter((id) => id !== 'telemetry' && id !== 'workflows' && id !== 'tasks');
+  const placed = order.filter((id) => id !== 'telemetry' && id !== 'workflows' && id !== 'tasks' && id !== 'rateLimit');
   return placed.length === DEFAULT_ORDER_WITH_CONTEXT_SOURCES_LAST.length
     && placed.every((id, index) => id === DEFAULT_ORDER_WITH_CONTEXT_SOURCES_LAST[index]);
 };
 
-const PLACED_AFTER = new Map<WorkStatusSectionId, WorkStatusSectionId>([['tasks', 'subagents']]);
+const PLACED_AFTER = new Map<WorkStatusSectionId, WorkStatusSectionId>([['tasks', 'subagents'], ['rateLimit', 'usage']]);
 
 export const sanitizeWorkStatusSectionOrder = (
   value: readonly string[] | null | undefined,
@@ -84,7 +86,8 @@ export const sanitizeWorkStatusSectionOrder = (
   }
   if (arranged || !isDefaultOrderWithContextSourcesLast(order)) return order;
   const moved: WorkStatusPanelSectionId[] = order.filter((id) => id !== 'contextSources');
-  moved.splice(moved.indexOf('usage') + 1, 0, 'contextSources');
+  const anchor = (['usage', 'rateLimit'] as const).reduce((at, id) => Math.max(at, moved.indexOf(id)), -1);
+  moved.splice(anchor + 1, 0, 'contextSources');
   return moved;
 };
 

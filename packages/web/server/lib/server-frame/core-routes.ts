@@ -84,7 +84,7 @@ export interface SettingsUtilityDependencies {
 
 export interface CommonRequestDependencies {
   express: ExpressFactory;
-  verboseRequestLogs?: boolean | (() => boolean);
+  verboseRequestLogs?: () => boolean;
   skipBodyParsing?: (req: Request) => boolean;
 }
 
@@ -1211,7 +1211,7 @@ export const registerSettingsUtilityRoutes = (app: Application, dependencies: Se
 };
 
 export const registerCommonRequestMiddleware = (app: Application, dependencies: CommonRequestDependencies) => {
-  const { express, verboseRequestLogs = false, skipBodyParsing = () => false } = dependencies;
+  const { express, verboseRequestLogs = () => false, skipBodyParsing = () => false } = dependencies;
 
   app.use((req, res, next) => {
     if (skipBodyParsing(req)) {
@@ -1282,7 +1282,7 @@ export const registerCommonRequestMiddleware = (app: Application, dependencies: 
   });
 
   app.use((req, _res, next) => {
-    const shouldLog = typeof verboseRequestLogs === 'function' ? verboseRequestLogs() : verboseRequestLogs;
+    const shouldLog = verboseRequestLogs();
     if (shouldLog) {
       console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     }

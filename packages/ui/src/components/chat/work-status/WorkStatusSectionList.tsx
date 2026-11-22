@@ -3,6 +3,7 @@ import React from 'react';
 import { WorkStatusGoalRow } from './WorkStatusGoalRow';
 import { WorkStatusPrimaryGroup } from './WorkStatusPrimaryGroup';
 import { WorkStatusUsageSection } from './WorkStatusUsageSection';
+import { WorkStatusRateLimitSection } from './WorkStatusRateLimitSection';
 import { WorkStatusTelemetrySection } from './WorkStatusTelemetrySection';
 import { WorkStatusSubagentsSection } from './WorkStatusSubagentsSection';
 import { WorkStatusWorkflowsSection } from './WorkStatusWorkflowsSection';
@@ -28,6 +29,7 @@ export const WorkStatusSectionList: React.FC<{
 
   const secondarySections = {
     usage: <WorkStatusUsageSection visible={visible} />,
+    rateLimit: <WorkStatusRateLimitSection visible={visible} />,
     telemetry: <WorkStatusTelemetrySection sessionId={sessionId} directory={directory} />,
     subagents: <WorkStatusSubagentsSection sessionId={sessionId} directory={directory} />,
     tasks: <WorkStatusTasksSection sessionId={sessionId} />,

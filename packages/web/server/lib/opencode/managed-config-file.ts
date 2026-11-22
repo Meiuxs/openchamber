@@ -29,6 +29,7 @@ export interface ManagedConfigDependencies {
   env?: NodeJS.ProcessEnv;
   agentToolRuntime?: Pick<ReturnType<typeof createAgentToolRuntime>, 'materializePlugin' | 'createChildEnv'> | null;
   limitFailoverRuntime?: { materializePlugin: () => Promise<string> } | null;
+  rateGateRuntime?: { isEnabled: () => Promise<boolean>; materializePlugin: () => Promise<string> } | null;
   readSettings: () => ManagedConfigSettings | null | Promise<ManagedConfigSettings | null>;
   listExtensionSkillDirectories?: () => Promise<string[]>;
   listExtensionPluginDirectories?: () => Promise<string[]>;
@@ -59,6 +60,7 @@ export const createManagedConfigRuntime = ({
   env = process.env,
   agentToolRuntime = null,
   limitFailoverRuntime = null,
+  rateGateRuntime = null,
   readSettings,
   listExtensionSkillDirectories = async () => [],
   listExtensionPluginDirectories = async () => [],
@@ -109,6 +111,9 @@ export const createManagedConfigRuntime = ({
     }
     if (agentToolRuntime && limitFailoverRuntime && isLimitFailoverConfigured(settings)) {
       directories.push(await limitFailoverRuntime.materializePlugin());
+    }
+    if (rateGateRuntime && await rateGateRuntime.isEnabled()) {
+      directories.push(await rateGateRuntime.materializePlugin());
     }
     directories.push(await materializeSessionTitlePlugin({ fsPromises, path, instanceDir }));
     const disabled = [

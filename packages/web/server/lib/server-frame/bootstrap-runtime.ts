@@ -11,6 +11,7 @@ import type {
 import type { Application, ExpressFactory } from '../shared/http-contracts.js';
 import type { createAgentToolRuntime } from '../agent-tool/runtime.js';
 import type { createLimitFailoverRuntime } from '../limit-failover/runtime.js';
+import type { createRateGateRuntime } from '../rate-gate/runtime.js';
 import type { registerNotificationRoutes } from '../notifications/routes.js';
 import type { OpenChamberRouteDependencies, registerOpenChamberRoutes } from '../self-update/openchamber-routes.js';
 import type { SayTtsCapability } from '../tts/capability-runtime.js';
@@ -47,6 +48,7 @@ type BaseRoutesOptions =
     sessionRuntime: Required<SessionSnapshots>;
     agentToolRuntime: AgentTool;
     limitFailoverRuntime: Pick<ReturnType<typeof createLimitFailoverRuntime>, 'registerRoutes'> | null;
+    rateGateRuntime: Pick<ReturnType<typeof createRateGateRuntime>, 'registerRoutes' | 'registerStatusRoute'> | null;
     pluginNotificationEmitter: Parameters<typeof registerNotificationEmitRoutes>[1]['emitter'];
   };
 
@@ -119,6 +121,7 @@ export const createBootstrapRuntime = (dependencies: BootstrapDependencies) => {
       isLocalOnlyPushRequest,
       agentToolRuntime,
       limitFailoverRuntime,
+      rateGateRuntime,
       pluginNotificationEmitter,
       desktopUpdater,
       getOpenCodeCompatibility,
@@ -154,15 +157,13 @@ export const createBootstrapRuntime = (dependencies: BootstrapDependencies) => {
 
     registerCommonRequestMiddleware(app, {
       express,
-      verboseRequestLogs: () => {
-        const value = options.verboseRequestLogs;
-        return typeof value === 'function' ? value() : value ?? false;
-      },
+      verboseRequestLogs: options.verboseRequestLogs,
       skipBodyParsing,
     });
 
     registerAgentToolRoutes(app, { express, agentToolRuntime });
     limitFailoverRuntime?.registerRoutes(app, express);
+    rateGateRuntime?.registerRoutes(app, express);
 
     const notificationEmitRoutes = registerNotificationEmitRoutes(app, {
       express,
@@ -189,6 +190,7 @@ export const createBootstrapRuntime = (dependencies: BootstrapDependencies) => {
     });
 
     notificationEmitRoutes.registerApiRoute(requireApiAuth);
+    rateGateRuntime?.registerStatusRoute(app, requireApiAuth);
 
     registerTtsRoutes(app, { sayTTSCapability });
 

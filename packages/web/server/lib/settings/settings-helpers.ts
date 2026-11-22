@@ -14,6 +14,8 @@ import { idleStopSchema } from '../spaces/idle-stop.js';
 import { sshHostSchema } from '../spaces/places/ssh-host.js';
 import { PROVIDER_LOGO_MIMES } from '../appearance/provider-logo-routes.js';
 import { sanitizeDictationSettings } from './settings-dictation.js';
+import { normalizeGatewayList } from '../rate-gate/policy.js';
+import type { ClearableStringSettingsKey, NumberSettingsKey, StringArraySettingsKey, StringSettingsKey } from './settings-keys.js';
 
 const settingsDocumentSchema = z.looseObject({});
 export type SettingsDocument = z.infer<typeof settingsDocumentSchema>;
@@ -242,33 +244,6 @@ type BooleanSettingsKey =
   | 'filesViewShowGitignored' | 'reportUsage' | 'responseStyleEnabled' | 'dictationEnabled' | 'dictationAutoSend'
   | 'sttCorrectTranscript' | (typeof AGENT_TOOL_BOOLEAN_KEYS)[number];
 
-type StringSettingsKey =
-  | 'themeId' | 'locale' | 'lightThemeId' | 'darkThemeId' | 'splashBgLight' | 'splashFgLight' | 'splashBgDark'
-  | 'splashFgDark' | 'lastDirectory' | 'homeDirectory' | 'opencodeBinary' | 'desktopUiPassword' | 'activeProjectId'
-  | 'uiFont' | 'monoFont' | 'customUiFont' | 'customMonoFont' | 'uiFontWeight' | 'githubClientId' | 'githubScopes'
-  | 'gitlabClientId' | 'fileEditorVimMappings' | 'tunnelProvider' | 'tunnelMode' | 'lastSelectedModel'
-  | 'pwaAppName' | 'pwaOrientation' | 'mobileKeyboardMode' | 'browserProvider' | 'agentMemoryDreamingModel'
-  | 'agentMemoryDreamingVariant' | 'agentImageModel' | 'isolatedSpacesSshHost' | 'openCodeUpdateToastDismissedVersion'
-  | 'terminalShell' | 'openInAppId' | 'globalBehaviorPrompt' | 'responseStylePreset' | 'responseStyleCustomInstructions'
-  | 'sttServerUrl' | 'sttModel' | 'sttEndpointPath' | 'sttLocalModel' | 'sttLanguage' | 'sttPrompt' | 'sidebarProjectDisplayMode'
-  | 'sidebarViewMode' | 'sidebarListSessionGrouping' | 'sidebarGrouping' | 'sidebarProjectSortOrder'
-  | 'selectionApprovalText' | 'allowedInsecureGitOrigins' | 'logLevel';
-
-type ClearableStringSettingsKey =
-  | 'managedRemoteTunnelHostname' | 'managedRemoteTunnelSelectedPresetId' | 'defaultModel' | 'defaultVariant'
-  | 'defaultAgent' | 'smallModelOverride' | 'smallModelVariant' | 'walkthroughModelOverride' | 'walkthroughModelVariant'
-  | 'fallbackModel' | 'fallbackVariant' | 'defaultGitIdentityId' | 'zenModel' | 'chatsDefaultModel' | 'chatsDefaultVariant' | 'chatsDefaultAgent';
-
-type NumberSettingsKey =
-  | 'inputHistoryLimit' | 'sidebarSessionBatchSize' | 'liveBrowserTabLimit' | 'sessionGoalMaxAutoTurns'
-  | 'sessionGoalDefaultBudget' | 'summaryThreshold' | 'summaryLength' | 'maxLastMessageLength' | 'autoDeleteAfterDays'
-  | 'tunnelSessionTtlMs' | 'tunnelHttpsPort' | 'fontSize' | 'chatFontSize' | 'terminalFontSize' | 'editorFontSize'
-  | 'padding' | 'cornerRadius' | 'inputBarOffset';
-
-type StringArraySettingsKey =
-  | 'workStatusHiddenSections' | 'workStatusSectionOrder' | 'sidebarHiddenSections' | 'securityScopedBookmarks'
-  | 'pinnedDirectories' | 'providerOrder' | 'usageDropdownProviders' | 'accountSwitchProviders'
-  | 'terminalLoginShells' | 'collapsedModelProviders' | 'recentAgents' | 'favoriteAgents';
 
 export interface UsageModelGroups {
   customGroups?: { id: string; label: string; models: string[]; order: number }[];
@@ -673,6 +648,15 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
     }
     if (isFiniteNumber(candidate.sidebarSessionBatchSize)) {
       result.sidebarSessionBatchSize = Math.max(3, Math.min(50, Math.round(candidate.sidebarSessionBatchSize)));
+    }
+    if (isFiniteNumber(candidate.modelRateLimitRequests)) {
+      result.modelRateLimitRequests = Math.max(1, Math.min(10000, Math.round(candidate.modelRateLimitRequests)));
+    }
+    if (isFiniteNumber(candidate.modelRateLimitWindowMinutes)) {
+      result.modelRateLimitWindowMinutes = Math.max(1, Math.min(1440, Math.round(candidate.modelRateLimitWindowMinutes)));
+    }
+    if (isString(candidate.modelRateLimitGateways)) {
+      result.modelRateLimitGateways = normalizeGatewayList(candidate.modelRateLimitGateways).join('\n');
     }
     if (isSetMember(SIDEBAR_PROJECT_SORT_ORDER_VALUES, candidate.sidebarProjectSortOrder)) {
       result.sidebarProjectSortOrder = candidate.sidebarProjectSortOrder;
@@ -1539,6 +1523,9 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
       mobileKeyboardMode,
       inputHistoryScope,
       inputHistoryLimit,
+      modelRateLimitRequests: sanitized.modelRateLimitRequests ?? 100,
+      modelRateLimitWindowMinutes: sanitized.modelRateLimitWindowMinutes ?? 10,
+      modelRateLimitGateways: sanitized.modelRateLimitGateways ?? '',
       messageSearchEnabled: isMessageSearchEnabled(sanitized),
       securityScopedBookmarks: bookmarks,
       pinnedDirectories: normalizeStringArray(settings.pinnedDirectories),

@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { z } from 'zod';
 
+import { normalizeGateway } from './rate-gate/policy.js';
 
 export type EnterprisePolicySource = 'policy-file' | 'environment';
 
@@ -39,6 +40,11 @@ export interface EnterprisePolicy {
   modelsDevUrl: string | null;
   npmRegistry: string | null;
   skillsCatalogSources: SkillsCatalogSource[];
+  modelRateLimit?: {
+    requests?: number | undefined;
+    windowMinutes?: number | undefined;
+    gateways?: string[] | undefined;
+  } | undefined;
 }
 
 export type PublicEnterprisePolicy = Pick<EnterprisePolicy, 'enterpriseMode' | 'source' | 'organization' | 'policyError' | 'opencodeBinary'> & { networkAccessBlocked: boolean; modelsDevUrlPinned: boolean };
@@ -105,6 +111,15 @@ const policyFileSchema = z.object({
   allowedInsecureGitOrigins: z.array(z.string().trim().min(1).max(512)).max(100).optional(),
   modelsDevUrl: optionalText,
   npmRegistry: optionalText,
+  modelRateLimit: z.object({
+    requests: z.number().int().min(1).max(10000).optional(),
+    windowMinutes: z.number().int().min(1).max(1440).optional(),
+    gateways: z.array(
+      z.string().trim().min(1).max(512).refine((value) => normalizeGateway(value) !== null, {
+        message: 'must be an http(s) URL without credentials, query or fragment',
+      }),
+    ).max(50).optional(),
+  }).optional(),
   skillsCatalogSources: z.array(z.object({
     id: z.string().trim().min(1).max(64),
     label: z.string().trim().min(1).max(128),
@@ -140,7 +155,7 @@ const parsePolicyFile = (text: string) => {
     const field = issue.path.length > 0 ? `"${issue.path.join('.')}": ` : '';
     throw new Error(`${field}${issue.message}`);
   }
-  const { enterpriseMode, organization, relayUrl, allowNetworkAccess, allowedExtensions, allowLocalExtensions, jev, opencodeBinary, hideBuiltinSkillCatalogs, allowedInsecureGitOrigins, modelsDevUrl, npmRegistry, skillsCatalogSources } = parsed.data;
+  const { enterpriseMode, organization, relayUrl, allowNetworkAccess, allowedExtensions, allowLocalExtensions, jev, opencodeBinary, hideBuiltinSkillCatalogs, allowedInsecureGitOrigins, modelsDevUrl, npmRegistry, skillsCatalogSources, modelRateLimit } = parsed.data;
   return {
     enterpriseMode: enterpriseMode === true,
     organization: organization ?? null,
@@ -155,6 +170,7 @@ const parsePolicyFile = (text: string) => {
     modelsDevUrl: modelsDevUrl ?? null,
     npmRegistry: npmRegistry ?? null,
     skillsCatalogSources: skillsCatalogSources ?? [],
+    modelRateLimit: modelRateLimit ?? undefined,
   };
 };
 
@@ -260,7 +276,7 @@ export const readEnterprisePolicy = (options: EnterprisePolicyOptions = {}): Ent
   const allowLocalExtensions = fromFile?.allowLocalExtensions
     ?? (fileGoverns ? false : envFlag(env, 'OPENCHAMBER_ALLOW_LOCAL_EXTENSIONS'));
 
-  return {
+  const policy: EnterprisePolicy = {
     enterpriseMode,
     source: fileGoverns ? 'policy-file' : enterpriseMode ? 'environment' : null,
     organization: fromFile?.organization ?? null,
@@ -279,6 +295,9 @@ export const readEnterprisePolicy = (options: EnterprisePolicyOptions = {}): Ent
       ?? (fileGoverns ? null : envString(env, 'OPENCHAMBER_NPM_REGISTRY')),
     skillsCatalogSources: fromFile?.skillsCatalogSources ?? [],
   };
+  const modelRateLimit = fromFile?.modelRateLimit;
+  if (modelRateLimit) policy.modelRateLimit = modelRateLimit;
+  return policy;
 };
 
 export const readPinnedModelsDevUrl = (options?: EnterprisePolicyOptions): string | null => {

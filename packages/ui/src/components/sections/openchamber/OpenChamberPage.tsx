@@ -6,6 +6,7 @@ import { SessionWorkSettings } from './SessionWorkSettings';
 import { PasskeySettings } from './PasskeySettings';
 import { AppLinkSecuritySettings } from './AppLinkSecuritySettings';
 import { DefaultsSettings, SessionContextSettings } from './DefaultsSettings';
+import { RateGateSettings } from './RateGateSettings';
 import { GitSettings } from './GitSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { VoiceSettings } from './VoiceSettings';
@@ -156,6 +157,7 @@ const SessionsSectionContent: React.FC<{ runtimeEndpointEpoch: number }> = ({ ru
     return (
         <>
             <DefaultsSettings key={`defaults-${runtimeEndpointEpoch}`} />
+            {!isVSCodeRuntime() && <RateGateSettings />}
             <SessionWorkSettings />
             <SessionRetentionSettings />
             {!isVSCodeRuntime() && <FinishedWorktreesSettings />}

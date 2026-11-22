@@ -26,6 +26,7 @@ import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
 import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
+import { rateGateI18n } from './rate-gate.i18n';
 import { heapSnapshotI18n } from './heap-snapshot.i18n';
 import { consoleBudgetsI18n } from './console-budgets.i18n';
 import { imageToolI18n } from './image-tool.i18n';
@@ -226,6 +227,7 @@ export const dict = {
   ...sessionWarmingI18n.de,
   ...connectionHeartbeatI18n.de,
   ...compactionSettingsI18n.de,
+  ...rateGateI18n.de,
   ...heapSnapshotI18n.de,
   ...consoleBudgetsI18n.de,
   ...imageToolI18n.de,

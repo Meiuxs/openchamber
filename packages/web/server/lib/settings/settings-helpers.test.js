@@ -1047,6 +1047,7 @@ describe('settings registry gate', () => {
     codeBlockLineWrap: true, tableCellWrap: true, copyMessagesAsPlainText: true, showTurnChangedFiles: true, toolJsonViewMode: 'raw',
     timeFormatPreference: '24h', weekStartPreference: 'monday', messageStreamTransport: 'ws', logLevel: 'debug', diffLayoutPreference: 'inline', diffWrapLines: true, diffHideWhitespace: true,
     gitChangesViewMode: 'tree', gitmojiEnabled: true, allowedInsecureGitOrigins: 'http://git.internal', defaultFileViewerPreview: true, directoryShowHidden: true, filesViewShowGitignored: true,
+    modelRateLimitRequests: 50, modelRateLimitWindowMinutes: 5, modelRateLimitGateways: 'http://gw.corp',
     fileEditorKeymap: 'vim', fileEditorVimMappings: 'inoremap jk <Esc>', autoSaveEnabled: true, fileEditorWrapLines: false, confirmFileTreeMove: false, layoutAnimations: false, openLinksInBrowserPanel: true, liveBrowserTabLimit: 8, agentBrowserSharesLogins: true, openTrackerLinksOnBoard: true, fileTreeSide: 'left', autoCreateWorktree: true, sessionTabsEnabled: true, sessionTabsPerWorkspace: true, commandPaletteShowArchivedSessions: true,
     allowPromptingSubagentSessions: true, inputSpellcheckEnabled: true, enterToSend: true, enterToSendConfigured: true, mobileReturnKeySends: true,
     largeTextPasteBehavior: 'attach', documentAttachBehavior: 'save', savePastedImagesAsFiles: true, followUpBehavior: 'steer', queueModeEnabled: true, inputHistoryScope: 'global', inputHistoryLimit: 40,
@@ -1203,5 +1204,29 @@ describe('message search default', () => {
     // An unrelated save does not write the default into the file.
     expect('messageSearchEnabled' in helpers.mergePersistedSettings({}, helpers.sanitizeSettingsUpdate({ inputHistoryLimit: 40 }))).toBe(false);
     expect(helpers.formatSettingsResponse({ messageSearchEnabled: true }).messageSearchEnabled).toBe(true);
+  });
+});
+
+describe('model rate limit settings', () => {
+  it('clamps the numbers and normalizes gateway lines', () => {
+    const helpers = createTestHelpers();
+
+    expect(helpers.sanitizeSettingsUpdate({ modelRateLimitRequests: 40, modelRateLimitWindowMinutes: 5 }))
+      .toEqual({ modelRateLimitRequests: 40, modelRateLimitWindowMinutes: 5 });
+    expect(helpers.sanitizeSettingsUpdate({ modelRateLimitRequests: 0 })).toEqual({ modelRateLimitRequests: 1 });
+    expect(helpers.sanitizeSettingsUpdate({ modelRateLimitRequests: 20000 })).toEqual({ modelRateLimitRequests: 10000 });
+    expect(helpers.sanitizeSettingsUpdate({ modelRateLimitRequests: '40' })).toEqual({});
+    expect(helpers.sanitizeSettingsUpdate({ modelRateLimitGateways: 'http://a.corp\n\nhttp://a.corp/\nhttp://b.corp' }))
+      .toEqual({ modelRateLimitGateways: 'http://a.corp\nhttp://b.corp' });
+  });
+
+  it('answers the defaults', () => {
+    const helpers = createTestHelpers();
+
+    expect(helpers.formatSettingsResponse({})).toMatchObject({
+      modelRateLimitRequests: 100,
+      modelRateLimitWindowMinutes: 10,
+      modelRateLimitGateways: '',
+    });
   });
 });

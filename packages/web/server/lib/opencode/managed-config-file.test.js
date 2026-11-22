@@ -187,6 +187,35 @@ describe('managed OpenCode config file', () => {
     expect((await readConfig()).plugins).toEqual(['-opencode.browser', titleDirectory]);
   });
 
+  it('lists the rate gate plugin only while the gate reports itself enabled', async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openchamber-managed-config-'));
+    temporaryDirectories.push(dataDir);
+    const rateGateDirectory = path.join(dataDir, 'openchamber-rate-gate');
+    const titleDirectory = path.join(dataDir, 'session-title', 'openchamber-session-title');
+    const toolsOff = { agentControlToolEnabled: false, agentScheduleToolEnabled: false, agentWebToolEnabled: false, agentKnowledgeToolEnabled: false, agentRenderToolEnabled: false, agentSecretToolEnabled: false };
+    let gateEnabled = false;
+    const runtime = createManagedConfigRuntime({
+      fsPromises: fs,
+      path,
+      instanceDir: dataDir,
+      env: {},
+      agentToolRuntime: { materializePlugin: vi.fn(), createChildEnv: () => ({}) },
+      rateGateRuntime: {
+        isEnabled: async () => gateEnabled,
+        materializePlugin: vi.fn(async () => rateGateDirectory),
+      },
+      readSettings: () => toolsOff,
+    });
+    const readConfig = async () => JSON.parse(await fs.readFile(path.join(dataDir, MANAGED_CONFIG_FILE_NAME), 'utf8'));
+
+    await runtime.buildManagedChildEnv();
+    expect((await readConfig()).plugins).toEqual(['-opencode.browser', titleDirectory]);
+
+    gateEnabled = true;
+    await runtime.refreshManagedConfigFile();
+    expect((await readConfig()).plugins).toEqual(['-opencode.browser', rateGateDirectory, titleDirectory]);
+  });
+
   it('keeps the callback token in the child env while every tool is off', async () => {
     const { runtime, agentToolRuntime, readConfigFile, titleDirectory } = await createHarness({
       settings: { agentControlToolEnabled: false, agentScheduleToolEnabled: false, agentWebToolEnabled: false, agentMemoryToolEnabled: false, agentKnowledgeToolEnabled: false, agentRenderToolEnabled: false, agentSecretToolEnabled: false },

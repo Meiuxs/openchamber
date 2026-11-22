@@ -254,6 +254,9 @@ export interface UIStore {
   allowedInsecureGitOrigins: string;
   /** The npm registry URL as typed in Settings → npm (fork: intranet mirror). */
   npmRegistry: string;
+  modelRateLimitRequests: number;
+  modelRateLimitWindowMinutes: number;
+  modelRateLimitGateways: string;
   toolJsonViewMode: 'summary' | 'formatted' | 'raw';
   isTimelineDialogOpen: boolean;
   isPromptNavigatorPanelOpen: boolean;
@@ -627,6 +630,9 @@ export interface UIStore {
   setFileEditorVimMappings: (value: string) => void;
   setAllowedInsecureGitOrigins: (value: string) => void;
   setNpmRegistry: (value: string) => void;
+  setModelRateLimitRequests: (value: number) => void;
+  setModelRateLimitWindowMinutes: (value: number) => void;
+  setModelRateLimitGateways: (value: string) => void;
 }
 
 

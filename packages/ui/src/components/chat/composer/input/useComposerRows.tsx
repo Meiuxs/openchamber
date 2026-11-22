@@ -20,6 +20,7 @@ import { QueuedMessagesStrip } from '../../QueuedMessagesStrip';
 import { AutoReviewStrip } from '../../AutoReviewStrip';
 import { PullRequestWatchStrip } from '../../PullRequestWatchStrip';
 import { ExtensionWaitStrip } from '../../ExtensionWaitStrip';
+import { RateGateWaitingRow } from '../../RateGateWaitingRow';
 import { ModelControls } from '../../ModelControls';
 import { ComposerContextRows } from '../../composer/ui/ComposerContextRows';
 import { RevertedMessagesStrip } from '../../RevertedMessagesStrip';
@@ -179,6 +180,10 @@ export function useComposerRows({
         />
     ) : null;
 
+    const rateGateRow = !isBtwActive && !newSessionDraftOpen
+        ? <RateGateWaitingRow sessionId={currentSessionId} />
+        : null;
+
     const folderMissingRow = sessionFolder.missing && currentSessionId && currentSessionDirectoryForSync && !isBtwActive && !newSessionDraftOpen
         ? <SessionFolderMissingRow sessionId={currentSessionId} directory={currentSessionDirectoryForSync} busy={sessionPhase !== 'idle'} />
         : null;
@@ -187,7 +192,7 @@ export function useComposerRows({
         ? <SessionTrustPausedRow directory={trustPausedDirectory} />
         : null;
 
-    const composerTopRows = folderMissingRow || trustPausedRow || worktreeSetupRow || creatingSessionRow || spaceWaitRow || goalRow || autoReviewRow || prWatchRow || extensionWaitRow || backgroundShellsRow || revertRow || queueRow || doneHintRow || reviewHintRow || suggestionRow ? (
+    const composerTopRows = folderMissingRow || trustPausedRow || worktreeSetupRow || creatingSessionRow || spaceWaitRow || goalRow || autoReviewRow || prWatchRow || extensionWaitRow || backgroundShellsRow || revertRow || queueRow || rateGateRow || doneHintRow || reviewHintRow || suggestionRow ? (
         <>
             {folderMissingRow}
             {trustPausedRow}
@@ -201,6 +206,7 @@ export function useComposerRows({
             {backgroundShellsRow}
             {revertRow}
             {queueRow}
+            {rateGateRow}
             {doneHintRow}
             {reviewHintRow}
             {suggestionRow}

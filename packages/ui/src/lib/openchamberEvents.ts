@@ -18,6 +18,8 @@ import { sessionTodosEventSchema, type SessionTodosEvent } from '@/stores/useSes
 import { isJsonValue, type JsonValue } from '@openchamber/sdk';
 import { z } from 'zod';
 import { trackedItemRecordsSchema } from './trackedItems/model';
+import { rateGateStatusSchema, type RateGateStatus } from './rate-gate/status';
+import { limitFailoverSchema, type LimitFailoverEvent } from './limitFailoverEvent';
 import type { SyncEvent } from './opencode/events';
 import { classifyStreamPayload } from '@/sync/event-pipeline';
 
@@ -98,24 +100,7 @@ type GuestServiceEvent = { type: 'guest-service-event'; guestId: string; topic: 
 
 type ThemesChangedEvent = { type: 'themes-changed' };
 
-const limitFailoverSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('account'),
-    sessionId: z.string().min(1),
-    providerId: z.string().min(1),
-    fromAccount: z.string().nullable(),
-    toAccount: z.string().min(1),
-  }),
-  z.object({
-    kind: z.literal('model'),
-    sessionId: z.string().min(1),
-    providerId: z.string().min(1),
-    modelId: z.string().min(1),
-    toProviderId: z.string().min(1),
-    toModelId: z.string().min(1),
-  }),
-]);
-type LimitFailoverEvent = { type: 'limit-failover'; failover: z.infer<typeof limitFailoverSchema> };
+type RateGateEvent = { type: 'rate-gate'; status: RateGateStatus };
 
 const routingUpdatedSchema = z.object({
   available: z.boolean(),
@@ -242,6 +227,7 @@ type OpenChamberEvent =
   | GuestServiceEvent
   | ThemesChangedEvent
   | LimitFailoverEvent
+  | RateGateEvent
   | ProjectContextChangedEvent
   | SharePageChangedEvent
   | ReceivedPageChangedEvent
@@ -606,6 +592,12 @@ const dispatchFromEnvelope = (envelope: { type: string; properties: unknown }) =
   if (envelope.type === 'openchamber:limit-failover') {
     const parsed = limitFailoverSchema.safeParse(envelope.properties);
     if (parsed.success) for (const listener of listeners) listener({ type: 'limit-failover', failover: parsed.data });
+    return;
+  }
+
+  if (envelope.type === 'openchamber:rate-gate') {
+    const parsed = rateGateStatusSchema.safeParse(envelope.properties);
+    if (parsed.success) for (const listener of listeners) listener({ type: 'rate-gate', status: parsed.data });
     return;
   }
 

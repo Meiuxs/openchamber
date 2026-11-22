@@ -529,6 +529,15 @@
     "npmRegistry": {
       "scope": "profile"
     },
+    "modelRateLimitRequests": {
+      "scope": "profile"
+    },
+    "modelRateLimitWindowMinutes": {
+      "scope": "profile"
+    },
+    "modelRateLimitGateways": {
+      "scope": "profile"
+    },
     "defaultFileViewerPreview": {
       "scope": "profile"
     },

@@ -155,6 +155,9 @@ export const createInitialUIState = (): Pick<UIStore,
   | 'gitChangesViewMode'
   | 'allowedInsecureGitOrigins'
   | 'npmRegistry'
+  | 'modelRateLimitRequests'
+  | 'modelRateLimitWindowMinutes'
+  | 'modelRateLimitGateways'
   | 'toolJsonViewMode'
   | 'isTimelineDialogOpen'
   | 'isPromptNavigatorPanelOpen'
@@ -386,6 +389,9 @@ export const createInitialUIState = (): Pick<UIStore,
   gitChangesViewMode: 'flat',
   allowedInsecureGitOrigins: '',
   npmRegistry: '',
+  modelRateLimitRequests: 100,
+  modelRateLimitWindowMinutes: 10,
+  modelRateLimitGateways: '',
   toolJsonViewMode: 'summary',
   isTimelineDialogOpen: false,
   isPromptNavigatorPanelOpen: false,

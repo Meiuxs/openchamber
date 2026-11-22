@@ -12,7 +12,7 @@ export const useUnavailableWorkStatusSections = (): readonly WorkStatusSectionId
   const sessionId = useSessionUIStore((state) => state.currentSessionId);
   const tasks = useSessionTodosStore(selectSessionTodosOn(sessionId));
   return React.useMemo(() => [
-    ...(isMobile ? ['usage' as const] : []),
+    ...(isMobile ? ['usage' as const, 'rateLimit' as const] : []),
     ...(workflows ? [] : ['workflows' as const]),
     ...(tasks ? [] : ['tasks' as const]),
   ], [isMobile, tasks, workflows]);

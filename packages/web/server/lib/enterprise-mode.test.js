@@ -701,3 +701,26 @@ describe('enterprise policy', () => {
     });
   });
 });
+
+describe('model rate limit policy', () => {
+  it('carries a validated block', () => {
+    const policy = readEnterprisePolicy(machine({
+      [LINUX_POLICY]: JSON.stringify({
+        modelRateLimit: { requests: 50, windowMinutes: 5, gateways: ['http://gw.corp'] },
+      }),
+    }));
+    expect(policy.modelRateLimit).toEqual({ requests: 50, windowMinutes: 5, gateways: ['http://gw.corp'] });
+  });
+
+  it('rejects a value outside the allowed range', () => {
+    const policy = readEnterprisePolicy(machine({
+      [LINUX_POLICY]: JSON.stringify({ modelRateLimit: { requests: 0 } }),
+    }));
+    expect(policy.policyError).toContain('modelRateLimit.requests');
+  });
+
+  it('stays absent when the file does not set it', () => {
+    const policy = readEnterprisePolicy(machine({ [LINUX_POLICY]: JSON.stringify({}) }));
+    expect(policy.modelRateLimit).toBeUndefined();
+  });
+});

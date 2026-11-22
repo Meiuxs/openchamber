@@ -1,5 +1,5 @@
 import { installOpenCodeV2, supportsOpenCodeV2Install } from './lib/opencode/v2-install.js';
-import { describeOpenCodeCompatibility, readOpenCodeCliVersion, readExternalOpenCodeVersion } from './lib/opencode/compatibility.js';
+import { describeOpenCodeCompatibility, isOpenCodeOlderThan, readOpenCodeCliVersion, readExternalOpenCodeVersion } from './lib/opencode/compatibility.js';
 import 'reflect-metadata';
 import express from 'express';
 import { buildRestartNotification } from './lib/notifications/restart-notification.js';
@@ -217,6 +217,7 @@ import { createUploadStore, registerUploadRoute } from './lib/browser-control/up
 import { createManagedConfigRuntime } from './lib/opencode/managed-config-file.js';
 import { openCodePluginDelivery } from './lib/guests/opencode-plugin.js';
 import { createLimitFailoverRuntime } from './lib/limit-failover/runtime.js';
+import { createServerRateGateRuntime } from './lib/rate-gate/server-runtime.js';
 import { prepareInstanceDir } from './lib/opencode/instance-dir.js';
 import { createOpenChamberSessionService } from './lib/openchamber-sessions/routes.js';
 import { createSessionMetadataStore, createOpenCodeSessionMetadata } from './lib/openchamber-sessions/session-metadata-store.js';
@@ -243,6 +244,7 @@ import type { StreamSocket } from './lib/event-stream/contracts.js';
 import type { ScheduledTaskEventClient } from './lib/scheduled-tasks/routes.js';
 import type { MetadataDecider, MetadataReadOptions, SessionMetadata } from './lib/openchamber-sessions/session-metadata-store.js';
 import { isBoolean, isRecord, isString } from './lib/shared/object-guards.js';
+import { isEnvFlagDisabled, isEnvFlagEnabled, OPENCHAMBER_VERBOSE_REQUEST_LOGS, shouldSkipApiCompression } from './lib/env-flags.js';
 import type { JsonValue } from './lib/shared/json-values.js';
 import type { ForwardEventPayload } from './lib/event-stream/contracts.js';
 import type { TranslatedEvent } from './lib/event-stream/translate-v2.js';
@@ -379,29 +381,6 @@ const OPENCHAMBER_VERSION = (() => {
   return 'unknown';
 })();
 
-const isEnvFlagEnabled = (value: string | boolean | number | undefined) => {
-  if (value === true || value === 1) return true;
-  if (!isString(value)) return false;
-  const normalized = value.trim().toLowerCase();
-  return normalized === '1' || normalized === 'true';
-};
-
-const isEnvFlagDisabled = (value: string | boolean | number | undefined) => {
-  if (value === false || value === 0) return true;
-  if (!isString(value)) return false;
-  const normalized = value.trim().toLowerCase();
-  return normalized === '0' || normalized === 'false';
-};
-
-const shouldSkipApiCompression = () => {
-  if (isEnvFlagEnabled(process.env.OPENCHAMBER_SKIP_API_COMPRESSION)) return true;
-  if (isEnvFlagEnabled(process.env.OPENCHAMBER_COMPRESS_API)) return false;
-  if (isEnvFlagDisabled(process.env.OPENCHAMBER_COMPRESS_API)) return true;
-  return process.env.OPENCHAMBER_RUNTIME === 'desktop';
-};
-
-const OPENCHAMBER_VERBOSE_REQUEST_LOGS = isEnvFlagEnabled(process.env.OPENCHAMBER_VERBOSE_REQUEST_LOGS);
-
 const fsPromises = fs.promises;
 
 const settingsNormalizationRuntime = createSettingsNormalizationRuntime({
@@ -463,6 +442,7 @@ const deleteImportedTheme: typeof themeRuntime.deleteImportedTheme = (...args) =
 
 let agentToolRuntime: ReturnType<typeof createAgentToolRuntime> | null = null;
 let limitFailoverRuntime: ReturnType<typeof createLimitFailoverRuntime> | null = null;
+let rateGateRuntime: ReturnType<typeof createServerRateGateRuntime> | null = null;
 let managedConfigRuntime: ReturnType<typeof createManagedConfigRuntime> | null = null;
 let stopEnterprisePolicyWatch = () => {};
 
@@ -2451,6 +2431,19 @@ async function main(options: WebUiServerOptions = {}) {
     },
     broadcastUiEvent: (event) => broadcastOpenChamberUiEvent(event),
   });
+  rateGateRuntime = createServerRateGateRuntime({
+    instanceDir,
+    readSettings: () => readSettingsFromDiskMigrated(),
+    readPolicy: () => readEnterprisePolicy().modelRateLimit ?? null,
+    authorizeRequest: (req) => agentToolRuntime?.authorizeRequest(req) === true,
+    isPluginSupported: async () => {
+      if (isExternalOpenCode || ENV_SKIP_OPENCODE_START) return false;
+      const compatibility = await getOpenCodeCompatibility().catch(() => null);
+      const version = compatibility?.version ?? null;
+      return isString(version) && !isOpenCodeOlderThan(version, '2.2.7');
+    },
+    broadcast: (status) => broadcastOpenChamberUiEvent({ type: 'openchamber:rate-gate', properties: status }),
+  });
   managedConfigRuntime = createManagedConfigRuntime({
     fsPromises,
     path,
@@ -2458,6 +2451,7 @@ async function main(options: WebUiServerOptions = {}) {
     env: process.env,
     agentToolRuntime,
     limitFailoverRuntime,
+    rateGateRuntime,
     readSettings: () => readSettingsFromDiskMigrated(),
     listExtensionSkillDirectories: guestAgentContext.skillDirectories,
     listExtensionPluginDirectories: guestAgentContext.pluginDirectories,
@@ -2752,9 +2746,7 @@ async function main(options: WebUiServerOptions = {}) {
       return Number.isFinite(port) && port > 0 ? port : null;
     },
     getTunnelUrl: () => tunnelRuntimeContextHolder?.tunnelService?.getPublicUrl?.() ?? null,
-    get verboseRequestLogs() {
-      return OPENCHAMBER_VERBOSE_REQUEST_LOGS || isDebugLogging();
-    },
+    verboseRequestLogs: () => OPENCHAMBER_VERBOSE_REQUEST_LOGS || isDebugLogging(),
     uiPassword,
     tunnelAuthController,
     remoteClientAuthRuntime,
@@ -2813,6 +2805,7 @@ async function main(options: WebUiServerOptions = {}) {
     isLocalOnlyPushRequest: (req, uiSessionToken) => clientPushAccess.isLocalOnlyRequest(req, uiSessionToken),
     agentToolRuntime,
     limitFailoverRuntime,
+    rateGateRuntime,
     desktopUpdater,
     getOpenCodeCompatibility,
     skipBodyParsing: (req) => spacesHost?.skipsBodyParsing(req) === true,
