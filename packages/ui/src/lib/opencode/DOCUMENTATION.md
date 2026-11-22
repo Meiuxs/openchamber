@@ -174,6 +174,15 @@ generic rendering.
 
 ## Decisions
 
+### Why ephemeral generation sessions stop at the adapter
+
+`session.create` for small-model generation is a real OpenCode session, so it
+emits `session.created` and appears in session pages. Callers mark it
+`metadata.openchamber.kind === 'ephemeral-generation'`. The event translator and
+session page reader drop that mark before the sync stores see the record. This
+keeps the helper out of the sidebar, switcher, unread counts and retention while
+its deletion still clears any record a client from an older build cached.
+
 ### Why unchanged catalog and form types use domain aliases
 
 Integration, form and permission contracts retain their complete SDK shapes

@@ -17,14 +17,14 @@ describe('hidden sessions', () => {
     const hidden = createHiddenSessionRegistry();
     hidden.add('ses_dream');
     const sessions = [{ id: 'ses_dream' }, { id: 'ses_user' }];
-    expect(hidden.filterSessionList({ data: sessions, cursor: null })).toEqual({ data: [{ id: 'ses_user' }], cursor: null });
+    expect(hidden.filterSessionList({ data: sessions, cursor: null })).toEqual({ data: [{ id: 'ses_user' }], cursor: null, hiddenCount: 1 });
     expect(hidden.filterSessionList(sessions)).toEqual([{ id: 'ses_user' }]);
   });
 
   test('hides a session marked hidden in a list, and its later events', () => {
     const hidden = createHiddenSessionRegistry();
     const sessions = [{ id: 'ses_plugin', metadata: { hidden: true } }, { id: 'ses_user', metadata: { openchamber: { kind: 'x' } } }];
-    expect(hidden.filterSessionList({ data: sessions })).toEqual({ data: [sessions[1]] });
+    expect(hidden.filterSessionList({ data: sessions })).toEqual({ data: [sessions[1]], hiddenCount: 1 });
     expect(hidden.isHiddenPayload({ type: 'message.part.delta', data: { sessionID: 'ses_plugin' } })).toBe(true);
   });
 
@@ -33,6 +33,16 @@ describe('hidden sessions', () => {
     expect(hidden.isHiddenPayload({ type: 'session.created', data: { sessionID: 'ses_new', metadata: { hidden: true } } })).toBe(true);
     expect(hidden.isHiddenPayload({ type: 'session.status', data: { sessionID: 'ses_new' } })).toBe(true);
     expect(hidden.isHiddenPayload({ type: 'session.created', data: { sessionID: 'ses_other', metadata: { hidden: false } } })).toBe(false);
+  });
+
+  test('hides an ephemeral generation session in lists, events and the active map', () => {
+    const hidden = createHiddenSessionRegistry();
+    const sessions = [{ id: 'ses_generation', metadata: { openchamber: { kind: 'ephemeral-generation' } } }, { id: 'ses_user' }];
+    expect(hidden.filterSessionList({ data: sessions })).toEqual({ data: [sessions[1]], hiddenCount: 1 });
+    expect(hidden.isHiddenPayload({ type: 'session.created', data: { sessionID: 'ses_generation', metadata: sessions[0].metadata } })).toBe(true);
+    expect(hidden.isHiddenPayload({ type: 'session.status', data: { sessionID: 'ses_generation' } })).toBe(true);
+    expect(hidden.filterActive({ data: { ses_generation: { type: 'running' }, ses_user: { type: 'running' } } }))
+      .toEqual({ data: { ses_user: { type: 'running' } } });
   });
 
   test('learns hidden sessions that already exist from the session list', async () => {

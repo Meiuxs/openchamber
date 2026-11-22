@@ -57,6 +57,35 @@ describe("translateWireEvent", () => {
     expect(event?.type === "session.created" && event.properties.info.parentID).toBe("ses_parent")
   })
 
+  test("ephemeral generation sessions never enter the session list", () => {
+    const events = translateWireEvent({
+      ...base,
+      type: "session.created",
+      durable,
+      data: {
+        sessionID: "ses_generation",
+        projectID: "proj_1",
+        location: { directory: "/repo" },
+        slug: "generation",
+        version: "2.3.0",
+        metadata: { openchamber: { kind: "ephemeral-generation" } },
+      },
+    })
+    expect(events).toEqual([])
+    expect(translateWireEvent({
+      ...base,
+      type: "session.status",
+      data: { sessionID: "ses_generation", status: { type: "busy" } },
+    })).toEqual([])
+    const deleted = translateWireEvent({
+      ...base,
+      type: "session.deleted",
+      durable: { aggregateID: "ses_generation", seq: 1, version: 2 as const },
+      data: { sessionID: "ses_generation" },
+    })
+    expect(deleted.some((event) => event.type === "session.deleted")).toBe(true)
+  })
+
   test("session.forked carries the fork and parent ids (2.x sends no session.created for a fork)", () => {
     const forked = translateWireEvent({
       ...base,

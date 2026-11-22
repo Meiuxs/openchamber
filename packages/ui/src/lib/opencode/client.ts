@@ -64,6 +64,8 @@ import { subagentCancellationNote } from "./subagent-run"
 import { toJsonRecord } from "./json"
 import { withZenName } from "./providerDisplayName"
 import { readMessageThroughAncestors } from "./message-ownership"
+import { isEphemeralGenerationSession } from "@/lib/sessionEphemeralMetadata"
+import { isEventStreamUrl, isUsageStatsUrl, requestMethodOf, requestUrlOf, toOpenCodeDirectory, toOpencodeClientRoot } from "./requestHelpers"
 import {
   deniesAnyProvider,
   mergeConfigDocuments,
@@ -274,14 +276,7 @@ const OPENCODE_REQUEST_TIMEOUT_MS = 30_000
 // external: #6366 Usage aggregation can take minutes on large histories and uses the proxy deadline.
 const OPENCODE_STATS_REQUEST_TIMEOUT_MS = 4 * 60_000
 
-const isEventStreamUrl = (url: URL): boolean => url.pathname.endsWith("/event") || url.pathname.endsWith("/log")
-const isUsageStatsUrl = (url: URL): boolean => url.pathname.endsWith("/experimental/session/stats")
-
 const OPENCODE_DIRECTORY_HEADER = "x-opencode-directory"
-
-// external: https://github.com/anomalyco/opencode/tree/v2.3.0/packages/core/src OpenCode treats slash-prefixed Windows UNC paths as POSIX paths; backslashes preserve the share.
-const toOpenCodeDirectory = (directory: string): string =>
-  /^\/\/[^/]/.test(directory) ? directory.replace(/\//g, "\\") : directory
 
 type RuntimeOpencodeClientConfig = {
   baseUrl: string
@@ -289,20 +284,9 @@ type RuntimeOpencodeClientConfig = {
   requestTimeoutMs?: number
 }
 
-// external: https://github.com/anomalyco/opencode/tree/v2.3.0/packages/client The generated client appends /api routes to the base path, so it receives the mount parent.
 const PART_SHELLS_CAPABILITY = "api.message-part-shells.v1"
 const serverCapabilitiesSchema = z.object({ compatibility: z.object({ capabilities: z.array(z.string()) }) })
 const PART_SHELLS_CHECK_WAIT_MS = 5_000
-
-const toOpencodeClientRoot = (baseUrl: string): string => baseUrl.replace(/\/api\/*$/, "") || "/"
-
-const requestUrlOf = (input: string | URL | Request): URL => (
-  input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
-)
-
-const requestMethodOf = (input: string | URL | Request, init?: RequestInit): string => (
-  String(init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase()
-)
 
 export const createRuntimeOpencodeClient = (config: RuntimeOpencodeClientConfig): OpenCodeClient => {
   const requestTimeoutMs = config.requestTimeoutMs ?? OPENCODE_REQUEST_TIMEOUT_MS
@@ -428,9 +412,11 @@ export type SessionPage = {
   sessions: Session[]
   cursor: { previous?: string; next?: string }
   spaces?: SpaceMark[]
+  hiddenCount?: number
 }
 
 const sessionPageSpacesSchema = z.object({ spaces: z.array(spaceMarkSchema).optional() })
+const sessionPageHiddenCountSchema = z.object({ hiddenCount: z.number().finite().optional().catch(undefined) })
 
 export type SessionListOptions = {
   directory?: string | null
@@ -929,11 +915,18 @@ class OpencodeService {
       }),
     )
     const spaces = options.global ? sessionPageSpacesSchema.safeParse(response).data?.spaces : undefined
-    return {
-      sessions: response.data.map(projectSession),
+    const projected = response.data.map(projectSession)
+    const sessions = projected.filter((session) => !isEphemeralGenerationSession(session))
+    const hiddenCountResult = sessionPageHiddenCountSchema.safeParse(response)
+    const upstreamHidden = hiddenCountResult.success ? hiddenCountResult.data.hiddenCount ?? 0 : 0
+    const hiddenCount = upstreamHidden + (projected.length - sessions.length)
+    const page: SessionPage = {
+      sessions,
       cursor: pageCursor(response.cursor),
-      ...(spaces ? { spaces } : {}),
     }
+    if (spaces) page.spaces = spaces
+    if (hiddenCount > 0) page.hiddenCount = hiddenCount
+    return page
   }
 
   async listSessions(directory?: string | null): Promise<Session[]> {

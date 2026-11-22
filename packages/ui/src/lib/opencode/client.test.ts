@@ -231,6 +231,22 @@ describe("request fidelity", () => {
     expect(requests[0].headers.has("x-opencode-directory")).toBe(false)
   })
 
+  test("a session page leaves out ephemeral generation sessions", async () => {
+    responses.push(json({
+      data: [
+        sessionInfo,
+        { ...sessionInfo, id: "ses_generation", metadata: { openchamber: { kind: "ephemeral-generation" } } },
+      ],
+      cursor: {},
+      hiddenCount: 2,
+    }))
+
+    const page = await opencodeClient.listSessionsPage({ global: true })
+
+    expect(page.sessions.map((session: { id: string }) => session.id)).toEqual(["ses_1"])
+    expect(page.hiddenCount).toBe(3)
+  })
+
   test("the active-session snapshot is the host's, except for a directory inside an isolated space", async () => {
     responses.push(json({ data: { ses_host: { type: "running" } } }))
     await opencodeClient.getActiveSessionStatuses("/repo/app")

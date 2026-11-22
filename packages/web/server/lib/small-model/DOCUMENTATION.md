@@ -36,7 +36,11 @@ and model as the one-shot call, so the fallback keeps the selected model and the
 provider the caller was already using. Once a provider has refused, the rest of
 that generation, including a structured-output retry, uses the session route.
 Session cleanup has its own two-second timeout so a stalled removal cannot
-outlive the caller's deadline.
+outlive the caller's deadline. The created session is marked
+`metadata.openchamber.kind = 'ephemeral-generation'`. The OpenChamber proxy
+treats that mark like a hidden session in lists, events and the running map, and
+the shared UI drops it at its own adapter for runtimes without that proxy. No
+helper session flashes in the sidebar.
 
 ### Why the fallback is a session and not a different credential
 

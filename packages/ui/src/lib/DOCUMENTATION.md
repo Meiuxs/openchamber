@@ -52,6 +52,7 @@ The library owns shared session metadata readers, runtime transport and credenti
 
 - A btw panel belongs to its parent's metadata link and survives reloads. Its inherited-history boundary is located in transcript order by identity because message IDs can roll over or come from different client clocks.
 - A btw fork replaces the inherited OpenChamber namespace so source-owned review and side-conversation links cannot leak into it. Its marker lands before local insertion so it never flashes as an ordinary sidebar session.
+- Sessions marked `metadata.openchamber.kind === 'ephemeral-generation'` are helper runs. The OpenCode adapter drops them from created events and session pages, so the sidebar, switcher, unread state and retention never see them.
 - A side question forks the conversation without switching the main chat. Every send carries position-independent boundary instructions so the inherited task stays reference material without discarding earlier side-question turns.
 - Promotion carries a revocation notice on every send because persisted boundary parts remain in history and are read again on each turn.
 - A mid-turn fork inherits only settled records. The first question receives a fresh server-read text snapshot of the unfinished step so it has current context without unanswered tool calls.

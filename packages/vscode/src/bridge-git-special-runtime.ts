@@ -171,7 +171,10 @@ const generateBridgeGitTextInSession = async (
   model: { id: string; providerID: string; variant?: string },
   signal: AbortSignal,
 ): Promise<string> => {
-  const created = await client.session.create({ model }, { signal });
+  const created = await client.session.create({
+    model,
+    metadata: { openchamber: { kind: 'ephemeral-generation' } },
+  }, { signal });
   const rawSessionID = created?.id
     ?? (created as unknown as { data?: { id?: unknown } })?.data?.id;
   if (typeof rawSessionID !== 'string' || !rawSessionID.trim()) {

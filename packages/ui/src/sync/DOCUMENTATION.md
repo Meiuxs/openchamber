@@ -490,6 +490,12 @@ reports the authoritative state.
 
 ## Session list rules
 
+Sessions marked `metadata.openchamber.kind === 'ephemeral-generation'` never
+reach this layer. The OpenCode adapter drops their `session.created` event and
+their entries in session pages, while leaving `session.deleted` in place so a
+record cached by an older client is still removed. Sidebar, switcher, unread and
+retention therefore see no helper session to show or clean up.
+
 ### Session admission
 
 `session-admission.ts` owns admission of host sessions whose folder is outside

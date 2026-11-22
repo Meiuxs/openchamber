@@ -372,7 +372,10 @@ const generateInOpenCodeSession = async (
     providerID: model.providerID,
   };
   if (model.variant) sessionModel.variant = model.variant;
-  const created = await client.session.create({ model: sessionModel }, { signal });
+  const created = await client.session.create({
+    model: sessionModel,
+    metadata: { openchamber: { kind: 'ephemeral-generation' } },
+  }, { signal });
   const sessionID = asNonEmptyString(created?.id)
     ?? asNonEmptyString((created as unknown as { data?: { id?: unknown } })?.data?.id);
   if (!sessionID) {

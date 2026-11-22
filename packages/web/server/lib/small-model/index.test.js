@@ -215,6 +215,7 @@ describe('generateSmallModelText', () => {
     expect(result).toMatchObject({ text: 'session-generated', providerID: 'anthropic', modelID: 'claude-haiku-4-5' });
     const created = state.requests.find((entry) => entry.method === 'POST' && entry.path === '/api/session');
     expect(created?.body.model).toEqual({ id: 'claude-haiku-4-5', providerID: 'anthropic' });
+    expect(created?.body.metadata).toEqual({ openchamber: { kind: 'ephemeral-generation' } });
     expect(created?.headers['x-opencode-directory']).toBe(encodeURIComponent('/proj'));
     const generated = state.requests.find((entry) => entry.method === 'POST' && entry.path === '/api/session/ses_small_model/generate');
     expect(generated?.body.prompt).toBe('write a commit');

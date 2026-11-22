@@ -1,7 +1,10 @@
 
 import { z } from 'zod';
 
-const hiddenRecordSchema = z.object({ metadata: z.object({ hidden: z.literal(true) }) });
+const hiddenRecordSchema = z.union([
+  z.object({ metadata: z.object({ hidden: z.literal(true) }) }),
+  z.object({ metadata: z.object({ openchamber: z.object({ kind: z.literal('ephemeral-generation') }) }) }),
+]);
 
 const wireSessionSchema = z.object({
   type: z.string().catch(''),
@@ -13,7 +16,10 @@ const wireSessionSchema = z.object({
   }),
 });
 
-const sessionPageSchema = z.object({ data: z.array(z.unknown()) }).passthrough();
+const sessionPageSchema = z.object({
+  data: z.array(z.unknown()),
+  hiddenCount: z.number().finite().optional().catch(undefined),
+}).passthrough();
 const activeMapSchema = z.record(z.string(), z.unknown());
 const activeAnswerSchema = z.object({ data: activeMapSchema }).passthrough();
 const listPageSchema = z.object({
@@ -62,7 +68,12 @@ export const createHiddenSessionRegistry = () => {
     filterSessionList<Body>(body: Body) {
       if (Array.isArray(body)) return visible(body);
       const page = sessionPageSchema.safeParse(body);
-      return page.success ? { ...page.data, data: visible(page.data.data) } : body;
+      if (!page.success) return body;
+      const data = visible(page.data.data);
+      const hiddenCount = (page.data.hiddenCount ?? 0) + (page.data.data.length - data.length);
+      const filtered = { ...page.data, data };
+      if (hiddenCount > 0) filtered.hiddenCount = hiddenCount;
+      return filtered;
     },
     filterActive<Body>(body: Body) {
       if (ids.size === 0) return body;

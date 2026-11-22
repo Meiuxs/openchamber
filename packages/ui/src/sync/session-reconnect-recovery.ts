@@ -11,6 +11,7 @@ import { resolveGlobalSessionDirectory, useGlobalSessionsStore } from "@/stores/
 import { isSpaceDirectory } from "@/lib/spaces/space-route"
 import { applyGlobalSessionStatusEvents, buildActiveListReconcileEvents, watchGlobalSessionStatusWrites } from "./global-session-status"
 import { getRuntimeKey } from "@/lib/runtime-switch"
+import { isKnownEphemeralGenerationSession } from "@/lib/opencode/events"
 import { getImperativeSessionMessageLoader } from "./session-message-loader"
 import { type EventRoutingIndex, setIndexedSessionDirectory, setIndexedSessionMessages, ingestDirectoryStateIntoRoutingIndex } from "./event-routing-index"
 import { getActiveSessionCandidateIds, resyncDirectorySessionStatuses } from "./session-status-recovery"
@@ -30,6 +31,7 @@ export async function resyncDirectoryAfterReconnect(
   if (isStale()) return
   const current = store.getState()
   const candidateSessionIds = getActiveSessionCandidateIds(directory, current)
+    .filter((sessionId) => !isKnownEphemeralGenerationSession(sessionId))
   if (candidateSessionIds.length === 0) return true
 
   const statuses = await resyncDirectorySessionStatuses(directory, store, candidateSessionIds, "authoritative", isStale)
@@ -84,7 +86,7 @@ export async function reconcileActivityAfterGap(childStores: ChildStoreManager):
     if (!active || !isCatalogRuntimeCurrent(runtime)) return
     const activeSessionIds = new Set(Object.keys(active))
     const events = buildActiveListReconcileEvents(activeSessionIds, {
-      skip: (sessionId) => writes.touched.has(sessionId) || hasPromptInFlight(sessionId),
+      skip: (sessionId) => isKnownEphemeralGenerationSession(sessionId) || writes.touched.has(sessionId) || hasPromptInFlight(sessionId),
       covers: (directory) => !isSpaceDirectory(directory),
       resolveDirectory: (sessionId) => {
         const session = useGlobalSessionsStore.getState().entityById.get(sessionId)

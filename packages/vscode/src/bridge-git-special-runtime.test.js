@@ -105,6 +105,7 @@ describe('bridge git commit message generator', () => {
 
     expect(message.subject).toBe('feat: add a line');
     expect(sdkClient.session.create.mock.calls[0][0].model).toEqual({ id: 'claude-sonnet-4-5', providerID: 'anthropic' });
+    expect(sdkClient.session.create.mock.calls[0][0].metadata).toEqual({ openchamber: { kind: 'ephemeral-generation' } });
     expect(sdkClient.session.generate.mock.calls[0][0].sessionID).toBe('ses_small_model');
     expect(sdkClient.session.generate.mock.calls[0][0].prompt).toContain('+new line');
     expect(sdkClient.session.remove.mock.calls[0][0]).toEqual({ sessionID: 'ses_small_model' });

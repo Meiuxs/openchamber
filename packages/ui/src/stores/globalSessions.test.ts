@@ -212,6 +212,17 @@ describe('listGlobalSessionPages', () => {
     ]), { pageSize: 2 })).rejects.toThrow('Session pagination did not advance')
   })
 
+  test('continues past a page that only contained filtered sessions', async () => {
+    const calls: SessionListOptions[] = []
+    const sessions = await listGlobalSessionPages(pager([
+      { sessions: [], cursor: { next: 'c1' }, hiddenCount: 1 },
+      { sessions: [makeSession({ id: 'ses_1' })], cursor: {} },
+    ], calls), { pageSize: 1 })
+
+    expect(calls).toHaveLength(2)
+    expect(sessions.map((session) => session.id)).toEqual(['ses_1'])
+  })
+
   test('dedupes overlapping pages when pagination completes', async () => {
     const sessions = await listGlobalSessionPages(pager([
       { sessions: [makeSession({ id: 'ses_1' })], cursor: { next: 'c1' } },

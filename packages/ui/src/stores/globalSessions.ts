@@ -114,7 +114,8 @@ export async function listGlobalSessionPages(
 
         const next = page.cursor.next;
         if (!next) break;
-        if (seenCursors.has(next) || accepted.length === 0) {
+        const hiddenCount = page.hiddenCount ?? 0;
+        if (seenCursors.has(next) || (accepted.length === 0 && hiddenCount === 0)) {
             throw new Error("Session pagination did not advance; retaining the previous snapshot");
         }
         seenCursors.add(next);
