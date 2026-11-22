@@ -34,6 +34,7 @@ import { sharePagesI18n } from './share-pages.i18n';
 import { receivedPagesI18n } from './received-pages.i18n';
 import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
+import { externalOpenCodePluginI18n } from './external-opencode-plugin.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
@@ -235,6 +236,7 @@ export const dict = {
   ...receivedPagesI18n.nl,
   ...memoryDreamingI18n.nl,
   ...usageToolI18n.nl,
+  ...externalOpenCodePluginI18n.nl,
   ...openchamberToolsLayoutI18n.nl,
   ...openchamberToolOutputI18n.nl,
   ...opencodeToolOutputI18n.nl,
@@ -1701,6 +1703,7 @@ export const dict = {
   'contextPanel.actions.collapsePanel': 'Paneel inklappen',
   'contextPanel.actions.expandPanel': 'Paneel uitklappen',
   'contextPanel.actions.closePanel': 'Paneel sluiten',
+  'contextPanel.actions.backToPanel': 'Terug naar {panel}',
   'contextPanel.actions.resizePanelAria': 'Grootte van het contextpaneel aanpassen',
   'contextPanel.iframe.sessionChatTitle': 'Sessiechat {sessionID}',
   'contextPanel.preview.actions.reload': 'Preview herladen',
@@ -2292,6 +2295,7 @@ export const dict = {
   'terminalView.quickKeys.enterAria': 'Enter',
   'terminalView.tabs.closeTabTitle': 'Tabblad sluiten',
   'terminalView.tabs.newTabTitle': 'Nieuw tabblad',
+  'terminalView.tabs.sheetTitle': 'Terminals',
   'terminalView.tabs.menu.rename': 'Hernoemen',
   'terminalView.tabs.renameDialog.title': 'Terminal hernoemen',
   'terminalView.tabs.renameDialog.placeholder': 'Terminalnaam',
@@ -2490,7 +2494,6 @@ export const dict = {
   'session.githubIntegration.validation.branchAlreadyCheckedOut': 'Branch is al uitgecheckt in een worktree',
   'session.githubIntegration.validation.failed': 'Kan niet valideren',
   'chat.fileAttachment.toast.tooLarge': '{name} is te groot om bij te voegen (meer dan {size}). Staat het bestand in het project, noem het dan met @.',
-  'chat.fileAttachment.toast.heicConversionFailed': '{name} kon niet van HEIC naar JPEG worden omgezet en is daarom niet bijgevoegd. Sla de foto op als JPEG en voeg hem opnieuw toe.',
   'chat.fileAttachment.toast.overSendLimit': '{name} is te groot om bij te voegen (meer dan {size}).',
   'chat.fileAttachment.toast.documentAttachedAsPath': '{name} kon niet naar tekst worden omgezet. De agent krijgt het pad en leest het bestand zelf.',
   'chat.fileAttachment.activeEditor.addFile': 'Bestand {name} aan context toevoegen',
@@ -2577,6 +2580,10 @@ export const dict = {
   'chat.toast.opencodeRestartInterrupted.description': 'OpenCode is herstart terwijl er nog een antwoord liep. Stuur een bericht om verder te gaan.',
   'chat.toast.opencodeRestartInterrupted.autoResumeDescription': 'OpenCode is herstart terwijl er nog een antwoord liep. De chat gaat automatisch verder; stuur een bericht als dat niet gebeurt.',
   'chat.toast.opencodeRestartInterrupted.openSession': 'Sessie openen',
+  'chat.toast.claudePluginRetired.title': 'Claude draait nu via Claude Agent',
+  'chat.toast.claudePluginRetired.description': 'De plugin opencode-claude is niet meer nodig en is verwijderd. Claude draait nu via de ingebouwde provider Claude Agent met je Claude Code-login. Als er Claude-modellen als standaard waren gekozen in Instellingen, kies ze dan opnieuw.',
+  'chat.toast.claudePluginRetired.unconnectedTitle': 'Plugin opencode-claude verwijderd',
+  'chat.toast.claudePluginRetired.unconnectedDescription': 'De plugin opencode-claude is niet meer nodig en is verwijderd. Verbind Claude Agent in Instellingen → Providers om Claude te blijven gebruiken met je Claude Code-login.',
   'chat.toast.shareAnswer.openSession': 'Sessie openen',
   'chat.errorBoundary.title': 'Chatfout',
   'chat.errorBoundary.description': 'Er is een fout opgetreden in de chatinterface. Dit komt mogelijk door een tijdelijk netwerkprobleem of beschadigde berichtgegevens.',
@@ -2821,12 +2828,8 @@ export const dict = {
   'chat.chatInput.mentionChip.editHint': 'Dubbelklik om als tekst te bewerken',
   'chat.chatInput.toast.attachNamedFailed': 'Kan {name} niet toevoegen',
   'chat.chatInput.toast.unsupportedAttachmentModalities': "{model} kan de {modalities}-invoer in {files} niet lezen. Bij verzenden krijgt de agent de paden naar de opgeslagen bestanden.",
-  'chat.chatInput.toast.imagesSaving': '{files} opslaan…',
-  'chat.chatInput.toast.imagesSavedForTextModel': '{model} kan geen afbeeldingen lezen. {files} opgeslagen in {folder}.',
   'chat.chatInput.toast.imagesSentAsPathsForTextModel': '{model} kan geen afbeeldingen lezen. Het bericht geeft het een bestandspad voor {files}.',
   'chat.chatInput.toast.textModelImageSaveFailed': "Kon {files} niet opslaan voor de agent. Bericht niet verzonden. Probeer het opnieuw of kies een model dat deze bestanden kan lezen.",
-  'chat.chatInput.toast.imageSaveFailed': 'Kon {files} niet opslaan. In plaats daarvan bijgevoegd.',
-  'chat.chatInput.toast.imagesSaved': '{files} opgeslagen in {folder}.',
   'chat.chatInput.toast.imageCopySaveFailed': 'Kon {files} niet opslaan.',
   'chat.chatInput.toast.someFilesSkipped': 'Sommige bestanden zijn overgeslagen:\n{summary}',
   'chat.chatInput.toast.sharedFileTooLarge': 'te groot',

@@ -34,6 +34,7 @@ import { sharePagesI18n } from './share-pages.i18n';
 import { receivedPagesI18n } from './received-pages.i18n';
 import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
+import { externalOpenCodePluginI18n } from './external-opencode-plugin.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
@@ -235,6 +236,7 @@ export const dict = {
   ...receivedPagesI18n.fr,
   ...memoryDreamingI18n.fr,
   ...usageToolI18n.fr,
+  ...externalOpenCodePluginI18n.fr,
   ...openchamberToolsLayoutI18n.fr,
   ...openchamberToolOutputI18n.fr,
   ...opencodeToolOutputI18n.fr,
@@ -1467,6 +1469,7 @@ export const dict = {
   'contextPanel.actions.collapsePanel': 'Réduire le panneau',
   'contextPanel.actions.expandPanel': 'Agrandir le panneau',
   'contextPanel.actions.closePanel': 'Fermer le panneau',
+  'contextPanel.actions.backToPanel': 'Retour à {panel}',
   'contextPanel.actions.resizePanelAria': 'Redimensionner le panneau contextuel',
   'contextPanel.iframe.sessionChatTitle': 'Session de discussion {sessionID}',
   'contextPanel.preview.actions.reload': 'Recharger l\'aperçu',
@@ -2037,6 +2040,7 @@ export const dict = {
   'terminalView.quickKeys.enterAria': 'Entrée',
   'terminalView.tabs.closeTabTitle': 'Fermer l\'onglet',
   'terminalView.tabs.newTabTitle': 'Nouvel onglet',
+  'terminalView.tabs.sheetTitle': 'Terminaux',
   'terminalView.tabs.menu.rename': 'Renommer',
   'terminalView.tabs.renameDialog.title': 'Renommer le terminal',
   'terminalView.tabs.renameDialog.placeholder': 'Nom du terminal',
@@ -2235,7 +2239,6 @@ export const dict = {
   'session.githubIntegration.validation.branchAlreadyCheckedOut': 'La branche est déjà active dans un worktree',
   'session.githubIntegration.validation.failed': 'Échec de la validation',
   'chat.fileAttachment.toast.tooLarge': '{name} est trop volumineux pour être joint (plus de {size}). S\'il fait partie du projet, mentionnez-le avec @.',
-  'chat.fileAttachment.toast.heicConversionFailed': '{name} n\'a pas pu être converti de HEIC en JPEG et n\'a donc pas été joint. Enregistrez la photo au format JPEG et joignez-la à nouveau.',
   'chat.fileAttachment.toast.overSendLimit': '{name} est trop volumineux pour être joint (plus de {size}).',
   'chat.fileAttachment.toast.documentAttachedAsPath': 'Impossible de convertir {name} en texte : l\'agent reçoit son chemin et lit le fichier lui-même.',
   'chat.fileAttachment.activeEditor.addFile': 'Ajouter le fichier : {name} au contexte',
@@ -2301,6 +2304,10 @@ export const dict = {
   'chat.toast.opencodeRestartInterrupted.description': 'OpenCode a redémarré alors qu’une réponse était encore en cours. Envoyez un message pour continuer.',
   'chat.toast.opencodeRestartInterrupted.autoResumeDescription': 'OpenCode a redémarré alors qu’une réponse était encore en cours. La discussion reprendra automatiquement ; envoyez un message si elle ne reprend pas.',
   'chat.toast.opencodeRestartInterrupted.openSession': 'Ouvrir la session',
+  'chat.toast.claudePluginRetired.title': 'Claude passe à Claude Agent',
+  'chat.toast.claudePluginRetired.description': 'Le plugin opencode-claude n\'est plus nécessaire et a été supprimé. Claude fonctionne désormais avec le fournisseur intégré Claude Agent et votre connexion Claude Code. Si des modèles Claude étaient choisis par défaut dans les Réglages, choisissez-les à nouveau.',
+  'chat.toast.claudePluginRetired.unconnectedTitle': 'Plugin opencode-claude supprimé',
+  'chat.toast.claudePluginRetired.unconnectedDescription': 'Le plugin opencode-claude n\'est plus nécessaire et a été supprimé. Pour continuer à utiliser Claude avec votre connexion Claude Code, connectez Claude Agent dans Réglages → Fournisseurs.',
   'chat.toast.shareAnswer.openSession': 'Ouvrir la session',
   'chat.errorBoundary.title': 'Erreur de discussion',
   'chat.errorBoundary.description': 'L\'interface de discussion a rencontré une erreur. Cela peut être dû à un problème de réseau temporaire ou à des données de message corrompues.',
@@ -2509,12 +2516,8 @@ export const dict = {
   'chat.chatInput.mentionChip.editHint': 'Double-cliquez pour modifier comme texte',
   'chat.chatInput.toast.attachNamedFailed': 'Échec de la connexion du {name}',
   'chat.chatInput.toast.unsupportedAttachmentModalities': "{model} ne peut pas lire le contenu {modalities} de {files}. À l'envoi, l'agent recevra les chemins des fichiers enregistrés.",
-  'chat.chatInput.toast.imagesSaving': 'Enregistrement de {files}…',
-  'chat.chatInput.toast.imagesSavedForTextModel': '{model} ne peut pas lire les images. {files} enregistré dans {folder}.',
   'chat.chatInput.toast.imagesSentAsPathsForTextModel': '{model} ne lit pas les images. Le message lui donnera un chemin de fichier pour {files}.',
   'chat.chatInput.toast.textModelImageSaveFailed': "Impossible d'enregistrer {files} pour l'agent. Message non envoyé. Réessayez ou choisissez un modèle capable de lire ces fichiers.",
-  'chat.chatInput.toast.imageSaveFailed': 'Impossible d’enregistrer {files}. Joint à la place.',
-  'chat.chatInput.toast.imagesSaved': '{files} enregistré dans {folder}.',
   'chat.chatInput.toast.imageCopySaveFailed': 'Impossible d’enregistrer {files}.',
   'chat.chatInput.toast.someFilesSkipped': 'Certains fichiers ont été ignorés :\n{summary}',
   'chat.chatInput.toast.sharedFileTooLarge': 'trop volumineux',

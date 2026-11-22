@@ -34,6 +34,7 @@ import { sharePagesI18n } from './share-pages.i18n';
 import { receivedPagesI18n } from './received-pages.i18n';
 import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
+import { externalOpenCodePluginI18n } from './external-opencode-plugin.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
@@ -174,6 +175,7 @@ export const dict = {
   ...receivedPagesI18n.tr,
   ...memoryDreamingI18n.tr,
   ...usageToolI18n.tr,
+  ...externalOpenCodePluginI18n.tr,
   ...openchamberToolsLayoutI18n.tr,
   ...openchamberToolOutputI18n.tr,
   ...opencodeToolOutputI18n.tr,
@@ -1583,6 +1585,7 @@ export const dict = {
   'contextPanel.actions.collapsePanel': 'Paneli daralt',
   'contextPanel.actions.expandPanel': 'Paneli genişlet',
   'contextPanel.actions.closePanel': 'Paneli kapat',
+  'contextPanel.actions.backToPanel': '{panel} paneline dön',
   'contextPanel.actions.resizePanelAria': 'Bağlam panelini yeniden boyutlandır',
   'contextPanel.iframe.sessionChatTitle': 'Session sohbeti {sessionID}',
   'contextPanel.preview.actions.reload': 'Önizlemeyi yeniden yükle',
@@ -2160,6 +2163,7 @@ export const dict = {
   'terminalView.quickKeys.enterAria': 'Enter',
   'terminalView.tabs.closeTabTitle': 'Sekmeyi kapat',
   'terminalView.tabs.newTabTitle': 'Yeni sekme',
+  'terminalView.tabs.sheetTitle': 'Terminaller',
   'terminalView.tabs.menu.rename': 'Yeniden adlandır',
   'terminalView.tabs.renameDialog.title': 'Terminali yeniden adlandır',
   'terminalView.tabs.renameDialog.placeholder': 'Terminal adı',
@@ -2350,7 +2354,6 @@ export const dict = {
   'session.githubIntegration.validation.branchAlreadyCheckedOut': 'Branch zaten bir worktree\'de checkout edilmiş',
   'session.githubIntegration.validation.failed': 'Doğrulama başarısız',
   'chat.fileAttachment.toast.tooLarge': '{name} eklenemeyecek kadar büyük ({size} üzeri). Projedeyse @ ile anın.',
-  'chat.fileAttachment.toast.heicConversionFailed': '{name} HEIC\'ten JPEG\'e dönüştürülemediği için eklenmedi. Fotoğrafı JPEG olarak kaydedip yeniden ekleyin.',
   'chat.fileAttachment.toast.overSendLimit': '{name} eklenemeyecek kadar büyük ({size} üzeri).',
   'chat.fileAttachment.toast.documentAttachedAsPath': '{name} metne dönüştürülemedi. Ajan dosyanın yolunu alır ve dosyayı kendisi okur.',
   'chat.fileAttachment.activeEditor.addFile': '{name} dosyasını bağlama ekle',
@@ -2437,6 +2440,10 @@ export const dict = {
   'chat.toast.opencodeRestartInterrupted.description': 'Yanıt hâlâ çalışırken OpenCode yeniden başlatıldı. Devam etmek için bir mesaj gönder.',
   'chat.toast.opencodeRestartInterrupted.autoResumeDescription': 'Yanıt hâlâ çalışırken OpenCode yeniden başlatıldı. Sohbet otomatik olarak devam edecek; devam etmezse bir mesaj gönder.',
   'chat.toast.opencodeRestartInterrupted.openSession': 'Session\'ı aç',
+  'chat.toast.claudePluginRetired.title': 'Claude, Claude Agent\'a taşındı',
+  'chat.toast.claudePluginRetired.description': 'opencode-claude eklentisine artık gerek olmadığı için kaldırıldı. Claude artık Claude Code girişinizle yerleşik Claude Agent sağlayıcısı üzerinden çalışıyor. Ayarlarda varsayılan olarak Claude modelleri seçiliyse onları yeniden seçin.',
+  'chat.toast.claudePluginRetired.unconnectedTitle': 'opencode-claude eklentisi kaldırıldı',
+  'chat.toast.claudePluginRetired.unconnectedDescription': 'opencode-claude eklentisine artık gerek olmadığı için kaldırıldı. Claude\'u Claude Code girişinizle kullanmaya devam etmek için Ayarlar → Provider\'lar bölümünden Claude Agent\'ı bağlayın.',
   'chat.toast.shareAnswer.openSession': 'Session\'ı aç',
   'chat.errorBoundary.title': 'Sohbet Hatası',
   'chat.errorBoundary.description': 'Sohbet arayüzünde bir hata oluştu. Bu durum geçici bir ağ sorunu veya bozuk mesaj verilerinden kaynaklanıyor olabilir.',
@@ -2652,12 +2659,8 @@ export const dict = {
   'chat.chatInput.mentionChip.editHint': 'Metin olarak düzenlemek için çift tıklayın',
   'chat.chatInput.toast.attachNamedFailed': '{name} eklenemedi',
   'chat.chatInput.toast.unsupportedAttachmentModalities': "{model}, {files} içindeki {modalities} girdisini okuyamıyor. Gönderdiğinizde aracıya kaydedilen dosyaların yolları iletilecek.",
-  'chat.chatInput.toast.imagesSaving': '{files} kaydediliyor…',
-  'chat.chatInput.toast.imagesSavedForTextModel': '{model} görselleri okuyamıyor. {files}, {folder} klasörüne kaydedildi.',
   'chat.chatInput.toast.imagesSentAsPathsForTextModel': '{model} görsel okuyamıyor. Mesaj, {files} için ona bir dosya yolu verecek.',
   'chat.chatInput.toast.textModelImageSaveFailed': "{files}, aracının açabilmesi için kaydedilemedi. Mesaj gönderilmedi. Yeniden deneyin veya bu dosyaları okuyabilen bir model seçin.",
-  'chat.chatInput.toast.imageSaveFailed': '{files} kaydedilemedi. Bunun yerine eklendi.',
-  'chat.chatInput.toast.imagesSaved': '{files}, {folder} klasörüne kaydedildi.',
   'chat.chatInput.toast.imageCopySaveFailed': '{files} kaydedilemedi.',
   'chat.chatInput.toast.someFilesSkipped': 'Bazı dosyalar atlandı:\\n{summary}',
   'chat.chatInput.toast.sharedFileTooLarge': 'çok büyük',

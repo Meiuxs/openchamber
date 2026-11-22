@@ -35,6 +35,7 @@ import { sharePagesI18n } from './share-pages.i18n';
 import { receivedPagesI18n } from './received-pages.i18n';
 import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
+import { externalOpenCodePluginI18n } from './external-opencode-plugin.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
@@ -236,6 +237,7 @@ export const dict: Record<I18nKey, string> = {
   ...receivedPagesI18n.pl,
   ...memoryDreamingI18n.pl,
   ...usageToolI18n.pl,
+  ...externalOpenCodePluginI18n.pl,
   ...openchamberToolsLayoutI18n.pl,
   ...openchamberToolOutputI18n.pl,
   ...opencodeToolOutputI18n.pl,
@@ -1033,7 +1035,6 @@ export const dict: Record<I18nKey, string> = {
   'session.githubIntegration.validation.branchAlreadyCheckedOut': 'Gałąź jest już wyewidencjonowana w drzewie pracy',
   'session.githubIntegration.validation.failed': 'Walidacja nie powiodła się',
   'chat.fileAttachment.toast.tooLarge': 'Plik {name} jest za duży, aby go załączyć (ponad {size}). Jeśli jest w projekcie, wspomnij go przez @.',
-  'chat.fileAttachment.toast.heicConversionFailed': 'Nie udało się przekonwertować pliku {name} z HEIC do JPEG, więc go nie załączono. Zapisz zdjęcie jako JPEG i załącz je ponownie.',
   'chat.fileAttachment.toast.overSendLimit': 'Plik {name} jest za duży, aby go załączyć (ponad {size}).',
   'chat.fileAttachment.toast.documentAttachedAsPath': 'Nie udało się przekonwertować pliku {name} na tekst, więc agent dostaje jego ścieżkę i sam odczyta plik.',
   'chat.fileAttachment.activeEditor.addFile': 'Dodaj plik:{name} do kontekstu',
@@ -1120,6 +1121,10 @@ export const dict: Record<I18nKey, string> = {
   'chat.toast.opencodeRestartInterrupted.description': 'OpenCode uruchomił się ponownie podczas generowania odpowiedzi. Wyślij wiadomość, aby kontynuować.',
   'chat.toast.opencodeRestartInterrupted.autoResumeDescription': 'OpenCode uruchomił się ponownie podczas generowania odpowiedzi. Czat zostanie wznowiony automatycznie; wyślij wiadomość, jeśli się nie wznowi.',
   'chat.toast.opencodeRestartInterrupted.openSession': 'Otwórz sesję',
+  'chat.toast.claudePluginRetired.title': 'Claude działa teraz przez Claude Agent',
+  'chat.toast.claudePluginRetired.description': 'Wtyczka opencode-claude nie jest już potrzebna, więc została usunięta. Claude działa teraz przez wbudowanego dostawcę Claude Agent z Twoim logowaniem do Claude Code. Jeśli w Ustawieniach modele Claude były wybrane jako domyślne, wybierz je ponownie.',
+  'chat.toast.claudePluginRetired.unconnectedTitle': 'Usunięto wtyczkę opencode-claude',
+  'chat.toast.claudePluginRetired.unconnectedDescription': 'Wtyczka opencode-claude nie jest już potrzebna, więc została usunięta. Aby dalej korzystać z Claude z logowaniem do Claude Code, połącz Claude Agent w Ustawieniach → Dostawcy.',
   'chat.toast.shareAnswer.openSession': 'Otwórz sesję',
   'chat.errorBoundary.title': 'Błąd Czatu',
   'chat.errorBoundary.description': 'Interfejs czatu napotkał błąd. Może to być spowodowane tymczasowym problemem sieciowym lub uszkodzonymi danymi wiadomości.',
@@ -1576,12 +1581,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.chatInput.mentionChip.editHint': 'Kliknij dwukrotnie, aby edytować jako tekst',
   'chat.chatInput.toast.attachNamedFailed': 'Nie udało się dołączyć {name}',
   'chat.chatInput.toast.unsupportedAttachmentModalities': "Model {model} nie może odczytać danych {modalities} w {files}. Po wysłaniu agent otrzyma ścieżki do zapisanych plików.",
-  'chat.chatInput.toast.imagesSaving': 'Zapisywanie {files}…',
-  'chat.chatInput.toast.imagesSavedForTextModel': '{model} nie odczytuje obrazów. Zapisano {files} w {folder}.',
   'chat.chatInput.toast.imagesSentAsPathsForTextModel': '{model} nie odczytuje obrazów. Wiadomość przekaże mu ścieżkę pliku dla {files}.',
   'chat.chatInput.toast.textModelImageSaveFailed': "Nie udało się zapisać {files} dla agenta. Wiadomość nie została wysłana. Spróbuj ponownie lub wybierz model, który potrafi odczytać te pliki.",
-  'chat.chatInput.toast.imageSaveFailed': 'Nie udało się zapisać {files}. Dołączono zamiast tego.',
-  'chat.chatInput.toast.imagesSaved': 'Zapisano {files} w {folder}.',
   'chat.chatInput.toast.imageCopySaveFailed': 'Nie udało się zapisać {files}.',
   'chat.chatInput.toast.attachmentsTooLarge': 'Załączniki są zbyt duże, aby je wysłać. Spróbuj zmniejszyć liczbę lub rozmiar obrazów.',
   'chat.chatInput.toast.clipboardAttachFailed': 'Nie udało się dołączyć obrazu ze schowka',
@@ -1840,6 +1841,7 @@ export const dict: Record<I18nKey, string> = {
   'commandPalette.footer.close': 'zamknij',
   'commandPalette.title': 'Paleta poleceń',
   'contextPanel.actions.closePanel': 'Zamknij panel',
+  'contextPanel.actions.backToPanel': 'Wróć do {panel}',
   'contextPanel.actions.collapsePanel': 'Zwiń panel',
   'contextPanel.actions.expandPanel': 'Rozwiń panel',
   'contextPanel.actions.resizePanelAria': 'Zmień rozmiar panelu kontekstu',
@@ -3534,6 +3536,7 @@ export const dict: Record<I18nKey, string> = {
   'terminalView.stream.processExitedWithSignal': ' (signal {signal})',
   'terminalView.tabs.closeTabTitle': 'Close tab',
   'terminalView.tabs.newTabTitle': 'Nowa karta',
+  'terminalView.tabs.sheetTitle': 'Terminale',
   'terminalView.tabs.menu.rename': 'Zmień nazwę',
   'terminalView.tabs.renameDialog.title': 'Zmień nazwę terminala',
   'terminalView.tabs.renameDialog.placeholder': 'Nazwa terminala',

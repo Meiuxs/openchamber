@@ -35,6 +35,7 @@ import { sharePagesI18n } from './share-pages.i18n';
 import { receivedPagesI18n } from './received-pages.i18n';
 import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
+import { externalOpenCodePluginI18n } from './external-opencode-plugin.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
@@ -246,6 +247,7 @@ export const dict: Record<I18nKey, string> = {
   ...receivedPagesI18n['pt-BR'],
   ...memoryDreamingI18n['pt-BR'],
   ...usageToolI18n['pt-BR'],
+  ...externalOpenCodePluginI18n['pt-BR'],
   ...openchamberToolsLayoutI18n['pt-BR'],
   ...openchamberToolOutputI18n['pt-BR'],
   ...opencodeToolOutputI18n['pt-BR'],
@@ -1697,6 +1699,7 @@ export const dict: Record<I18nKey, string> = {
   "contextPanel.actions.collapsePanel": "Recolher painel",
   "contextPanel.actions.expandPanel": "Expandir painel",
   "contextPanel.actions.closePanel": "Fechar painel",
+  "contextPanel.actions.backToPanel": "Voltar para {panel}",
   "contextPanel.actions.resizePanelAria": "Ajustar tamanho do painel de contexto",
   "contextPanel.iframe.sessionChatTitle": "Chat de sessão {sessionID}",
   "contextPanel.preview.actions.reload": "Recarregar prévia",
@@ -2260,6 +2263,7 @@ export const dict: Record<I18nKey, string> = {
   "terminalView.quickKeys.enterAria": "Enter",
   "terminalView.tabs.closeTabTitle": "Fechar aba",
   "terminalView.tabs.newTabTitle": "Nova aba",
+  "terminalView.tabs.sheetTitle": "Terminais",
   "terminalView.tabs.menu.rename": "Renomear",
   "terminalView.tabs.renameDialog.title": "Renomear terminal",
   "terminalView.tabs.renameDialog.placeholder": "Nome do terminal",
@@ -2458,7 +2462,6 @@ export const dict: Record<I18nKey, string> = {
   "session.githubIntegration.validation.branchAlreadyCheckedOut": "A branch já está em uso em um worktree",
   "session.githubIntegration.validation.failed": "Não foi possível validar",
   "chat.fileAttachment.toast.tooLarge": "{name} é grande demais para anexar (mais de {size}). Se estiver no projeto, mencione-o com @.",
-  "chat.fileAttachment.toast.heicConversionFailed": "Não foi possível converter {name} de HEIC para JPEG, então ele não foi anexado. Salve a foto como JPEG e anexe novamente.",
   "chat.fileAttachment.toast.overSendLimit": "{name} é grande demais para anexar (mais de {size}).",
   "chat.fileAttachment.toast.documentAttachedAsPath": "Não foi possível converter {name} em texto, então o agente recebe o caminho e lê o arquivo por conta própria.",
   "chat.fileAttachment.activeEditor.addFile": "Adicionar arquivo:{name} ao contexto",
@@ -2545,6 +2548,10 @@ export const dict: Record<I18nKey, string> = {
   "chat.toast.opencodeRestartInterrupted.description": "O OpenCode foi reiniciado enquanto uma resposta ainda estava em andamento. Envie uma mensagem para continuar.",
   "chat.toast.opencodeRestartInterrupted.autoResumeDescription": "O OpenCode foi reiniciado enquanto uma resposta ainda estava em andamento. O chat será retomado automaticamente; envie uma mensagem se não for.",
   "chat.toast.opencodeRestartInterrupted.openSession": "Abrir sessão",
+  "chat.toast.claudePluginRetired.title": "Claude agora usa o Claude Agent",
+  "chat.toast.claudePluginRetired.description": "O plugin opencode-claude não é mais necessário e foi removido. O Claude agora funciona pelo provedor integrado Claude Agent com o seu login do Claude Code. Se modelos do Claude estavam escolhidos como padrão nas Configurações, escolha-os novamente.",
+  "chat.toast.claudePluginRetired.unconnectedTitle": "Plugin opencode-claude removido",
+  "chat.toast.claudePluginRetired.unconnectedDescription": "O plugin opencode-claude não é mais necessário e foi removido. Para continuar usando o Claude com o seu login do Claude Code, conecte o Claude Agent em Configurações → Provedores.",
   "chat.toast.shareAnswer.openSession": "Abrir sessão",
   "chat.errorBoundary.title": "Erro na conversa",
   "chat.errorBoundary.description": "A interface da conversa encontrou um erro. Isso pode ter sido causado por um problema temporário de rede ou por dados de mensagem corrompidos.",
@@ -2777,12 +2784,8 @@ export const dict: Record<I18nKey, string> = {
   "chat.chatInput.mentionChip.editHint": "Clique duas vezes para editar como texto",
   "chat.chatInput.toast.attachNamedFailed": "Não foi possível anexar {name}",
   "chat.chatInput.toast.unsupportedAttachmentModalities": "{model} não consegue ler a entrada {modalities} em {files}. Ao enviar, o agente receberá os caminhos dos arquivos salvos.",
-  "chat.chatInput.toast.imagesSaving": "Salvando {files}…",
-  "chat.chatInput.toast.imagesSavedForTextModel": "{model} não consegue ler imagens. {files} foi salvo em {folder}.",
   "chat.chatInput.toast.imagesSentAsPathsForTextModel": "{model} não lê imagens. A mensagem vai passar um caminho de arquivo para {files}.",
   "chat.chatInput.toast.textModelImageSaveFailed": "Não foi possível salvar {files} para o agente abrir. A mensagem não foi enviada. Tente novamente ou escolha um modelo que consiga ler esses arquivos.",
-  "chat.chatInput.toast.imageSaveFailed": "Não foi possível salvar {files}. Anexado no lugar.",
-  "chat.chatInput.toast.imagesSaved": "{files} salvo em {folder}.",
   "chat.chatInput.toast.imageCopySaveFailed": "Não foi possível salvar {files}.",
   "chat.chatInput.toast.someFilesSkipped": "Alguns arquivos foram omitidos:\n{summary}",
   "chat.chatInput.toast.sharedFileTooLarge": "muito grande",

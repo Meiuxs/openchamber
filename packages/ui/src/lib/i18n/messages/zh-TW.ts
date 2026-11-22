@@ -35,6 +35,7 @@ import { sharePagesI18n } from './share-pages.i18n';
 import { receivedPagesI18n } from './received-pages.i18n';
 import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
+import { externalOpenCodePluginI18n } from './external-opencode-plugin.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
@@ -236,6 +237,7 @@ export const dict: Record<I18nKey, string> = {
   ...receivedPagesI18n['zh-TW'],
   ...memoryDreamingI18n['zh-TW'],
   ...usageToolI18n['zh-TW'],
+  ...externalOpenCodePluginI18n['zh-TW'],
   ...openchamberToolsLayoutI18n['zh-TW'],
   ...openchamberToolOutputI18n['zh-TW'],
   ...opencodeToolOutputI18n['zh-TW'],
@@ -1726,6 +1728,7 @@ export const dict: Record<I18nKey, string> = {
   'contextPanel.actions.collapsePanel': '摺疊面板',
   'contextPanel.actions.expandPanel': '展開面板',
   'contextPanel.actions.closePanel': '關閉面板',
+  'contextPanel.actions.backToPanel': '返回 {panel}',
   'contextPanel.actions.resizePanelAria': '調整上下文面板大小',
   'contextPanel.iframe.sessionChatTitle': '會話聊天 {sessionID}',
   'contextPanel.preview.actions.reload': '重新整理預覽',
@@ -2269,6 +2272,7 @@ export const dict: Record<I18nKey, string> = {
   'terminalView.quickKeys.enterAria': 'Enter 鍵',
   'terminalView.tabs.closeTabTitle': '關閉分頁',
   'terminalView.tabs.newTabTitle': '新增分頁',
+  'terminalView.tabs.sheetTitle': '終端',
   'terminalView.tabs.menu.rename': '重新命名',
   'terminalView.tabs.renameDialog.title': '重新命名終端機',
   'terminalView.tabs.renameDialog.placeholder': '終端機名稱',
@@ -2467,7 +2471,6 @@ export const dict: Record<I18nKey, string> = {
   'session.githubIntegration.validation.branchAlreadyCheckedOut': '該分支已在某個 worktree 中簽出',
   'session.githubIntegration.validation.failed': '驗證失敗',
   'chat.fileAttachment.toast.tooLarge': '{name} 過大，無法附加（超過 {size}）。如果它在專案中，請用 @ 提及。',
-  'chat.fileAttachment.toast.heicConversionFailed': '{name} 無法從 HEIC 轉換為 JPEG，因此未附加。請將照片儲存為 JPEG 後再試一次。',
   'chat.fileAttachment.toast.overSendLimit': '{name} 過大，無法附加（超過 {size}）。',
   'chat.fileAttachment.toast.documentAttachedAsPath': '無法將 {name} 轉換為文字，因此會把檔案路徑交給代理，由代理自行讀取。',
   'chat.fileAttachment.activeEditor.addFile': '將檔案加入上下文:{name}',
@@ -2554,6 +2557,10 @@ export const dict: Record<I18nKey, string> = {
   'chat.toast.opencodeRestartInterrupted.description': 'OpenCode 在回覆仍在產生時重新啟動。傳送訊息以繼續。',
   'chat.toast.opencodeRestartInterrupted.autoResumeDescription': 'OpenCode 在回覆仍在產生時重新啟動。聊天將自動恢復；如果未恢復，請傳送一條訊息。',
   'chat.toast.opencodeRestartInterrupted.openSession': '開啟會話',
+  'chat.toast.claudePluginRetired.title': 'Claude 已改用 Claude Agent',
+  'chat.toast.claudePluginRetired.description': 'opencode-claude 外掛已不再需要，因此已移除。Claude 現在透過內建的 Claude Agent 供應者執行，並使用你的 Claude Code 登入。如果設定中預設選擇了 Claude 模型，請重新選擇。',
+  'chat.toast.claudePluginRetired.unconnectedTitle': '已移除 opencode-claude 外掛',
+  'chat.toast.claudePluginRetired.unconnectedDescription': 'opencode-claude 外掛已不再需要，因此已移除。若要繼續以你的 Claude Code 登入使用 Claude，請在設定 → 供應商中連接 Claude Agent。',
   'chat.toast.shareAnswer.openSession': '開啟會話',
   'chat.errorBoundary.title': '聊天錯誤',
   'chat.errorBoundary.description': '聊天介面發生錯誤，可能是暫時網路問題或訊息資料損毀導致。',
@@ -2798,12 +2805,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.chatInput.mentionChip.editHint': '按兩下以文字形式編輯',
   'chat.chatInput.toast.attachNamedFailed': '附加 {name} 失敗',
   'chat.chatInput.toast.unsupportedAttachmentModalities': "{model} 無法讀取 {files} 中的 {modalities} 輸入。傳送時，代理程式將收到已儲存檔案的路徑。",
-  'chat.chatInput.toast.imagesSaving': '正在儲存 {files}…',
-  'chat.chatInput.toast.imagesSavedForTextModel': '{model} 無法讀取圖片。已將 {files} 儲存到 {folder}。',
   'chat.chatInput.toast.imagesSentAsPathsForTextModel': '{model} 無法讀取圖片。訊息會改為傳遞 {files} 的檔案路徑。',
   'chat.chatInput.toast.textModelImageSaveFailed': "無法儲存 {files} 供代理程式開啟。訊息未傳送。請重試或選擇可讀取這些檔案的模型。",
-  'chat.chatInput.toast.imageSaveFailed': '無法儲存 {files}。已改為附加。',
-  'chat.chatInput.toast.imagesSaved': '已將 {files} 儲存到 {folder}。',
   'chat.chatInput.toast.imageCopySaveFailed': '無法儲存 {files}。',
   'chat.chatInput.toast.someFilesSkipped': '部分檔案被跳過：\n{summary}',
   'chat.chatInput.toast.sharedFileTooLarge': '過大',

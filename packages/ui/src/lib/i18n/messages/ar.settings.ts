@@ -1239,7 +1239,7 @@ export const settingsDict = {
   'settings.openchamber.desktopNetwork.error.miniChatGlobalShortcutUnsupported': 'لا يمكن استخدام هذه التركيبة كاختصار عام. أضف Ctrl أو Alt أو Cmd.',
   'settings.openchamber.desktopNetwork.error.quakeModeSaveFailed': 'تعذّر تحديث وضع Quake',
   'settings.openchamber.desktopNetwork.error.quakeModeShortcutUnsupported': 'لا يمكن استخدام هذه التركيبة كاختصار عام. أضف Ctrl أو Alt أو Cmd.',
-  'settings.openchamber.opencodeCli.title': 'OpenCode CLI (Ø³Ø·Ø± Ø§ÙØ£ÙØ§ÙØ±)',
+  'settings.openchamber.opencodeCli.title': 'خادم OpenCode',
   'settings.openchamber.spaces.title': 'المساحات المعزولة',
   'settings.openchamber.spaces.field.enabled': 'السماح للوكلاء بالعمل في مساحات معزولة',
   'settings.openchamber.spaces.field.enabledAria': 'السماح للوكلاء بالعمل في مساحات معزولة',
@@ -2644,6 +2644,7 @@ export const settingsDict = {
   'settings.openchamber.visual.option.messageTransport.sse.description': 'استخدام Server-Sent Events لبث الرسائل.',
   'settings.openchamber.visual.option.activityRenderMode.collapsed.label': 'مطوي',
   'settings.openchamber.visual.option.activityRenderMode.collapsed.description': 'إبقاء النشاط مطويًا افتراضيًا.',
+  'settings.openchamber.visual.option.activityRenderMode.text.label': 'إظهار الملاحظات',
   'settings.openchamber.visual.option.activityRenderMode.summary.label': 'موسّع',
   'settings.openchamber.visual.option.activityRenderMode.summary.description': 'توسيع النشاط افتراضيًا.',
   'settings.openchamber.visual.option.timeFormat.auto.label': 'تلقائي',

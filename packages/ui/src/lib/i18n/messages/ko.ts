@@ -35,6 +35,7 @@ import { sharePagesI18n } from './share-pages.i18n';
 import { receivedPagesI18n } from './received-pages.i18n';
 import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
+import { externalOpenCodePluginI18n } from './external-opencode-plugin.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
@@ -236,6 +237,7 @@ export const dict: Record<I18nKey, string> = {
   ...receivedPagesI18n.ko,
   ...memoryDreamingI18n.ko,
   ...usageToolI18n.ko,
+  ...externalOpenCodePluginI18n.ko,
   ...openchamberToolsLayoutI18n.ko,
   ...openchamberToolOutputI18n.ko,
   ...opencodeToolOutputI18n.ko,
@@ -1754,6 +1756,7 @@ export const dict: Record<I18nKey, string> = {
   'contextPanel.actions.collapsePanel': '접기 패널',
   'contextPanel.actions.expandPanel': '펼치기 패널',
   'contextPanel.actions.closePanel': '패널 닫기',
+  'contextPanel.actions.backToPanel': '{panel}로 돌아가기',
   'contextPanel.actions.resizePanelAria': '컨텍스트 패널 크기 조정',
   'contextPanel.iframe.sessionChatTitle': '세션 채팅 {sessionID}',
   'sidebarFilesTree.menu.rename': '이름 변경',
@@ -2292,6 +2295,7 @@ export const dict: Record<I18nKey, string> = {
   'terminalView.quickKeys.enterAria': 'Enter',
   'terminalView.tabs.closeTabTitle': '탭 닫기',
   'terminalView.tabs.newTabTitle': '새 탭',
+  'terminalView.tabs.sheetTitle': '터미널',
   'terminalView.tabs.menu.rename': '이름 바꾸기',
   'terminalView.tabs.renameDialog.title': '터미널 이름 바꾸기',
   'terminalView.tabs.renameDialog.placeholder': '터미널 이름',
@@ -2490,7 +2494,6 @@ export const dict: Record<I18nKey, string> = {
   'session.githubIntegration.validation.branchAlreadyCheckedOut': '브랜치가 이미 워크트리에 체크아웃되어 있습니다',
   'session.githubIntegration.validation.failed': '유효성 검사에 실패했습니다',
   'chat.fileAttachment.toast.tooLarge': '{name}은(는) 너무 커서 첨부할 수 없습니다({size} 초과). 프로젝트에 있는 파일이면 @로 멘션하세요.',
-  'chat.fileAttachment.toast.heicConversionFailed': '{name} 파일을 HEIC에서 JPEG로 변환하지 못해 첨부되지 않았습니다. 사진을 JPEG로 저장한 뒤 다시 첨부하세요.',
   'chat.fileAttachment.toast.overSendLimit': '{name}은(는) 너무 커서 첨부할 수 없습니다({size} 초과).',
   'chat.fileAttachment.toast.documentAttachedAsPath': '{name}을(를) 텍스트로 변환할 수 없어 에이전트에게 경로를 전달합니다. 에이전트가 파일을 직접 읽습니다.',
   'chat.fileAttachment.activeEditor.addFile': '컨텍스트에 파일 추가:{name}',
@@ -2577,6 +2580,10 @@ export const dict: Record<I18nKey, string> = {
   'chat.toast.opencodeRestartInterrupted.description': '응답이 진행 중인 동안 OpenCode가 다시 시작되었습니다. 계속하려면 메시지를 보내세요.',
   'chat.toast.opencodeRestartInterrupted.autoResumeDescription': '응답이 진행 중인 동안 OpenCode가 다시 시작되었습니다. 채팅은 자동으로 이어집니다. 이어지지 않으면 메시지를 보내세요.',
   'chat.toast.opencodeRestartInterrupted.openSession': '세션 열기',
+  'chat.toast.claudePluginRetired.title': 'Claude가 Claude Agent로 전환되었습니다',
+  'chat.toast.claudePluginRetired.description': 'opencode-claude 플러그인은 더 이상 필요하지 않아 제거되었습니다. 이제 Claude는 Claude Code 로그인으로 기본 제공 Claude Agent 공급자를 통해 실행됩니다. 설정에서 Claude 모델을 기본값으로 선택했다면 다시 선택하세요.',
+  'chat.toast.claudePluginRetired.unconnectedTitle': 'opencode-claude 플러그인이 제거되었습니다',
+  'chat.toast.claudePluginRetired.unconnectedDescription': 'opencode-claude 플러그인은 더 이상 필요하지 않아 제거되었습니다. Claude Code 로그인으로 Claude를 계속 사용하려면 설정 → 프로바이더에서 Claude Agent를 연결하세요.',
   'chat.toast.shareAnswer.openSession': '세션 열기',
   'chat.errorBoundary.title': '채팅 오류',
   'chat.errorBoundary.description': '채팅 인터페이스에서 오류가 발생했습니다. 일시적인 네트워크 이슈 또는 손상된 메시지 데이터 때문일 수 있습니다.',
@@ -2821,12 +2828,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.chatInput.mentionChip.editHint': '두 번 클릭하여 텍스트로 편집',
   'chat.chatInput.toast.attachNamedFailed': '첨부 {name} 실패',
   'chat.chatInput.toast.unsupportedAttachmentModalities': "{model}은(는) {files}의 {modalities} 입력을 읽을 수 없습니다. 보내면 에이전트가 저장된 파일의 경로를 받습니다.",
-  'chat.chatInput.toast.imagesSaving': '{files} 저장 중…',
-  'chat.chatInput.toast.imagesSavedForTextModel': '{model}은(는) 이미지를 읽을 수 없습니다. {files}을(를) {folder}에 저장했습니다.',
   'chat.chatInput.toast.imagesSentAsPathsForTextModel': '{model}은(는) 이미지를 읽을 수 없습니다. 메시지에는 {files} 대신 파일 경로가 전달됩니다.',
   'chat.chatInput.toast.textModelImageSaveFailed': "에이전트가 열 수 있도록 {files}을(를) 저장하지 못했습니다. 메시지가 전송되지 않았습니다. 다시 시도하거나 해당 파일을 읽을 수 있는 모델을 선택하세요.",
-  'chat.chatInput.toast.imageSaveFailed': '{files}을(를) 저장하지 못했습니다. 대신 첨부했습니다.',
-  'chat.chatInput.toast.imagesSaved': '{files}을(를) {folder}에 저장했습니다.',
   'chat.chatInput.toast.imageCopySaveFailed': '{files}을(를) 저장하지 못했습니다.',
   'chat.chatInput.toast.someFilesSkipped': '일부 파일을 건너뛰었습니다:\n{summary}',
   'chat.chatInput.toast.sharedFileTooLarge': '너무 큼',

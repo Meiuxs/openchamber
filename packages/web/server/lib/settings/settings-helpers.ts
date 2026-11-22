@@ -238,7 +238,7 @@ type BooleanSettingsKey =
   | 'summarizeLastMessage' | 'autoDeleteEnabled' | 'sessionRetentionOnlyArchived' | 'sessionRetentionIncludeInWork'
   | 'mergedWorktreeCleanupEnabled' | 'worktreeArchiveOnDoneEnabled' | 'smallModelUseDefault' | 'autoCreateWorktree'
   | 'gitmojiEnabled' | 'defaultFileViewerPreview' | 'inputSpellcheckEnabled' | 'enterToSend' | 'enterToSendConfigured'
-  | 'mobileReturnKeySends' | 'showOpenCodeUpdateNotifications' | 'agentWebToolEnabled' | 'isolatedSpacesEnabled'
+  | 'mobileReturnKeySends' | 'showOpenCodeUpdateNotifications' | 'useGlobalOpenCodeService' | 'agentWebToolEnabled' | 'isolatedSpacesEnabled'
   | 'showToolFileIcons' | 'showTurnChangedFiles' | 'collapsibleUserMessages' | 'stickyUserHeader'
   | 'promptNavigatorEnabled' | 'wideChatLayoutEnabled' | 'showSplitAssistantMessageActions' | 'directoryShowHidden'
   | 'filesViewShowGitignored' | 'reportUsage' | 'responseStyleEnabled' | 'dictationEnabled' | 'dictationAutoSend'
@@ -298,7 +298,7 @@ export type SanitizedSettings = Partial<Record<BooleanSettingsKey, boolean>>
     weekStartPreference?: 'auto' | 'sunday' | 'monday';
     chatRenderMode?: 'sorted' | 'live';
     messageStreamTransport?: 'auto' | 'ws' | 'sse';
-    activityRenderMode?: 'collapsed' | 'summary';
+    activityRenderMode?: 'collapsed' | 'text' | 'summary';
     mermaidRenderingMode?: 'svg' | 'ascii';
     userMessageRenderingMode?: 'markdown' | 'plain';
     chatWidth?: 'default' | 'wider' | 'full';
@@ -1090,11 +1090,8 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
     if (candidate.mobileReturnKeySends === true || candidate.mobileReturnKeySends === false) {
       result.mobileReturnKeySends = candidate.mobileReturnKeySends;
     }
-    if (isBoolean(candidate.showOpenCodeUpdateNotifications)) {
-      result.showOpenCodeUpdateNotifications = candidate.showOpenCodeUpdateNotifications;
-    }
-    if (isBoolean(candidate.agentWebToolEnabled)) {
-      result.agentWebToolEnabled = candidate.agentWebToolEnabled;
+    for (const key of ['showOpenCodeUpdateNotifications', 'useGlobalOpenCodeService', 'agentWebToolEnabled'] as const) {
+      if (isBoolean(candidate[key])) result[key] = candidate[key];
     }
     if (isString(candidate.browserProvider) && candidate.browserProvider.trim()) {
       result.browserProvider = candidate.browserProvider.trim();
@@ -1160,7 +1157,7 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
     }
     if (isString(candidate.activityRenderMode)) {
       const mode = candidate.activityRenderMode.trim();
-      if (mode === 'collapsed' || mode === 'summary') {
+      if (mode === 'collapsed' || mode === 'text' || mode === 'summary') {
         result.activityRenderMode = mode;
       }
     }

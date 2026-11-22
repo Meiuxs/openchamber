@@ -49,6 +49,7 @@ type BaseRoutesOptions =
     agentToolRuntime: AgentTool;
     limitFailoverRuntime: Pick<ReturnType<typeof createLimitFailoverRuntime>, 'registerRoutes'> | null;
     rateGateRuntime: Pick<ReturnType<typeof createRateGateRuntime>, 'registerRoutes' | 'registerStatusRoute'> | null;
+    registerExternalBridgeRoutes?: (app: Application) => void;
     pluginNotificationEmitter: Parameters<typeof registerNotificationEmitRoutes>[1]['emitter'];
   };
 
@@ -122,6 +123,7 @@ export const createBootstrapRuntime = (dependencies: BootstrapDependencies) => {
       agentToolRuntime,
       limitFailoverRuntime,
       rateGateRuntime,
+      registerExternalBridgeRoutes,
       pluginNotificationEmitter,
       desktopUpdater,
       getOpenCodeCompatibility,
@@ -237,6 +239,8 @@ export const createBootstrapRuntime = (dependencies: BootstrapDependencies) => {
       desktopUpdater,
       getOpenCodeCompatibility,
     });
+
+    registerExternalBridgeRoutes?.(app);
 
     return {
       uiAuthController,

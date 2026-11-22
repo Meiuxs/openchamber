@@ -35,6 +35,7 @@ import { sharePagesI18n } from './share-pages.i18n';
 import { receivedPagesI18n } from './received-pages.i18n';
 import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
+import { externalOpenCodePluginI18n } from './external-opencode-plugin.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
@@ -1613,6 +1614,7 @@ export const dict: Record<I18nKey, string> = {
   'contextPanel.actions.collapsePanel': 'طي اللوحة',
   'contextPanel.actions.expandPanel': 'توسيع اللوحة',
   'contextPanel.actions.closePanel': 'إغلاق اللوحة',
+  'contextPanel.actions.backToPanel': 'العودة إلى {panel}',
   'contextPanel.actions.resizePanelAria': 'تغيير حجم لوحة السياق',
   'contextPanel.iframe.sessionChatTitle': 'محادثة الجلسة {sessionID}',
   'contextPanel.preview.actions.reload': 'إعادة تحميل المعاينة',
@@ -2187,6 +2189,7 @@ export const dict: Record<I18nKey, string> = {
   'terminalView.quickKeys.enterAria': 'Enter',
   'terminalView.tabs.closeTabTitle': 'إغلاق علامة التبويب',
   'terminalView.tabs.newTabTitle': 'علامة تبويب جديدة',
+  'terminalView.tabs.sheetTitle': 'الطرفيات',
   'terminalView.tabs.menu.rename': 'إعادة تسمية',
   'terminalView.tabs.renameDialog.title': 'إعادة تسمية الطرفية',
   'terminalView.tabs.renameDialog.placeholder': 'اسم الطرفية',
@@ -2385,7 +2388,6 @@ export const dict: Record<I18nKey, string> = {
   'session.githubIntegration.validation.branchAlreadyCheckedOut': 'الفرع مسحوب بالفعل في شجرة عمل (worktree)',
   'session.githubIntegration.validation.failed': 'تعذّر التحقق',
   'chat.fileAttachment.toast.tooLarge': '{name} كبير جدًا بحيث لا يمكن إرفاقه (أكثر من {size}). إذا كان ضمن المشروع، فاذكره باستخدام @.',
-  'chat.fileAttachment.toast.heicConversionFailed': 'تعذّر تحويل {name} من HEIC إلى JPEG، لذا لم يُرفق. احفظ الصورة بصيغة JPEG وأرفقها مرة أخرى.',
   'chat.fileAttachment.toast.overSendLimit': '{name} كبير جدًا بحيث لا يمكن إرفاقه (أكثر من {size}).',
   'chat.fileAttachment.toast.documentAttachedAsPath': 'تعذّر تحويل {name} إلى نص، لذا يحصل الوكيل على مساره ويقرأ الملف بنفسه.',
   'chat.fileAttachment.activeEditor.addFile': 'إضافة file:{name} إلى السياق',
@@ -2472,6 +2474,10 @@ export const dict: Record<I18nKey, string> = {
   'chat.toast.opencodeRestartInterrupted.description': 'أُعيد تشغيل OpenCode بينما كان الرد لا يزال قيد التنفيذ. أرسل رسالة للمتابعة.',
   'chat.toast.opencodeRestartInterrupted.autoResumeDescription': 'أُعيد تشغيل OpenCode بينما كان الرد لا يزال قيد التنفيذ. ستستأنف المحادثة تلقائيًا؛ أرسل رسالة إذا لم تفعل.',
   'chat.toast.opencodeRestartInterrupted.openSession': 'فتح الجلسة',
+  'chat.toast.claudePluginRetired.title': 'تم نقل Claude إلى Claude Agent',
+  'chat.toast.claudePluginRetired.description': 'لم تعد إضافة opencode-claude ضرورية، لذا تمت إزالتها. يعمل Claude الآن عبر المزوّد المدمج Claude Agent باستخدام تسجيل دخولك إلى Claude Code. إذا كانت نماذج Claude مختارة كنماذج افتراضية في الإعدادات، فاخترها مرة أخرى.',
+  'chat.toast.claudePluginRetired.unconnectedTitle': 'تمت إزالة إضافة opencode-claude',
+  'chat.toast.claudePluginRetired.unconnectedDescription': 'لم تعد إضافة opencode-claude ضرورية، لذا تمت إزالتها. لمواصلة استخدام Claude بتسجيل دخولك إلى Claude Code، اربط Claude Agent من الإعدادات ← الموفرون.',
   'chat.toast.shareAnswer.openSession': 'فتح الجلسة',
   'chat.errorBoundary.title': 'خطأ في المحادثة',
   'chat.errorBoundary.description': 'واجهت واجهة المحادثة خطأً. قد يكون السبب مشكلة مؤقتة في الشبكة أو بيانات رسائل تالفة.',
@@ -2716,12 +2722,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.chatInput.mentionChip.editHint': 'انقر نقرًا مزدوجًا للتعديل كنص',
   'chat.chatInput.toast.attachNamedFailed': 'تعذّر إرفاق {name}',
   'chat.chatInput.toast.unsupportedAttachmentModalities': "لا يستطيع {model} قراءة إدخال {modalities} في {files}. عند الإرسال، سيتلقى الوكيل مسارات الملفات المحفوظة.",
-  'chat.chatInput.toast.imagesSaving': 'جارٍ حفظ {files}…',
-  'chat.chatInput.toast.imagesSavedForTextModel': 'لا يستطيع {model} قراءة الصور. تم حفظ {files} في {folder}.',
   'chat.chatInput.toast.imagesSentAsPathsForTextModel': 'لا يستطيع {model} قراءة الصور. ستمرّر الرسالة مسار ملف بدلًا من {files}.',
   'chat.chatInput.toast.textModelImageSaveFailed': "تعذّر حفظ {files} ليتمكن الوكيل من فتحها. لم تُرسل الرسالة. حاول مجددًا أو اختر نموذجًا يستطيع قراءة هذه الملفات.",
-  'chat.chatInput.toast.imageSaveFailed': 'تعذّر حفظ {files}. أُرفق بدلًا من ذلك.',
-  'chat.chatInput.toast.imagesSaved': 'تم حفظ {files} في {folder}.',
   'chat.chatInput.toast.imageCopySaveFailed': 'تعذّر حفظ {files}.',
   'chat.chatInput.toast.someFilesSkipped': "تم تخطي بعض الملفات:\n{summary}",
   'chat.chatInput.toast.sharedFileTooLarge': 'كبير جدًا',
@@ -4007,6 +4009,7 @@ export const dict: Record<I18nKey, string> = {
   ...receivedPagesI18n.ar,
   ...memoryDreamingI18n.ar,
   ...usageToolI18n.ar,
+  ...externalOpenCodePluginI18n.ar,
   ...openchamberToolsLayoutI18n.ar,
   ...openchamberToolOutputI18n.ar,
   ...opencodeToolOutputI18n.ar,

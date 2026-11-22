@@ -18,11 +18,12 @@ export const useTimelineRows = (
         showReasoningTraces: boolean;
         stickyUserHeader: boolean;
         defaultActivityExpanded: boolean;
+        keepActivityText: boolean;
         turnExpansion: Map<string, boolean>;
         directory?: string;
     },
 ) => {
-    const { showTurnChangedFiles, showReasoningTraces, stickyUserHeader, defaultActivityExpanded, turnExpansion, directory } = options;
+    const { showTurnChangedFiles, showReasoningTraces, stickyUserHeader, defaultActivityExpanded, keepActivityText, turnExpansion, directory } = options;
     const { projection, staticTurns, streamingTurn } = useTurnRecords(displayMessages, {
         sessionKey,
         showTurnChangedFiles,
@@ -99,12 +100,13 @@ export const useTimelineRows = (
     const rows = React.useMemo(() => streamPerfMeasure('ui.message_list.render_rows_ms', () => {
         const next = buildTimelineRows(allEntries, {
             collapsedActivity: !defaultActivityExpanded,
+            keepActivityText,
             expandedTurns: turnExpansion,
             showReasoningTraces,
         }, previousRowsRef.current);
         previousRowsRef.current = next;
         return next;
-    }), [allEntries, defaultActivityExpanded, showReasoningTraces, turnExpansion]);
+    }), [allEntries, defaultActivityExpanded, keepActivityText, showReasoningTraces, turnExpansion]);
 
     const stickyRowIndices = React.useMemo(() => {
         if (!stickyUserHeader) return undefined;

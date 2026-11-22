@@ -34,6 +34,7 @@ import { sharePagesI18n } from './share-pages.i18n';
 import { receivedPagesI18n } from './received-pages.i18n';
 import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
+import { externalOpenCodePluginI18n } from './external-opencode-plugin.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
@@ -1613,6 +1614,7 @@ export const dict: Record<I18nKey, string> = {
   'contextPanel.actions.collapsePanel': 'כווץ חלונית',
   'contextPanel.actions.expandPanel': 'הרחב חלונית',
   'contextPanel.actions.closePanel': 'סגור חלונית',
+  'contextPanel.actions.backToPanel': 'חזרה אל {panel}',
   'contextPanel.actions.resizePanelAria': 'שנה את גודל חלונית ההקשר',
   'contextPanel.iframe.sessionChatTitle': 'צ\'אט ההפעלה {sessionID}',
   'contextPanel.preview.actions.reload': 'טען מחדש את התצוגה המקדימה',
@@ -2187,6 +2189,7 @@ export const dict: Record<I18nKey, string> = {
   'terminalView.quickKeys.enterAria': 'Enter',
   'terminalView.tabs.closeTabTitle': 'סגור כרטיסייה',
   'terminalView.tabs.newTabTitle': 'כרטיסייה חדשה',
+  'terminalView.tabs.sheetTitle': 'מסופים',
   'terminalView.tabs.menu.rename': 'שנה שם',
   'terminalView.tabs.renameDialog.title': 'שינוי שם המסוף',
   'terminalView.tabs.renameDialog.placeholder': 'שם המסוף',
@@ -2385,7 +2388,6 @@ export const dict: Record<I18nKey, string> = {
   'session.githubIntegration.validation.branchAlreadyCheckedOut': 'הענף כבר פתוח בעץ עבודה',
   'session.githubIntegration.validation.failed': 'האימות נכשל',
   'chat.fileAttachment.toast.tooLarge': '{name} גדול מדי לצירוף (מעל {size}). אם הקובץ נמצא בפרויקט, אפשר לאזכר אותו עם @.',
-  'chat.fileAttachment.toast.heicConversionFailed': 'לא ניתן היה להמיר את {name} מ-HEIC ל-JPEG, ולכן הוא לא צורף. שמרו את התמונה כ-JPEG וצרפו אותה שוב.',
   'chat.fileAttachment.toast.overSendLimit': '{name} גדול מדי לצירוף (מעל {size}).',
   'chat.fileAttachment.toast.documentAttachedAsPath': 'לא ניתן היה להמיר את {name} לטקסט, ולכן הסוכן מקבל את הנתיב שלו וקורא את הקובץ בעצמו.',
   'chat.fileAttachment.activeEditor.addFile': 'הוסף את file:{name} להקשר',
@@ -2472,6 +2474,10 @@ export const dict: Record<I18nKey, string> = {
   'chat.toast.opencodeRestartInterrupted.description': 'OpenCode הופעל מחדש בזמן שתגובה עדיין רצה. אפשר לשלוח הודעה כדי להמשיך.',
   'chat.toast.opencodeRestartInterrupted.autoResumeDescription': 'OpenCode הופעל מחדש בזמן שתגובה עדיין רצה. השיחה תמשיך אוטומטית; שלחו הודעה אם לא.',
   'chat.toast.opencodeRestartInterrupted.openSession': 'פתח הפעלה',
+  'chat.toast.claudePluginRetired.title': 'Claude עבר ל-Claude Agent',
+  'chat.toast.claudePluginRetired.description': 'התוסף opencode-claude כבר לא נחוץ ולכן הוסר. Claude פועל עכשיו דרך הספק המובנה Claude Agent עם ההתחברות שלך ל-Claude Code. אם מודלים של Claude נבחרו כברירת מחדל בהגדרות, בחר אותם שוב.',
+  'chat.toast.claudePluginRetired.unconnectedTitle': 'התוסף opencode-claude הוסר',
+  'chat.toast.claudePluginRetired.unconnectedDescription': 'התוסף opencode-claude כבר לא נחוץ ולכן הוסר. כדי להמשיך להשתמש ב-Claude עם ההתחברות שלך ל-Claude Code, חבר את Claude Agent בהגדרות ← ספקים.',
   'chat.toast.shareAnswer.openSession': 'פתח הפעלה',
   'chat.errorBoundary.title': 'שגיאת צ\'אט',
   'chat.errorBoundary.description': 'אירעה שגיאה בממשק הצ\'אט. ייתכן שהסיבה היא בעיית רשת זמנית או נתוני הודעה פגומים.',
@@ -2716,12 +2722,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.chatInput.mentionChip.editHint': 'לחיצה כפולה לעריכה כטקסט',
   'chat.chatInput.toast.attachNamedFailed': 'לא ניתן היה לצרף את {name}',
   'chat.chatInput.toast.unsupportedAttachmentModalities': "{model} לא יכול לקרוא קלט מסוג {modalities} בקבצים {files}. בשליחה, הסוכן יקבל נתיבים לקבצים השמורים.",
-  'chat.chatInput.toast.imagesSaving': 'שומר את {files}…',
-  'chat.chatInput.toast.imagesSavedForTextModel': '{model} לא יכול לקרוא תמונות. {files} נשמר ב-{folder}.',
   'chat.chatInput.toast.imagesSentAsPathsForTextModel': '{model} לא יכול לקרוא תמונות. ההודעה תעביר לו נתיב קובץ במקום {files}.',
   'chat.chatInput.toast.textModelImageSaveFailed': "לא ניתן לשמור את {files} לפתיחה בידי הסוכן. ההודעה לא נשלחה. אפשר לנסות שוב או לבחור מודל שמסוגל לקרוא את הקבצים האלה.",
-  'chat.chatInput.toast.imageSaveFailed': 'לא ניתן לשמור את {files}. צורף במקום זאת.',
-  'chat.chatInput.toast.imagesSaved': '{files} נשמר ב-{folder}.',
   'chat.chatInput.toast.imageCopySaveFailed': 'לא ניתן לשמור את {files}.',
   'chat.chatInput.toast.someFilesSkipped': "חלק מהקבצים דולגו:\n{summary}",
   'chat.chatInput.toast.sharedFileTooLarge': 'גדול מדי',
@@ -4007,6 +4009,7 @@ export const dict: Record<I18nKey, string> = {
   ...receivedPagesI18n.he,
   ...memoryDreamingI18n.he,
   ...usageToolI18n.he,
+  ...externalOpenCodePluginI18n.he,
   ...openchamberToolsLayoutI18n.he,
   ...openchamberToolOutputI18n.he,
   ...opencodeToolOutputI18n.he,

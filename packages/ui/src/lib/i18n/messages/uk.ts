@@ -35,6 +35,7 @@ import { sharePagesI18n } from './share-pages.i18n';
 import { receivedPagesI18n } from './received-pages.i18n';
 import { memoryDreamingI18n } from './memory-dreaming.i18n';
 import { usageToolI18n } from './usage-tool.i18n';
+import { externalOpenCodePluginI18n } from './external-opencode-plugin.i18n';
 import { openchamberToolsLayoutI18n } from './openchamber-tools-layout.i18n';
 import { openchamberToolOutputI18n } from './openchamber-tool-output.i18n';
 import { opencodeToolOutputI18n } from './opencode-tool-output.i18n';
@@ -246,6 +247,7 @@ export const dict: Record<I18nKey, string> = {
   ...receivedPagesI18n.uk,
   ...memoryDreamingI18n.uk,
   ...usageToolI18n.uk,
+  ...externalOpenCodePluginI18n.uk,
   ...openchamberToolsLayoutI18n.uk,
   ...openchamberToolOutputI18n.uk,
   ...opencodeToolOutputI18n.uk,
@@ -1697,6 +1699,7 @@ export const dict: Record<I18nKey, string> = {
   "contextPanel.actions.collapsePanel": "Згорнути панель",
   "contextPanel.actions.expandPanel": "Розгорнути панель",
   "contextPanel.actions.closePanel": "Закрити панель",
+  "contextPanel.actions.backToPanel": "Назад до {panel}",
   "contextPanel.actions.resizePanelAria": "Змінити розмір контекстної панелі",
   "contextPanel.iframe.sessionChatTitle": "Сесійний чат {sessionID}",
   "contextPanel.preview.actions.reload": "Перезавантажити перегляд",
@@ -2260,6 +2263,7 @@ export const dict: Record<I18nKey, string> = {
   "terminalView.quickKeys.enterAria": "Enter",
   "terminalView.tabs.closeTabTitle": "Закрити вкладку",
   "terminalView.tabs.newTabTitle": "Нова вкладка",
+  "terminalView.tabs.sheetTitle": "Термінали",
   "terminalView.tabs.menu.rename": "Перейменувати",
   "terminalView.tabs.renameDialog.title": "Перейменувати термінал",
   "terminalView.tabs.renameDialog.placeholder": "Назва термінала",
@@ -2458,7 +2462,6 @@ export const dict: Record<I18nKey, string> = {
   "session.githubIntegration.validation.branchAlreadyCheckedOut": "Гілку вже відкрито в worktree",
   "session.githubIntegration.validation.failed": "Помилка перевірки",
   "chat.fileAttachment.toast.tooLarge": "{name} завеликий, щоб прикріпити (понад {size}). Якщо файл є в проєкті, згадайте його через @.",
-  "chat.fileAttachment.toast.heicConversionFailed": "Не вдалося конвертувати {name} з HEIC у JPEG, тому файл не додано. Збережіть фото як JPEG і додайте його знову.",
   "chat.fileAttachment.toast.overSendLimit": "{name} завеликий, щоб прикріпити (понад {size}).",
   "chat.fileAttachment.toast.documentAttachedAsPath": "Не вдалося перетворити {name} на текст, тож агент отримає шлях до файлу і прочитає його сам.",
   "chat.fileAttachment.activeEditor.addFile": "Додати файл:{name} до контексту",
@@ -2545,6 +2548,10 @@ export const dict: Record<I18nKey, string> = {
   "chat.toast.opencodeRestartInterrupted.description": "OpenCode перезапустився, поки відповідь ще формувалася. Надішліть повідомлення, щоб продовжити.",
   "chat.toast.opencodeRestartInterrupted.autoResumeDescription": "OpenCode перезапустився, поки відповідь ще формувалася. Чат буде відновлено автоматично; надішліть повідомлення, якщо ні.",
   "chat.toast.opencodeRestartInterrupted.openSession": "Відкрити сесію",
+  "chat.toast.claudePluginRetired.title": "Claude переведено на Claude Agent",
+  "chat.toast.claudePluginRetired.description": "Плагін opencode-claude більше не потрібен, тому його видалено. Claude тепер працює через вбудований провайдер Claude Agent з вашим входом у Claude Code. Якщо в налаштуваннях за замовчуванням були вибрані моделі Claude, виберіть їх знову.",
+  "chat.toast.claudePluginRetired.unconnectedTitle": "Плагін opencode-claude видалено",
+  "chat.toast.claudePluginRetired.unconnectedDescription": "Плагін opencode-claude більше не потрібен, тому його видалено. Щоб і далі користуватися Claude з вашим входом у Claude Code, підключіть Claude Agent у Налаштуваннях → Провайдери.",
   "chat.toast.shareAnswer.openSession": "Відкрити сесію",
   "chat.errorBoundary.title": "Помилка чату",
   "chat.errorBoundary.description": "В інтерфейсі чату сталася помилка. Причиною може бути тимчасова проблема з мережею або пошкоджені дані повідомлення.",
@@ -2777,12 +2784,8 @@ export const dict: Record<I18nKey, string> = {
   "chat.chatInput.mentionChip.editHint": "Двічі клацніть, щоб редагувати як текст",
   "chat.chatInput.toast.attachNamedFailed": "Не вдалося прикріпити {name}",
   "chat.chatInput.toast.unsupportedAttachmentModalities": "{model} не може прочитати вміст типу {modalities} у {files}. Після надсилання агент отримає шляхи до збережених файлів.",
-  "chat.chatInput.toast.imagesSaving": "Зберігаю {files}…",
-  "chat.chatInput.toast.imagesSavedForTextModel": "{model} не читає зображень. {files} збережено в {folder}.",
   "chat.chatInput.toast.imagesSentAsPathsForTextModel": "{model} не читає зображення. Замість {files} повідомлення передасть шлях до файлу.",
   "chat.chatInput.toast.textModelImageSaveFailed": "Не вдалося зберегти {files} для агента. Повідомлення не надіслано. Спробуйте ще раз або виберіть модель, яка може читати ці файли.",
-  "chat.chatInput.toast.imageSaveFailed": "Не вдалося зберегти {files}. Додано як вкладення.",
-  "chat.chatInput.toast.imagesSaved": "{files} збережено в {folder}.",
   "chat.chatInput.toast.imageCopySaveFailed": "Не вдалося зберегти {files}.",
   "chat.chatInput.toast.someFilesSkipped": "Деякі файли були пропущені:\n{summary}",
   "chat.chatInput.toast.sharedFileTooLarge": "завеликий",
