@@ -14,7 +14,7 @@ import { repositoryBindingOwner, useRepositoryBindings } from '@/lib/source-cont
 import { applyIdentityToRepository } from '@/lib/source-control/applyIdentity';
 import { useGitIdentitiesStore } from '@/stores/useGitIdentitiesStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
-import type { SourceControlAuthAccount, SourceControlBindingRead, SourceControlProviderBinding } from '@/lib/api/types';
+import type { SourceControlAuthAccount, SourceControlBindingRead, SourceControlIdentity, SourceControlProviderBinding } from '@/lib/api/types';
 import {
   bindMutation,
   bindingTargetForRead,
@@ -28,6 +28,7 @@ import {
 } from './repositoryBindings';
 
 type AccountOption = { accountId: string; label: string; account: SourceControlAuthAccount };
+type BindOption = { key: string; label: string; identity: SourceControlIdentity; account: SourceControlAuthAccount };
 type UndoEntry = { directory: string; provider: SourceControlProviderBinding; profileId: string | null };
 
 type DialogState =
@@ -57,6 +58,8 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
   const [expanded, setExpanded] = React.useState<string | null>(null);
   const [dialog, setDialog] = React.useState<DialogState>(null);
   const [selectedAccount, setSelectedAccount] = React.useState('');
+  const [bindAccountKey, setBindAccountKey] = React.useState('');
+  const [bindRemote, setBindRemote] = React.useState('');
   const [keepDirectory, setKeepDirectory] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [result, setResult] = React.useState<string | null>(null);
@@ -118,6 +121,37 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
       .map((account) => ({ accountId: account.id, label: account.user.username || account.id, account }));
   }, [authEntries]);
 
+  const bindOptions = React.useMemo((): BindOption[] => {
+    const options: BindOption[] = [];
+    for (const identity of identities) {
+      const entry = authEntries[getSourceControlAuthKey(identity)];
+      if (entry?.status?.status !== 'connected') continue;
+      for (const account of entry.status.accounts ?? []) {
+        if (account.status !== 'valid') continue;
+        options.push({
+          key: JSON.stringify([identity.provider, identity.instance, account.id]),
+          label: `${identity.provider} @${account.user.username || account.id} · ${identity.instance}`,
+          identity: { provider: identity.provider, instance: identity.instance },
+          account,
+        });
+      }
+    }
+    return options.sort((left, right) => Number(right.account.current) - Number(left.account.current));
+  }, [authEntries, identities]);
+
+  const openBindDialog = React.useCallback((row: RepositoryBindingRow) => {
+    const target = row.read ? bindingTargetForRead(row.read, identities) : null;
+    const matched = target
+      ? bindOptions.find((option) => (
+        option.identity.provider === target.identity.provider
+        && normalizeInstance(option.identity.instance) === normalizeInstance(target.identity.instance)
+      ))
+      : undefined;
+    setBindAccountKey((matched ?? bindOptions[0])?.key ?? '');
+    setBindRemote(target?.primaryRemote ?? row.read?.repository.remotes[0]?.name ?? '');
+    setDialog({ kind: 'bind', directory: row.directory });
+  }, [bindOptions, identities]);
+
   const refresh = React.useCallback(async (directory: string, previous: SourceControlBindingRead, next: SourceControlBindingRead) => {
     const scope = repositoryBindingOwner.scope(directory);
     const mutation = repositoryBindingOwner.captureMutation(scope, previous);
@@ -165,19 +199,23 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
     await refresh(row.directory, current, next);
   }, [api.sourceControl, refresh]);
 
-  const bindRow = React.useCallback(async (row: RepositoryBindingRow, account: SourceControlAuthAccount) => {
+  const bindRow = React.useCallback(async (
+    row: RepositoryBindingRow,
+    identity: SourceControlIdentity,
+    account: SourceControlAuthAccount,
+    primaryRemote: string,
+  ) => {
     const current = row.read;
     if (!current || current.binding) return;
-    const target = bindingTargetForRead(current, identities);
-    if (!target) throw new Error('No matching remote for this account');
+    const target = { identity, primaryRemote };
     const profile = useGitIdentitiesStore.getState().profiles.find((item) => (
-      item.account?.provider === target.identity.provider
-      && normalizeInstance(item.account.instance) === normalizeInstance(target.identity.instance)
+      item.account?.provider === identity.provider
+      && normalizeInstance(item.account.instance) === normalizeInstance(identity.instance)
       && item.account.accountId === account.id
     ));
     if (profile) {
       const outcome = await applyIdentityToRepository(
-        { directory: row.directory, identity: profile, remoteName: target.primaryRemote },
+        { directory: row.directory, identity: profile, remoteName: primaryRemote },
         { git: api.git, sourceControl: api.sourceControl },
       );
       if (outcome.status !== 'applied') throw new Error('Applying this identity failed');
@@ -185,7 +223,7 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
       const bound = await api.sourceControl.repositoryProviderBindingMutate(
         bindMutation(row.directory, current, target, account.id),
       );
-      const remote = bound.repository.remotes.find((item) => item.name === target.primaryRemote);
+      const remote = bound.repository.remotes.find((item) => item.name === primaryRemote);
       if (remote && /^https?:\/\//.test(remote.fetch.displayUrl)) {
         await api.git.configureTransportBinding?.({
           directory: row.directory,
@@ -194,11 +232,11 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
           expectedConfigRevision: bound.repository.configRevision,
           expectedFetchFingerprint: remote.fetch.fingerprint,
           expectedPushFingerprint: remote.push.fingerprint,
-          remote: target.primaryRemote,
+          remote: primaryRemote,
           transport: 'https',
           credentialAccount: {
-            provider: target.identity.provider,
-            instance: target.identity.instance,
+            provider: identity.provider,
+            instance: identity.instance,
             accountId: account.id,
           },
         });
@@ -206,10 +244,11 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
     }
     const next = await api.sourceControl.repositoryBinding(row.directory);
     await refresh(row.directory, current, next);
-  }, [api.git, api.sourceControl, identities, refresh]);
+  }, [api.git, api.sourceControl, refresh]);
 
-  const bindTargetRow = dialog?.kind === 'bind' ? rows.find((row) => row.directory === dialog.directory) : undefined;
-  const bindTarget = bindTargetRow?.read ? bindingTargetForRead(bindTargetRow.read, identities) : null;
+  const bindDialogRow = dialog?.kind === 'bind' ? rows.find((row) => row.directory === dialog.directory) : undefined;
+  const bindRemotes = bindDialogRow?.read?.repository.remotes ?? [];
+  const selectedBindOption = bindOptions.find((option) => option.key === bindAccountKey) ?? null;
 
   const runDialog = React.useCallback(async () => {
     if (!dialog) return;
@@ -218,9 +257,9 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
     try {
       if (dialog.kind === 'bind') {
         const row = rows.find((entry) => entry.directory === dialog.directory);
-        const option = accountsFor(bindTarget?.identity.provider ?? 'github', bindTarget?.identity.instance ?? '')
-          .find((item) => item.accountId === selectedAccount);
-        if (row && option) await bindRow(row, option.account);
+        const remote = row?.read?.repository.remotes.find((item) => item.name === bindRemote);
+        if (!row || !selectedBindOption || !remote) throw new Error(t('repoBindings.bind.invalid'));
+        await bindRow(row, selectedBindOption.identity, selectedBindOption.account, remote.name);
         setResult(t('repoBindings.result.done'));
       } else if (dialog.kind === 'reset') {
         const row = rows.find((entry) => entry.directory === dialog.directory);
@@ -252,7 +291,7 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
     } finally {
       setBusy(false);
     }
-  }, [accountsFor, bindRow, bindTarget, dialog, groups, keepDirectory, rebindRow, resetRow, rows, selectedAccount, t]);
+  }, [bindRemote, bindRow, dialog, groups, keepDirectory, rebindRow, resetRow, rows, selectedAccount, selectedBindOption, t]);
 
   const undo = React.useCallback(async (entry: UndoEntry) => {
     setBusy(true);
@@ -340,8 +379,7 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
         <div className="divide-y rounded-md border">
           {visibleRows.map((row) => {
             const provider = row.read?.binding?.providers[0];
-            const rowTarget = row.read && !row.read.binding ? bindingTargetForRead(row.read, identities) : null;
-            const bindAccounts = rowTarget ? accountsFor(rowTarget.identity.provider, rowTarget.identity.instance) : [];
+            const canBind = Boolean(row.read && !row.read.binding);
             const duplicate = [...groups.values()].some((group) => group.members.some((member) => member.directory === row.directory));
             const statusKey = row.error ? 'repoBindings.status.error'
               : row.loading ? 'repoBindings.loading'
@@ -360,11 +398,8 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
                     <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded(expanded === row.directory ? null : row.directory)}>
                       {t('repoBindings.action.details')}
                     </Button>
-                    {bindAccounts.length > 0 ? (
-                      <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => {
-                        setSelectedAccount(bindAccounts[0].accountId);
-                        setDialog({ kind: 'bind', directory: row.directory });
-                      }}>
+                    {canBind ? (
+                      <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => openBindDialog(row)}>
                         {t('repoBindings.action.bind')}
                       </Button>
                     ) : null}
@@ -408,15 +443,33 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
                     : t('repoBindings.dialog.duplicate')}
             </DialogTitle>
           </DialogHeader>
-          {dialog?.kind === 'bind' && bindTarget ? (
-            <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-              <SelectTrigger aria-label={t('repoBindings.action.bind')}><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {accountsFor(bindTarget.identity.provider, bindTarget.identity.instance).map((account) => (
-                  <SelectItem key={account.accountId} value={account.accountId}>{account.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {dialog?.kind === 'bind' ? (
+            <div className="space-y-3">
+              {bindOptions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('repoBindings.bind.noAccount')}</p>
+              ) : (
+                <Select value={bindAccountKey} onValueChange={setBindAccountKey}>
+                  <SelectTrigger aria-label={t('repoBindings.dialog.rebind')}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {bindOptions.map((option) => (
+                      <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {bindRemotes.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('repoBindings.bind.noRemote')}</p>
+              ) : (
+                <Select value={bindRemote} onValueChange={setBindRemote}>
+                  <SelectTrigger aria-label={t('repoBindings.detail.remote')}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {bindRemotes.map((remote) => (
+                      <SelectItem key={remote.name} value={remote.name}>{remote.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           ) : null}
           {dialog?.kind === 'rebind' && activeDialogProvider ? (
             <Select value={selectedAccount} onValueChange={setSelectedAccount}>
@@ -440,7 +493,9 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
           ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setDialog(null)}>{t('settings.common.actions.cancel')}</Button>
-            <Button type="button" disabled={busy || ((dialog?.kind === 'rebind' || dialog?.kind === 'bind') && !selectedAccount)} onClick={() => void runDialog()}>
+            <Button type="button" disabled={busy
+              || (dialog?.kind === 'rebind' && !selectedAccount)
+              || (dialog?.kind === 'bind' && (!bindAccountKey || !bindRemote))} onClick={() => void runDialog()}>
               {t('repoBindings.action.confirm')}
             </Button>
           </DialogFooter>

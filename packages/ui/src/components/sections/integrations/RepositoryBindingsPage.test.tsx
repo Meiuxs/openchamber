@@ -63,7 +63,7 @@ const missingRead = (directory: string): SourceControlBindingRead => ({
     repositoryId: `repo:${directory}`,
     configRevision: 'config-1',
     bare: false,
-    remotes: [{ name: 'origin', fetch: { displayUrl: 'https://gitlab.example.com/root/app.git', fingerprint: 'fetch-fp' }, push: { displayUrl: 'https://gitlab.example.com/root/app.git', fingerprint: 'push-fp' } }],
+    remotes: [{ name: 'upstream', fetch: { displayUrl: 'https://selfhosted.example.org/team/app.git', fingerprint: 'fetch-fp' }, push: { displayUrl: 'https://selfhosted.example.org/team/app.git', fingerprint: 'push-fp' } }],
   },
   binding: null,
 });
@@ -178,7 +178,7 @@ describe('RepositoryBindingsPage', () => {
     dom.close();
   });
 
-  test('lists every OpenChamber project, marks unbound projects, and flags duplicates', async () => {
+  test('lists every project, flags duplicates, and binds manually when the remote cannot be inferred', async () => {
     const { createRoot } = await import('react-dom/client');
     root = createRoot(host);
     await act(async () => {
@@ -201,11 +201,12 @@ describe('RepositoryBindingsPage', () => {
     await act(async () => { confirm?.click(); });
     expect(mutateCalls[0]).toMatchObject({
       operation: 'add',
-      provider: { accountId: 'acct#1', primaryRemote: 'origin' },
+      provider: { provider: 'gitlab', instance: 'https://gitlab.example.com', accountId: 'acct#1', primaryRemote: 'upstream' },
     });
     expect(configureCalls[0]).toMatchObject({
       expectedRevision: 4,
       expectedFetchFingerprint: 'fetch-fp',
+      remote: 'upstream',
       transport: 'https',
       credentialAccount: { provider: 'gitlab', instance: 'https://gitlab.example.com', accountId: 'acct#1' },
     });
