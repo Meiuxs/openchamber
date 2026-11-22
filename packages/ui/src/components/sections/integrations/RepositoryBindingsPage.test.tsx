@@ -196,6 +196,8 @@ describe('RepositoryBindingsPage', () => {
     const bindButton = [...document.querySelectorAll('button')].find((button) => button.textContent === 'Bind');
     expect(bindButton).toBeTruthy();
     await act(async () => { bindButton?.click(); });
+    expect(host.textContent).toContain('root');
+    expect(host.textContent).not.toContain('["gitlab"');
     const confirm = [...document.querySelectorAll('button')].find((button) => button.textContent === 'Confirm');
     expect(confirm).toBeTruthy();
     await act(async () => { confirm?.click(); });

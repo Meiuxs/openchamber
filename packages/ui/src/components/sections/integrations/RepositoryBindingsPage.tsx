@@ -130,7 +130,7 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
         if (account.status !== 'valid') continue;
         options.push({
           key: JSON.stringify([identity.provider, identity.instance, account.id]),
-          label: `${identity.provider} @${account.user.username || account.id} · ${identity.instance}`,
+          label: account.user.username || account.id,
           identity: { provider: identity.provider, instance: identity.instance },
           account,
         });
@@ -449,7 +449,9 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
                 <p className="text-sm text-muted-foreground">{t('repoBindings.bind.noAccount')}</p>
               ) : (
                 <Select value={bindAccountKey} onValueChange={setBindAccountKey}>
-                  <SelectTrigger aria-label={t('repoBindings.dialog.rebind')}><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label={t('repoBindings.dialog.rebind')}>
+                    <SelectValue>{selectedBindOption?.label ?? ''}</SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     {bindOptions.map((option) => (
                       <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>
@@ -461,7 +463,9 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
                 <p className="text-sm text-muted-foreground">{t('repoBindings.bind.noRemote')}</p>
               ) : (
                 <Select value={bindRemote} onValueChange={setBindRemote}>
-                  <SelectTrigger aria-label={t('repoBindings.detail.remote')}><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label={t('repoBindings.detail.remote')}>
+                    <SelectValue>{bindRemote}</SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     {bindRemotes.map((remote) => (
                       <SelectItem key={remote.name} value={remote.name}>{remote.name}</SelectItem>
@@ -473,7 +477,12 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
           ) : null}
           {dialog?.kind === 'rebind' && activeDialogProvider ? (
             <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-              <SelectTrigger aria-label={t('repoBindings.action.rebind')}><SelectValue /></SelectTrigger>
+              <SelectTrigger aria-label={t('repoBindings.action.rebind')}>
+                <SelectValue>
+                  {accountsFor(activeDialogProvider.provider, activeDialogProvider.instance)
+                    .find((account) => account.accountId === selectedAccount)?.label ?? ''}
+                </SelectValue>
+              </SelectTrigger>
               <SelectContent>
                 {accountsFor(activeDialogProvider.provider, activeDialogProvider.instance).map((account) => (
                   <SelectItem key={account.accountId} value={account.accountId}>{account.label}</SelectItem>
