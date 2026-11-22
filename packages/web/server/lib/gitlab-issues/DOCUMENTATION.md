@@ -4,14 +4,14 @@ The design and requirements live in `docs/gitlab-issue-spec/gitlab-issue-automat
 
 ## Ownership
 
-This module turns one labeled GitLab issue into a reviewable merge request. It owns the polling dispatcher, the run ledger, the GitLab API adapter, the worktree and push boundary, the five prompt contracts (triage, plan, implement, review, feedback), and the read/act routes of the runs panel. It does not merge merge requests, it does not create issues, and it does not fix CI failures after a merge request opens. After a merge request opens it does answer reviewer comments: a bounded run of comment-driven fix rounds (`addressing`), described below.
+This module turns one labeled GitLab issue into a reviewable merge request. It owns the polling dispatcher, the run ledger, the GitLab API adapter, the worktree and push boundary, the six prompt contracts (triage, plan, implement, review, recheck, feedback), and the read/act routes of the runs panel. It does not merge merge requests, it does not create issues, and it does not fix CI failures after a merge request opens. After a merge request opens it does answer reviewer comments: a bounded run of comment-driven fix rounds (`addressing`), described below.
 
-- `dispatcher.ts` is the timer and the phase loop: project scan cadence, claim, concurrency caps, leases, cancellation, timeout, recovery, triage, review rounds, and merge polling.
+- `dispatcher.ts` is the timer and the phase loop: project scan cadence, claim, concurrency caps, leases, cancellation, timeout, recovery, triage, review and recheck rounds, and merge polling.
 - `ledger.ts` is the authoritative phase store at `<data dir>/gitlab-issue-runs.json`, keyed by `origin|projectId|iid`.
 - `machine.ts` declares the phases and the only legal transitions.
-- `gitlab.ts` parses the issue template, builds branch names, resolves accounts, and wraps the GitBeaker calls the dispatcher uses.
-- `workspace.ts` creates and removes worktrees, writes the commit identity, and runs authenticated fetch and push through a one-shot credential lease.
-- `prompts.ts` builds the triage, plan, implementation, review, and feedback prompts and validates the agent's structured output.
+- `gitlab.ts` parses the issue template, builds branch names, resolves accounts, resolves the project's automation config, and wraps the GitBeaker calls the dispatcher uses.
+- `workspace.ts` creates and removes worktrees, writes the commit identity, runs the project's verify command, and runs authenticated fetch and push through a one-shot credential lease.
+- `prompts.ts` builds the triage, plan, implementation, review, recheck, and feedback prompts and validates the agent's structured output.
 - `routes.ts` serves the issue-creation route and the panel's read/act routes. The act route changes GitLab labels or posts a command comment as the operator's bound account; it never writes the ledger.
 
 
@@ -20,9 +20,9 @@ The GitLab labels are a mirror for humans. A label change a human makes is read 
 ## Invariants
 
 - The ledger is authoritative. A label that announces a transition follows its ledger write. A comment the ledger must reference (the plan, the evidence, the merge request) is posted first so its note id can be recorded, and the transition itself is still written before the next phase does anything — a comment alone never announces a move the ledger has not made.
-- One run per project and three globally occupy a dispatch slot. A slot covers `claimed`, `preparing`, `triaging`, `planning`, `waiting-approval`, `implementing`, `reviewing`, `verifying`, and `addressing`.
+- One run per project and three globally occupy a dispatch slot. A slot covers `claimed`, `preparing`, `triaging`, `planning`, `waiting-approval`, `implementing`, `reviewing`, `rechecking`, `verifying`, and `addressing`.
 - One claim per project per tick and three globally. The issue list is read every third tick, at most three pages of 100; active runs are checked every tick.
-- The agent never pushes. The server pushes only after the branch prefix, a non-empty tree diff against the target, the evidence note, and a review verdict of `approve` all validate.
+- The agent never pushes. The server pushes only after the branch prefix, a non-empty tree diff against the target, the evidence note, an approving review — plus, while the project keeps the second review on, an approving blind recheck — and, when a verify command is configured, that command's own green exit all validate.
 - A worktree is created with the project's own setup commands (`setup-worktree`: shared ones the project trusted, plus personal ones) and its session starts only after that setup reports `setup-ready`. A failed setup blocks the run with the reason; a slow one leaves the run in `preparing` and the next tick asks again.
 - Push and merge-request creation use the triggerer's credential. Fetch and comments use the bot credential. Neither token enters the prompt, a log line, a commit, or the merge request body.
 - The server never force-pushes and never writes to the default or a protected branch.
@@ -30,6 +30,7 @@ The GitLab labels are a mirror for humans. A label change a human makes is read 
 - A dirty worktree is never deleted. The path is commented and kept in the ledger.
 - A failed issue list read is a skipped tick, not an empty result.
 - Every session a run opens stays on the ledger as `sessions` (`{ sessionId, stage, at }`, oldest first, at most 20), because a phase clears `sessionId` when it moves on. The runs route is its only reader.
+- A session the dispatcher creates carries `metadata.hidden: true` and `metadata.openchamber.kind: 'gitlab-automation'`, with the run's origin, project entry and issue number. The hidden-session proxy keeps it out of the main session list and event stream; the runs panel and the automation session archive reach it by ID through the ledger, using the worktree path, which the runs route exposes as `worktreePath`.
 
 ## Decisions
 
@@ -103,11 +104,39 @@ Removing it would discard work that may be the only copy of the change. The clea
 
 ### Why recovery only re-decides phases that hold a session
 
-A verifying run's session is already finished; its state belongs to the branch and the merge request, not to the session. Recovery therefore only checks `planning`, `preparing`, and `implementing`. A lost session returns to `implementing` when the branch has commits and to `claimed` when it does not. Waiting-approval and verifying continue from their stored phase. `triaging`, `reviewing` and `addressing` take a third path: the session is cleared and the same phase opens a fresh one next tick, because what those phases decide — is the report real, does the diff pass, are the feedback items answered — is not recorded anywhere on the branch.
+A verifying run's session is already finished; its state belongs to the branch and the merge request, not to the session. Recovery therefore only checks `planning`, `preparing`, and `implementing`. A lost session returns to `implementing` when the branch has commits and to `claimed` when it does not. Waiting-approval and verifying continue from their stored phase. `triaging`, `reviewing`, `rechecking` and `addressing` take a third path: the session is cleared and the same phase opens a fresh one next tick, because what those phases decide — is the report real, does the diff pass, does an independent reader agree, are the feedback items answered — is not recorded anywhere on the branch.
 
 ### Why the review is a separate session, not the implementer's own check
 
 An agent that reviews its own change confirms its own reasoning. A second session reads the diff with a reviewer prompt and only that prompt, so the verdict is independent of the implementation transcript. It still cannot push: `verifying` re-checks the diff, and an approve produces no commit.
+
+### Why the second review is blind and bounded to one pass
+
+The first reviewer reads the implementer's report alongside the diff, which is efficient but anchors: a reviewer who has been told what the change does tends to see that story in the code. The recheck session therefore gets no report at all — only the issue and the diff — so its approval is a second, independent reading rather than a confirmation of the first. It runs at most once per run: a rejecting recheck feeds the normal revision loop with `rechecked` set, so the next approval pushes directly and a fix-review-recheck-fix cycle cannot burn a session per round. A project that does not want the pass can set `gitlabIssueSecondReview` to false, and the first approval behaves as it did before the gate existed.
+
+### Why only a blocker finding may request changes
+
+The first contract said "findings is empty for approve", which forced a reviewer with a minor observation either to swallow it or to block a mergeable change over taste. Severity is now the verdict's justification: `request-changes` needs at least one `blocker` finding, minor findings ride an `approve`, and the parser refuses a verdict that contradicts its own severities, so a reviewer cannot block a change without naming what would break. Style, naming, and formatting preferences are excluded outright — the prompt allows them as findings only when the repository's own documented rules (AGENTS.md and the module's DOCUMENTATION.md, which every stage prompt now names) state the rule being broken, so "style" can never be a reviewer's personal taste.
+
+### Why the recheck and review sessions may run as a configured agent
+
+`gitlabIssueReviewAgent` names an OpenCode agent persona for both review passes, falling back to the project's default agent. A persona file (a `.opencode/agent/*.md` with `mode: subagent`) is where a project encodes reviewer discipline — findings over verdicts, no style nitpicks, what counts as evidence — and the automation reuses that instead of growing a second prompt vocabulary for reviewer behavior. The persona comes from the target repository's own agent files, so this repository ships none for it.
+
+### Why the server runs the project's verify command itself
+
+The agent's `verification` entries are self-reported by the session that wrote the change, and a report is not a gate. When a project sets `gitlabIssueVerifyCommand`, `verifying` runs that command in the worktree through `workspace.runVerifyCommand` and blocks the push on any non-zero exit or timeout, with the output tail in the blocked comment. The command comes from project settings an operator wrote — the same trust level as the worktree setup commands — so a shell is allowed, but the exit code decides, never the output's text.
+
+### Why an insufficient-info block reclaims on a new comment
+
+The blocked comment asks the reporter for detail, and a person answers in the issue thread, not by editing the description. The triage prompt therefore carries the issue's recent human comments as untrusted data, and a blocked run checks for any new non-bot comment from the triggerer or a Developer: found, it clears its verdict and reclaims through `claimed`, so the pipeline re-runs with the thread in front of it; missing, it stays blocked and the manual reset path is unchanged. Without the comments in the prompt, the resume would re-block on the same description it just read.
+
+### Why a project can defer the not-an-issue close
+
+The close is the one action in the verdict that a reporter cannot cheaply reverse perception of, and the judge is the same model family that will later fix the issue. `gitlabIssueAutoCloseNotAnIssue` set to false swaps the close for a block with the evidence comment above it: a human closes the issue, or answers the evidence and resets. The closing comment now also names the reopen path, because a person who disagrees needs to know the run will not look again until the ledger row is deleted.
+
+### Why the oscillation note fires before the round cap
+
+A revision loop that repeats itself is visible on the second `request-changes` round, but the cap only speaks at the third, after another full fix-and-review cycle has been paid for. From the second round on, a note names the findings whose file a previous round already flagged and this round flagged again, so a person watching the issue can step in before the budget runs out instead of reading about it in the block.
 
 ### Why review findings are re-wrapped as data
 
@@ -199,7 +228,11 @@ The MR diff can be large and the agent works in the worktree that holds it, so t
 
 ### Why the session title carries the stage
 
-The sidebar and the tab strip are the only surfaces that show these sessions without opening the runs panel, and `#17: Fix login` alone cannot tell a fix round from a review or a feedback round once several sessions pile up on one issue. The title therefore ends with the stage label (`· 判定` / `· 方案` / `· 修复` / `· 审核` / `· 反馈修复第 N 轮`), written at creation and never changed after; the run itself stays the structural link, carried by the ledger, not by the title.
+The automation archive and the tab strip are the surfaces that show these sessions without the runs list, and `#17: Fix login` alone cannot tell a fix round from a review or a feedback round once several sessions pile up on one issue. The title therefore ends with the stage label (`· 判定` / `· 方案` / `· 修复` / `· 审核` / `· 反馈修复第 N 轮`), written at creation and never changed after; the run itself stays the structural link, carried by the ledger, not by the title.
+
+### Why automation sessions are hidden from the main session list
+
+One issue opens a session per stage and per review or feedback round, so a busy project fills the main session list with work nobody started by hand. Creating each session with `metadata.hidden: true` keeps that list for the person's own sessions; the runs panel and the dedicated automation session archive read the ledger, which already names every session a run opened, and open one by ID with the run's `worktreePath`. Hiding only affects discovery: `session.get` and `message.list` still answer by ID, so the chat view shows the session's tools and files when it is opened.
 
 ### Why a lost addressing worktree blocks instead of rebuilding
 
@@ -276,6 +309,10 @@ The settings sanitizer stores a Windows path with backslashes while the UI sends
 ### Why errors are logged without the raw response
 
 A GitLab error object can carry the authenticated request — and its token. The logger extracts only the message and status fields, never the whole error, so a failed call cannot print a credential into the log. A failed ledger read is likewise surfaced as an error, never an empty list, so a broken ledger cannot masquerade as "no runs".
+
+### Why a folder that is not a Git repository answers "not a GitLab project"
+
+A project may be a plain folder, or a worktree whose git metadata is gone — neither can ever be bound to GitLab. The binding service says so by rejecting the read (`UNSUPPORTED_SOURCE_CONTROL_REPOSITORY`), and the routes treat that rejection as the answer it is: the create, runs and act routes answer `not-gitlab-project` rather than `lookup-failed`/`runs-unavailable`. A 500 here told the panel nothing it could show, and the board's runs tab, which has no other surface, rendered empty on every poll. Any other binding failure still propagates as a server error, because that one is the server's problem and not a property of the project.
 
 ### Why the panel can read and act when the bot token is broken
 

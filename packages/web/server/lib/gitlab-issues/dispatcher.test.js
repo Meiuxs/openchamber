@@ -60,7 +60,9 @@ const triageValidJson = '```json\n{"verdict":"valid","summary":"the timeout is u
 const triageNotAnIssueJson = '```json\n{"verdict":"not-an-issue","summary":"by design","evidence":"src/login.js:40 returns early"}\n```';
 const triageInsufficientJson = '```json\n{"verdict":"insufficient-info","summary":"nothing to check","missing":"reproduction steps"}\n```';
 const planJson = '```json\n{"files":["src/login.js"],"dataFlow":"add timeout","verification":"bun test","risks":"none","outOfScope":"no ui"}\n```';
-const reviewApproveJson = '```json\n{"verdict":"approve","summary":"fix matches the report","findings":[]}\n```';
+const reviewApproveJson = '```json\n{"verdict":"approve","summary":"fix matches the report","findings":[],"impact":{"modules":"login","business":"login works","compatibility":"none","rollback":"revert the branch","testScope":"login flow"}}\n```';
+const recheckApproveJson = '```json\n{"verdict":"approve","summary":"the fix stands on its own","findings":[]}\n```';
+const recheckChangesJson = '```json\n{"verdict":"request-changes","summary":"the recheck disagrees","findings":[{"file":"src/login.js","line":12,"severity":"blocker","note":"no upper bound"}]}\n```';
 const reviewChangesJson = '```json\n{"verdict":"request-changes","summary":"timeout is not bounded","findings":[{"file":"src/login.js","line":12,"severity":"blocker","note":"no upper bound"}]}\n```';
 const evidence = {
   rootCause: 'x', changes: 'y', verification: [{ command: 'bun test', result: 'pass' }], risks: 'z',
@@ -211,6 +213,7 @@ async function harness({
       removed: !state.worktreeDirty,
       dirty: state.worktreeDirty,
     })),
+    runVerifyCommand: vi.fn(async () => ({ code: 0, stdout: '', stderr: '' })),
   };
 
   const client = {
@@ -467,9 +470,25 @@ describe('GitLab issue dispatcher bug path', () => {
     state.messages = [message(reviewApproveJson)];
     await dispatcher.tick();
     run = (await ledger.list())[0];
-    expect(run.phase).toBe('verifying');
+    // The first approve does not push by itself: an independent blind recheck
+    // sits between the review and the verify step.
+    expect(run.phase).toBe('rechecking');
     expect(run.reviewVerdict).toBe('approve');
-    expect(state.notes.some((note) => note.body.includes('### 代码审核：通过'))).toBe(true);
+    expect(state.notes.some((note) => note.body.includes('### 代码审核：通过')
+      && note.body.includes('独立复核'))).toBe(true);
+
+    await dispatcher.tick();
+    expect(state.calls.sessionCreates).toBe(4);
+    expect(state.calls.prompts[3]).toContain('independent second review');
+    expect(state.calls.prompts[3]).not.toContain('<implementation-report');
+
+    state.messages = [message(recheckApproveJson)];
+    await dispatcher.tick();
+    run = (await ledger.list())[0];
+    expect(run.phase).toBe('verifying');
+    expect(run.recheckVerdict).toBe('approve');
+    expect(run.rechecked).toBe(true);
+    expect(state.notes.some((note) => note.body.includes('### 独立复核：通过'))).toBe(true);
 
     await dispatcher.tick();
     run = (await ledger.list())[0];
@@ -727,6 +746,146 @@ describe('GitLab issue dispatcher session start and outcome', () => {
 
     state.messages = [message(evidenceJson)];
     await expect(dispatcher.sessionStatus(run)).resolves.toBe('idle');
+  });
+});
+
+describe('GitLab issue dispatcher recheck and gates', () => {
+  it('pushes on the first approve when the project turns the recheck off', async () => {
+    const { dispatcher, ledger, state } = await harness({
+      projectOverrides: { gitlabIssueSecondReview: false },
+    });
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    await ledger.put(runEntry({
+      phase: 'reviewing', sessionId: 'ses_rev', worktreePath: 'D:/wt/17', attempts: 1,
+      evidence, evidenceNoteId: 1,
+    }));
+    state.messages = [message(reviewApproveJson)];
+
+    await dispatcher.tick();
+    expect((await ledger.list())[0]).toMatchObject({ phase: 'verifying', reviewVerdict: 'approve' });
+  });
+
+  it('feeds a rejecting recheck into the revision loop and never rechecks twice', async () => {
+    const { dispatcher, ledger, state } = await harness();
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    await ledger.put(runEntry({
+      phase: 'rechecking', sessionId: 'ses_rc', worktreePath: 'D:/wt/17', attempts: 0,
+      evidence, evidenceNoteId: 1, reviewVerdict: 'approve',
+    }));
+    state.messages = [message(recheckChangesJson)];
+
+    await dispatcher.tick();
+    let run = (await ledger.list())[0];
+    expect(run).toMatchObject({
+      phase: 'implementing', rechecked: true, recheckVerdict: 'request-changes',
+      reviewRounds: 1, sessionId: null,
+    });
+    expect((run.reviewFindings ?? []).some((finding) => finding.file === 'src/login.js')).toBe(true);
+    expect(state.notes.some((note) => note.body.includes('### 独立复核：需修改'))).toBe(true);
+
+    // The run has spent its one recheck: the next approve pushes directly.
+    await dispatcher.tick();
+    state.messages = [message(evidenceJson)];
+    await dispatcher.tick();
+    await dispatcher.tick();
+    state.messages = [message(reviewApproveJson)];
+    await dispatcher.tick();
+    run = (await ledger.list())[0];
+    expect(run.phase).toBe('verifying');
+    expect(state.calls.sessionCreates).toBe(2);
+  });
+
+  it('resumes an insufficient-info block when a developer answers in the thread', async () => {
+    const { dispatcher, ledger, state } = await harness();
+    state.issue.labels = ['ai-ready', 'ai-blocked'];
+    await ledger.put(runEntry({
+      phase: 'blocked', blockedReason: 'insufficient-info', attempts: 0,
+      worktreePath: 'D:/wt/17', triageNoteId: 100,
+    }));
+    state.notes.push({
+      id: 150, body: 'happens on 12.7; steps: open the login page', system: false,
+      created_at: new Date(NOW + 60_000).toISOString(), author: { id: 7, username: 'sam' },
+    });
+
+    await dispatcher.tick();
+
+    const run = (await ledger.list())[0];
+    expect(run).toMatchObject({
+      phase: 'claimed', blockedReason: null, triageNoteId: null, sessionId: null,
+    });
+    expect(state.calls.labels).toContainEqual(['remove', ['ai-blocked']]);
+    expect(state.calls.labels).toContainEqual(['add', ['ai-working']]);
+    expect(state.notes.some((note) => note.body.includes('收到补充信息'))).toBe(true);
+  });
+
+  it('runs the configured verify command before pushing and blocks on its failure', async () => {
+    const { dispatcher, ledger, state, workspace } = await harness({
+      projectOverrides: { gitlabIssueVerifyCommand: 'bun run check:changed' },
+    });
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    await ledger.put(runEntry({
+      phase: 'verifying', worktreePath: 'D:/wt/17', attempts: 1, evidenceNoteId: 1,
+      reviewVerdict: 'approve', evidence,
+    }));
+    workspace.runVerifyCommand.mockResolvedValueOnce({ code: 1, stdout: '', stderr: 'type error in login.ts' });
+
+    await dispatcher.tick();
+
+    expect(workspace.runVerifyCommand).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: 'D:/wt/17', command: 'bun run check:changed',
+    }));
+    expect((await ledger.list())[0]).toMatchObject({
+      phase: 'blocked', blockedReason: 'verification-failed',
+    });
+    expect(state.calls.pushes).toEqual([]);
+    expect(state.notes.some((note) => note.body.includes('bun run check:changed')
+      && note.body.includes('type error in login.ts'))).toBe(true);
+
+    // A green command lets the push through.
+    const green = await harness({ projectOverrides: { gitlabIssueVerifyCommand: 'bun run check:changed' } });
+    green.state.issue.labels = ['ai-ready', 'ai-working'];
+    await green.ledger.put(runEntry({
+      phase: 'verifying', worktreePath: 'D:/wt/17', attempts: 1, evidenceNoteId: 1,
+      reviewVerdict: 'approve', evidence,
+    }));
+    await green.dispatcher.tick();
+    expect((await green.ledger.list())[0].phase).toBe('mr-open');
+    expect(green.state.calls.pushes).toEqual(['openchamber/issue-17-fix-login']);
+  });
+
+  it('waits for a human close when the project disables auto-closing a non-issue', async () => {
+    const { dispatcher, ledger, state } = await harness({
+      projectOverrides: { gitlabIssueAutoCloseNotAnIssue: false },
+    });
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    await ledger.put(runEntry({
+      phase: 'triaging', sessionId: 'ses_triage', worktreePath: 'D:/wt/17', attempts: 0,
+    }));
+    state.messages = [message(triageNotAnIssueJson)];
+
+    await dispatcher.tick();
+    expect((await ledger.list())[0]).toMatchObject({
+      phase: 'blocked', blockedReason: 'not-an-issue', triageVerdict: 'not-an-issue',
+    });
+    expect(state.calls.closes).toBe(0);
+    expect(state.issue.state).toBe('opened');
+    expect(state.notes.some((note) => note.body.includes('等待人工确认'))).toBe(true);
+  });
+
+  it('warns early when a revision round repeats an earlier finding', async () => {
+    const { dispatcher, ledger, state } = await harness();
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    await ledger.put(runEntry({
+      phase: 'reviewing', sessionId: 'ses_rev', worktreePath: 'D:/wt/17', attempts: 0,
+      evidence, evidenceNoteId: 1, reviewRounds: 1,
+      reviewFindings: [{ file: 'src/login.js', line: 12, severity: 'blocker', note: 'no upper bound' }],
+    }));
+    state.messages = [message(reviewChangesJson)];
+
+    await dispatcher.tick();
+    expect((await ledger.list())[0]).toMatchObject({ phase: 'implementing', reviewRounds: 2 });
+    expect(state.notes.some((note) => note.body.includes('此前已指出')
+      && note.body.includes('src/login.js'))).toBe(true);
   });
 });
 
@@ -1028,11 +1187,15 @@ describe('GitLab issue dispatcher cleanup and recovery', () => {
     await dispatcher.tick();
     await dispatcher.tick();
     // The review gate sits between the implementation and the push: open the
-    // review session, then let its approve verdict reach the verify step.
+    // review session, then let its approve verdict reach the recheck, and the
+    // recheck's approve reach the verify step.
     state.messages = [message(reviewApproveJson)];
     await dispatcher.tick();
     await dispatcher.tick();
-    // The verdict unlocks the verify step; the comparison runs on its tick.
+    state.messages = [message(recheckApproveJson)];
+    await dispatcher.tick();
+    await dispatcher.tick();
+    // Both verdicts unlocked the verify step; the comparison runs on its tick.
     await dispatcher.tick();
     expect(workspace.hasDiffSince).toHaveBeenCalledWith({
       cwd: 'D:/wt/17',
@@ -1380,7 +1543,13 @@ describe('GitLab issue dispatcher feedback rounds', () => {
     state.messages = [message(reviewApproveJson)];
     await dispatcher.tick();
     let run = (await ledger.list())[0];
-    expect(run).toMatchObject({ phase: 'verifying', feedbackItems: null });
+    expect(run).toMatchObject({ phase: 'rechecking', feedbackItems: null });
+
+    await dispatcher.tick();
+    state.messages = [message(recheckApproveJson)];
+    await dispatcher.tick();
+    run = (await ledger.list())[0];
+    expect(run).toMatchObject({ phase: 'verifying', recheckVerdict: 'approve' });
 
     await dispatcher.tick();
     run = (await ledger.list())[0];

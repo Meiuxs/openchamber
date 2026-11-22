@@ -20,7 +20,8 @@ const paged = (data) => async () => ({ data, paginationInfo: { next: null } });
 const evidenceJson = '```json\n{"rootCause":"missing timeout","changes":"added timeout","verification":[{"command":"bun test","result":"pass"}],"risks":"none"}\n```';
 const triageValidJson = '```json\n{"verdict":"valid","summary":"the timeout is unbounded"}\n```';
 const triageNotAnIssueJson = '```json\n{"verdict":"not-an-issue","summary":"by design","evidence":"src/login.js:40 returns early"}\n```';
-const reviewApproveJson = '```json\n{"verdict":"approve","summary":"fix matches the report","findings":[]}\n```';
+const reviewApproveJson = '```json\n{"verdict":"approve","summary":"fix matches the report","findings":[],"impact":{"modules":"login","business":"login works","compatibility":"none","rollback":"revert the branch","testScope":"login flow"}}\n```';
+const recheckApproveJson = '```json\n{"verdict":"approve","summary":"the fix stands on its own","findings":[]}\n```';
 const planJson = '```json\n{"files":["src/login.js"],"dataFlow":"add timeout","verification":"bun test","risks":"none","outOfScope":"no ui"}\n```';
 
 async function createFixture() {
@@ -248,6 +249,17 @@ describe('GitLab issue automation integration', () => {
       time: { completed: NOW + 2000 },
     }];
     await dispatcher.tick();
+    // The first approve hands the change to the blind recheck, not to the push.
+    expect((await ledger.list())[0].phase).toBe('rechecking');
+
+    await dispatcher.tick();
+    expect(state.calls.sessionCreates).toBe(4);
+    state.messages = [{
+      type: 'assistant',
+      content: [{ type: 'text', text: recheckApproveJson }],
+      time: { completed: NOW + 2500 },
+    }];
+    await dispatcher.tick();
     expect((await ledger.list())[0].phase).toBe('verifying');
 
     await dispatcher.tick();
@@ -320,6 +332,15 @@ describe('GitLab issue automation integration', () => {
       type: 'assistant',
       content: [{ type: 'text', text: reviewApproveJson }],
       time: { completed: NOW + 4000 },
+    }];
+    await dispatcher.tick();
+    expect((await ledger.list())[0].phase).toBe('rechecking');
+
+    await dispatcher.tick();
+    state.messages = [{
+      type: 'assistant',
+      content: [{ type: 'text', text: recheckApproveJson }],
+      time: { completed: NOW + 5000 },
     }];
     await dispatcher.tick();
     expect((await ledger.list())[0].phase).toBe('verifying');

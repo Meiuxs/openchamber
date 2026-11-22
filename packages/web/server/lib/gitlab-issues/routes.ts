@@ -1,6 +1,6 @@
 import { parseGitLabRemoteUrl } from '../gitlab/repo.js';
 import { isValidGitRefName } from '../shared/git-ref.js';
-import { isPlainObject, isString } from '../shared/guards.js';
+import { isPlainObject, isRecord, isString } from '../shared/guards.js';
 import type { JsonObject, JsonValue } from '../shared/json-values.js';
 import type { Application, Request, Response } from '../shared/http-contracts.js';
 import type { SettingsProject } from '../settings/settings-normalization-runtime.js';
@@ -101,8 +101,25 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
     return projects.find((project) => canonicalDirectory(project?.path) === wanted) ?? null;
   };
 
+  /**
+   * A project whose folder is not a Git repository cannot be bound to GitLab,
+   * and the binding service says so by rejecting the read. That is an answer
+   * about the project, not a failure to answer: treated like a folder with no
+   * GitLab binding, so a panel asking about it gets "not GitLab" instead of a
+   * server error it could only show as broken.
+   */
+  const readBindingOrNull = async (path: string): Promise<BindingRead | null> => {
+    try {
+      return await bindingService.get(path);
+    } catch (error) {
+      const code = isRecord(error) ? error.code : null;
+      if (code === 'UNSUPPORTED_SOURCE_CONTROL_REPOSITORY') return null;
+      throw error;
+    }
+  };
+
   const resolveTarget = async (project: SettingsProject, config: ReturnType<typeof resolveProjectConfig>) => {
-    const bindingRead: BindingRead | null = await bindingService.get(project.path);
+    const bindingRead: BindingRead | null = await readBindingOrNull(project.path);
     const provider = (bindingRead?.binding?.providers ?? []).find((entry) => (
       entry?.provider === 'gitlab' && entry.readiness === 'ready'
     ));
@@ -210,7 +227,7 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
   });
 
   const resolveInstanceProject = async (project: SettingsProject) => {
-    const bindingRead: BindingRead | null = await bindingService.get(project.path);
+    const bindingRead: BindingRead | null = await readBindingOrNull(project.path);
     const provider = (bindingRead?.binding?.providers ?? []).find((entry) => (
       entry?.provider === 'gitlab' && entry.readiness === 'ready'
     ));
@@ -295,6 +312,7 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
       lastError: run.lastError ?? null,
       branch: run.branch ?? null,
       targetBranch: run.targetBranch ?? null,
+      worktreePath: run.worktreePath ?? null,
       mrIid: run.mrIid ?? null,
       issueUrl: issueUrlOf(run),
       mrUrl: mrUrlOf(run),
@@ -302,7 +320,12 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
       reviewRounds: run.reviewRounds ?? 0,
       feedbackRounds: run.feedbackRounds ?? 0,
       reviewVerdict: run.reviewVerdict ?? null,
+      reviewFindings: run.reviewFindings ?? null,
+      reviewImpact: run.reviewImpact ?? null,
       triageVerdict: run.triageVerdict ?? null,
+      triage: run.triage ?? null,
+      plan: run.plan ?? null,
+      evidence: run.evidence ?? null,
       outcome: run.outcome ?? null,
       since: run.since ?? null,
       updatedAt: run.updatedAt ?? null,
@@ -324,6 +347,7 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
 
   app.get('/api/gitlab-issues/runs', async (req: Request, res: Response) => {
     const directory = isString(req.query?.directory) ? req.query.directory.trim() : '';
+    const includeDone = req.query?.includeDone === '1';
     let runs: RunEntry[];
     try {
       runs = await dispatcher.ledger.list();
@@ -354,7 +378,7 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
       }
       const enabled = (await readProjects()).filter((project) => resolveProjectConfig(project).enabled);
       const byEntryId = new Map(enabled.map((project) => [String(project.id), project]));
-      const scoped = runs.filter((run) => run.phase !== 'done' && byEntryId.has(String(run.projectEntryId)));
+      const scoped = runs.filter((run) => (includeDone || run.phase !== 'done') && byEntryId.has(String(run.projectEntryId)));
       const states = await issueStatesOf(scoped);
       return res.json({
         runs: await Promise.all(scoped.map((run) => toRunView(run, states.get(runViewKey(run)) ?? null))),
@@ -387,9 +411,9 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
       if (action === 'take' && run.blockedReason !== 'missing-credential') {
         return res.status(409).json({ error: 'phase-mismatch', phase: run.phase });
       }
-      if (accountId === project.gitlabIssueBotAccountId) {
-        return res.status(403).json({ error: 'account-is-bot' });
-      }
+      // The acting account may be the project's bot account: a person can share
+      // one GitLab account with the automation, because the dispatcher tags its
+      // own notes with BOT_NOTE_MARKER instead of relying on author identity.
       const accounts = await authStore.listAccounts(run.origin);
       const acting = accounts.find((entry) => entry?.credentialId === accountId && entry?.status === 'valid');
       if (!acting) return res.status(409).json({ error: 'account-unbound' });

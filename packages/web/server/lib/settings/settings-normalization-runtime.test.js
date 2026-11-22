@@ -189,11 +189,15 @@ describe('settings normalization runtime - symlink resolution', () => {
           id: 'proj1', path: '/a', autoDispatchGitlabIssues: true,
           gitlabIssueBranchPrefix: 'team/bot/', gitlabIssueBotAccountId: 'acc-1',
           gitlabIssueTimeoutMinutes: 45,
+          gitlabIssueReviewAgent: ' review-changes ', gitlabIssueVerifyCommand: ' bun run check ',
+          gitlabIssueSecondReview: false, gitlabIssueAutoCloseNotAnIssue: false,
         },
         {
           id: 'proj2', path: '/b', autoDispatchGitlabIssues: false,
           gitlabIssueBranchPrefix: 'bad prefix/', gitlabIssueBotAccountId: ' ',
           gitlabIssueTimeoutMinutes: 0,
+          gitlabIssueReviewAgent: '   ', gitlabIssueVerifyCommand: '  ',
+          gitlabIssueSecondReview: 'no', gitlabIssueAutoCloseNotAnIssue: 1,
         },
         {
           id: 'proj3', path: '/c', autoDispatchGitlabIssues: true,
@@ -207,6 +211,10 @@ describe('settings normalization runtime - symlink resolution', () => {
         gitlabIssueBranchPrefix: 'team/bot/',
         gitlabIssueBotAccountId: 'acc-1',
         gitlabIssueTimeoutMinutes: 45,
+        // The recheck and close gates are opt-out: an explicit false must
+        // survive the round trip, and absence stays absence.
+        gitlabIssueReviewAgent: 'review-changes', gitlabIssueVerifyCommand: 'bun run check',
+        gitlabIssueSecondReview: false, gitlabIssueAutoCloseNotAnIssue: false,
       });
       expect(result[1]).not.toHaveProperty('autoDispatchGitlabIssues');
       expect(result[1]).toMatchObject({
@@ -214,6 +222,10 @@ describe('settings normalization runtime - symlink resolution', () => {
         gitlabIssueTimeoutMinutes: 0,
       });
       expect(result[1]).not.toHaveProperty('gitlabIssueBotAccountId');
+      expect(result[1]).not.toHaveProperty('gitlabIssueReviewAgent');
+      expect(result[1]).not.toHaveProperty('gitlabIssueVerifyCommand');
+      expect(result[1]).not.toHaveProperty('gitlabIssueSecondReview');
+      expect(result[1]).not.toHaveProperty('gitlabIssueAutoCloseNotAnIssue');
       expect(result[2]).toMatchObject({ gitlabIssueBranchPrefix: 'openchamber' });
       expect(result[2]).not.toHaveProperty('gitlabIssueTimeoutMinutes');
       expect(runtime.sanitizeProjects(JSON.parse(JSON.stringify(result)))).toEqual(result);

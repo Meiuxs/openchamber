@@ -105,6 +105,44 @@ describe('GitLab issue workspace', () => {
     await expect(unchanged.hasDiffSince({ cwd: 'D:/wt', baseRef: 'origin/main' })).resolves.toBe(false);
   });
 
+  it('runs the verify command in the worktree and reports its exit code', async () => {
+    // The verify command is a shell line an operator wrote, so it runs with
+    // `shell: true` and its exit code — never its output — is the answer.
+    const { spawnImpl, calls } = fakeSpawn([
+      { when: (options) => options.shell === true, stdout: 'ok\n', stderr: '', code: 0 },
+    ]);
+    const workspace = createGitlabIssueWorkspace({ spawnImpl, credentialBroker: broker() });
+    await expect(workspace.runVerifyCommand({
+      cwd: 'D:/wt', command: 'bun run check:changed', timeoutMs: 60_000,
+    })).resolves.toEqual({ code: 0, stdout: 'ok\n', stderr: '' });
+    expect(calls[0].binary).toBe('bun run check:changed');
+    expect(calls[0].args.cwd).toBe('D:/wt');
+    expect(calls[0].args.shell).toBe(true);
+
+    const failing = createGitlabIssueWorkspace({
+      spawnImpl: fakeSpawn([{ when: (options) => options.shell === true, stdout: '', stderr: 'type error', code: 1 }]).spawnImpl,
+      credentialBroker: broker(),
+    });
+    // A failing check resolves with its code: the dispatcher decides what to do.
+    await expect(failing.runVerifyCommand({
+      cwd: 'D:/wt', command: 'bun run check:changed', timeoutMs: 60_000,
+    })).resolves.toMatchObject({ code: 1 });
+  });
+
+  it('kills a verify command that never finishes', async () => {
+    const spawnImpl = () => {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = vi.fn();
+      return child;
+    };
+    const workspace = createGitlabIssueWorkspace({ spawnImpl, credentialBroker: broker() });
+    await expect(workspace.runVerifyCommand({
+      cwd: 'D:/wt', command: 'bun run never-ends', timeoutMs: 5,
+    })).rejects.toMatchObject({ code: 'verify-timeout' });
+  });
+
   it('refuses a signed-commit repository before the agent runs', async () => {
     const { spawnImpl } = fakeSpawn([
       { when: (args) => args.includes('commit.gpgsign'), stdout: 'true\n' },

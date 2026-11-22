@@ -25,8 +25,9 @@ import {
   AgentOutputError, buildFeedbackPrompt, buildImplementPrompt, buildPlanPrompt, buildReviewPrompt,
   buildTriagePrompt,
   formatBareMentionComment, formatBlockedComment, formatEvidenceComment, formatFeedbackAckComment,
-  formatFeedbackPushComment, formatFindingLine, formatMrComment, formatPlanComment,
-  formatReviewComment, formatTriageComment, parseAgentOutput, sessionStageLabel,
+  formatFeedbackPushComment, formatFindingLine, formatMrComment, formatOscillationComment,
+  formatPlanComment, formatRecheckComment, formatReviewComment, formatTriageComment,
+  parseAgentOutput, sessionStageLabel,
 } from './prompts.js';
 import type { EvidenceResult, Finding, FeedbackLine } from './prompts.js';
 import type { IssueCredential } from './workspace.js';
@@ -40,10 +41,15 @@ const MAX_ATTEMPTS = 2;
 const REVIEW_MAX_REVISIONS = 3;
 const FEEDBACK_MAX_ROUNDS = 5;
 const FEEDBACK_MIN_ACCESS_LEVEL = 30;
+/**
+ * The verify command is the server's own gate, so it gets a bound no agent
+ * phase can stretch: a check that hangs must not hold the run's slot.
+ */
+const VERIFY_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
 const SLOT_PHASES: readonly string[] = Object.freeze([
   PHASES.CLAIMED, PHASES.TRIAGING, PHASES.PLANNING, PHASES.WAITING_APPROVAL,
-  PHASES.PREPARING, PHASES.IMPLEMENTING, PHASES.REVIEWING, PHASES.VERIFYING,
-  PHASES.ADDRESSING,
+  PHASES.PREPARING, PHASES.IMPLEMENTING, PHASES.REVIEWING, PHASES.RECHECKING,
+  PHASES.VERIFYING, PHASES.ADDRESSING,
 ]);
 
 const SESSION_FAILED_DETAIL = '会话没有任何输出就结束了（常见原因：模型不可用、额度不足，或会话被中断）。';
@@ -185,6 +191,7 @@ interface CreateGitlabIssueWorkspaceLike {
   pushBranch(input: { cwd: string; remote: string; branch: string; credential: IssueCredential }): Promise<{ branch: string; sha: string }>;
   removeWorktreeSafely(input: { repoPath: string; worktreePath: string | null | undefined }): Promise<{ removed: boolean; dirty: boolean }>;
   run(args: string[], options?: { cwd?: string | undefined }): Promise<WorkspaceCommandResult>;
+  runVerifyCommand(input: { cwd: string; command: string; timeoutMs: number }): Promise<WorkspaceCommandResult>;
 }
 
 interface DispatchContext {
@@ -220,6 +227,21 @@ const isInteger = (value: unknown): value is number => Number.isInteger(value);
 const asId = (value: JsonValue | undefined): string | number => (isString(value) || isInteger(value) ? value : 0);
 const asIid = (value: JsonValue | undefined): number => (isInteger(value) ? value : 0);
 const asText = (value: JsonValue | null | undefined) => (isString(value) ? value : '');
+
+/** The human thread an issue carries, newest kept, bot and system notes left out. */
+const MAX_TRIAGE_COMMENTS = 20;
+const readIssueComments = (notes: JsonObject[]): FeedbackLine[] => (Array.isArray(notes) ? notes : [])
+  .filter((note) => isJsonRecord(note) && isInteger(note.id) && note.system !== true
+    && !isBotNoteBody(asText(note.body)))
+  .slice(-MAX_TRIAGE_COMMENTS)
+  .map((note) => {
+    const author = isJsonRecord(note.author) ? note.author : null;
+    return {
+      author: isString(author?.username) ? author.username : 'unknown',
+      text: asText(note.body),
+    };
+  })
+  .filter((item) => item.text.trim().length > 0);
 
 export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies) {
   const {
@@ -572,7 +594,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
   };
 
   const startSession = async (run: RunEntry, context: DispatchContext, stage: string): Promise<RunEntry> => {
-    if (stage !== 'review' && (run.attempts ?? 0) >= MAX_ATTEMPTS) {
+    if (stage !== 'review' && stage !== 'recheck' && (run.attempts ?? 0) >= MAX_ATTEMPTS) {
       return failRun(run, context, BLOCKED_REASONS.REPEATED_ERROR, 'Attempt limit reached');
     }
     let setupState: 'ready' | 'pending' | 'failed' = 'ready';
@@ -592,6 +614,16 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     }
     const client = sessionClient(run);
     const issue = await context.api.getIssue(run.projectId, run.iid);
+    // The triage verdict weighs the issue thread too: a report blocked for
+    // missing detail answers in the comments, not by editing the description.
+    const triageComments = stage === 'triage'
+      ? await context.api.listNotes(run.projectId, run.iid ?? 0)
+        .then(readIssueComments)
+        .catch((error) => {
+          warn(`[gitlab-issues] comment read failed for #${run.iid}:`, error);
+          return null as FeedbackLine[] | null;
+        })
+      : null;
     const actor = await resolveAccount(authStore, run.origin, run.actorAccountId);
     if (!actor) {
       return blockWithComment(run, context, BLOCKED_REASONS.MISSING_CREDENTIAL, '触发者账号不可用。');
@@ -612,7 +644,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
         },
       },
     };
-    const usesReviewModel = stage === 'review' && Boolean(context.config.reviewModel);
+    const usesReviewModel = (stage === 'review' || stage === 'recheck') && Boolean(context.config.reviewModel);
     const modelValue = isString(usesReviewModel ? context.config.reviewModel : context.project.defaultModel)
       ? String(usesReviewModel ? context.config.reviewModel : context.project.defaultModel).trim()
       : '';
@@ -627,7 +659,12 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
         model.variant = variant;
       }
     }
-    if (context.project.defaultAgent) payload.agent = context.project.defaultAgent;
+    // The review passes may run as a dedicated agent persona; without one they
+    // fall back to the project's default agent like every other stage.
+    const stageAgent = (stage === 'review' || stage === 'recheck') && context.config.reviewAgent
+      ? context.config.reviewAgent
+      : context.project.defaultAgent ?? '';
+    if (stageAgent) payload.agent = stageAgent;
     const session = await client.session.create(payload);
     const sessionData = isJsonRecord(session) ? session : null;
     const sessionID = asText(isJsonRecord(sessionData?.data) ? sessionData.data.id : sessionData?.id);
@@ -635,13 +672,14 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     const nextPhase = stage === 'triage' ? PHASES.TRIAGING
       : stage === 'plan' ? PHASES.PLANNING
         : stage === 'review' ? PHASES.REVIEWING
-          : stage === 'feedback' ? PHASES.ADDRESSING : PHASES.IMPLEMENTING;
+          : stage === 'recheck' ? PHASES.RECHECKING
+            : stage === 'feedback' ? PHASES.ADDRESSING : PHASES.IMPLEMENTING;
     await ledger.update(keyOf(run), {
       sessionId: sessionID,
       sessions: withSession(run, { sessionId: sessionID, stage: nextPhase, at: isoNow() }),
       phase: nextPhase,
       since: isoNow(),
-      attempts: stage === 'triage' || stage === 'review' || stage === 'feedback'
+      attempts: stage === 'triage' || stage === 'review' || stage === 'recheck' || stage === 'feedback'
         ? (run.attempts ?? 0) : (run.attempts ?? 0) + 1,
       leaseUntil: new Date(now() + leaseMs).toISOString(),
       events: withEvents(run, [
@@ -651,7 +689,11 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     });
     const text = stage === 'triage'
       ? buildTriagePrompt({
-        issue,
+        issue: {
+          title: isString(issue?.title) ? issue.title : null,
+          description: isString(issue?.description) ? issue.description : null,
+          comments: triageComments,
+        },
         iid: run.iid,
         projectPath: run.worktreePath ?? '',
         actorLogin: asText(actor.user.login),
@@ -670,6 +712,19 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
           baseRef: `${context.primaryRemote}/${run.targetBranch}`,
           evidence: run.evidence,
           feedbackItems: run.feedbackItems,
+        })
+        : stage === 'recheck'
+        ? buildReviewPrompt({
+          issue,
+          iid: run.iid,
+          projectPath: run.worktreePath ?? '',
+          actorLogin: asText(actor.user.login),
+          baseRef: `${context.primaryRemote}/${run.targetBranch}`,
+          // Blind by design: the recheck reads the diff without the implementer's
+          // report so an approval cannot lean on the author's own reasoning.
+          evidence: null,
+          feedbackItems: null,
+          secondOpinion: true,
         })
         : stage === 'feedback'
           ? buildFeedbackPrompt({
@@ -745,15 +800,21 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       blockedFrom: null,
       triageVerdict: null,
       triageNoteId: null,
+      triage: null,
       outcome: null,
       approvalNoteId: null,
       planNoteId: null,
+      plan: null,
       evidenceNoteId: null,
       evidence: null,
       reviewRounds: 0,
       reviewNoteId: null,
       reviewVerdict: null,
       reviewFindings: null,
+      reviewImpact: null,
+      recheckVerdict: null,
+      recheckNoteId: null,
+      rechecked: false,
       feedbackRounds: 0,
       lastFeedbackActor: null,
       feedbackItems: null,
@@ -894,6 +955,17 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
   const handlePreparing = async (run: RunEntry, context: DispatchContext) => startSession(run, context, 'triage');
 
   const closeAsNotAnIssue = async (run: RunEntry, context: DispatchContext, triage: { verdict: string }, noteId: number) => {
+    if (context.config.autoCloseNotAnIssue === false) {
+      // Closing is the one action the verdict takes that a human cannot cheaply
+      // undo, so a project can ask for a person to confirm it first.
+      return blockWithComment(
+        run,
+        context,
+        BLOCKED_REASONS.NOT_AN_ISSUE,
+        '判定为非问题（依据见上一条评论）。按项目配置已暂停，等待人工确认后关闭；如认同请直接关闭 issue，如不认同请回复说明。',
+        { triageVerdict: triage.verdict, triageNoteId: noteId },
+      );
+    }
     try {
       await context.api.closeIssue(run.projectId, run.iid ?? 0);
     } catch (error) {
@@ -954,6 +1026,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     return transition(run, run.kind === 'feature' ? PHASES.PLANNING : PHASES.IMPLEMENTING, {
       triageVerdict: triage.verdict,
       triageNoteId: noteId,
+      triage,
       sessionId: null,
       attempts: 0,
     });
@@ -978,7 +1051,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, error.message);
     }
     const noteId = await context.api.postNote(run.projectId, run.iid ?? 0, formatPlanComment(plan));
-    const next = await transition(run, PHASES.WAITING_APPROVAL, { planNoteId: noteId, sessionId: null });
+    const next = await transition(run, PHASES.WAITING_APPROVAL, { planNoteId: noteId, plan, sessionId: null });
     await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-plan-review'])
       .catch((error) => warn(`[gitlab-issues] ai-plan-review label failed for #${run.iid}:`, error));
     await context.api.removeLabels(run.projectId, run.iid ?? 0, ['ai-working'])
@@ -1043,6 +1116,49 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     return next;
   };
 
+  /**
+   * An `insufficient-info` block asked the issue for detail; a new human
+   * comment is that detail arriving. The run reclaims itself instead of
+   * waiting for a manual label reset, because the claim gate already ensures
+   * the triggerer is a Developer, the same bar the feedback commands use.
+   */
+  const resumeOnNewInfo = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | null> => {
+    let notes: JsonObject[];
+    let members: Map<number, number>;
+    try {
+      notes = await context.api.listNotes(run.projectId, run.iid ?? 0);
+      members = new Map((await context.api.listMembers(run.projectId))
+        .map((member): [number, number] => [Number(member?.id), Number(member?.access_level)]));
+    } catch {
+      // A failed read skips this tick's resume; the manual reset path still works.
+      return null;
+    }
+    const watermark = run.triageNoteId ?? 0;
+    const answered = notes.some((note) => {
+      const author = isJsonRecord(note?.author) ? note.author : null;
+      const authorId = Number(author?.id ?? 0);
+      return isInteger(note?.id) && note.id > watermark
+        && note.system !== true && !isBotNoteBody(asText(note.body))
+        && (authorId === (run.actorUserId ?? 0) || (members.get(authorId) ?? 0) >= FEEDBACK_MIN_ACCESS_LEVEL);
+    });
+    if (!answered) return null;
+    const next = await transition(run, PHASES.CLAIMED, {
+      blockedReason: null,
+      triageVerdict: null,
+      triageNoteId: null,
+      triage: null,
+      sessionId: null,
+      attempts: 0,
+    });
+    await context.api.removeLabels(run.projectId, run.iid ?? 0, ['ai-blocked'])
+      .catch((error) => warn(`[gitlab-issues] ai-blocked label failed for #${run.iid}:`, error));
+    await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-working'])
+      .catch((error) => warn(`[gitlab-issues] ai-working label failed for #${run.iid}:`, error));
+    await context.api.postNote(run.projectId, run.iid ?? 0, '收到补充信息，重新开始判定。')
+      .catch((error) => warn(`[gitlab-issues] resume note failed for #${run.iid}:`, error));
+    return next;
+  };
+
   const handleBlocked = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | void> => {
     if (run.blockedReason === BLOCKED_REASONS.MISSING_CREDENTIAL) {
       const command = await context.api.latestCommand(run.projectId, run.iid ?? 0, {
@@ -1067,6 +1183,10 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
           return next;
         }
       }
+    }
+    if (run.blockedReason === BLOCKED_REASONS.INSUFFICIENT_INFO) {
+      const resumed = await resumeOnNewInfo(run, context);
+      if (resumed) return resumed;
     }
     const issue = await context.api.getIssue(run.projectId, run.iid ?? 0);
     if (issue.state === 'opened' && hasLabel(issue, 'ai-ready') && !hasLabel(issue, 'ai-blocked')) {
@@ -1098,6 +1218,33 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     });
   };
 
+  /** Findings this round that a previous round already named: the loop a person must see early. */
+  const recurringFindings = (run: RunEntry, current: Finding[]) => {
+    const previous = Array.isArray(run.reviewFindings) ? run.reviewFindings : [];
+    return current.filter((finding) => previous.some((entry) => entry.file === finding.file));
+  };
+
+  /**
+   * Posted from the second request-changes round on, for findings a previous
+   * round already named: an oscillation is visible long before the round cap
+   * blocks the run, and a person reading the issue should see it then.
+   */
+  const postOscillationNote = async (
+    run: RunEntry,
+    context: DispatchContext,
+    rounds: number,
+    current: Finding[],
+  ) => {
+    if (rounds < 2) return;
+    const recurring = recurringFindings(run, current);
+    if (!recurring.length) return;
+    await context.api.postNote(
+      run.projectId,
+      run.iid ?? 0,
+      formatOscillationComment(recurring, rounds, REVIEW_MAX_REVISIONS),
+    ).catch((error) => warn(`[gitlab-issues] oscillation note failed for #${run.iid}:`, error));
+  };
+
   const handleReviewing = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | void> => {
     if (!run.sessionId) {
       const prepared = run.worktreePath ? run : await ensureWorktree(run, context);
@@ -1121,16 +1268,31 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       ...(Array.isArray(run.reviewFindings) ? run.reviewFindings : []),
       ...(review.verdict === 'request-changes' ? review.findings : []),
     ];
+    const recheckNext = context.config.secondReview && !run.rechecked;
     const noteId = await context.api.postNote(
       run.projectId,
       run.iid ?? 0,
-      formatReviewComment(review, rounds, REVIEW_MAX_REVISIONS),
+      formatReviewComment(review, rounds, REVIEW_MAX_REVISIONS, recheckNext),
     );
     if (review.verdict === 'approve') {
+      if (recheckNext) {
+        return transition(run, PHASES.RECHECKING, {
+          reviewNoteId: noteId,
+          reviewVerdict: 'approve',
+          reviewImpact: review.impact ?? null,
+          sessionId: null,
+          feedbackItems: null,
+        });
+      }
       return transition(run, PHASES.VERIFYING, {
-        reviewNoteId: noteId, reviewVerdict: 'approve', sessionId: null, feedbackItems: null,
+        reviewNoteId: noteId,
+        reviewVerdict: 'approve',
+        reviewImpact: review.impact ?? null,
+        sessionId: null,
+        feedbackItems: null,
       });
     }
+    await postOscillationNote(run, context, rounds, review.findings);
     if (rounds > REVIEW_MAX_REVISIONS) {
       return blockWithComment(
         run,
@@ -1142,6 +1304,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
           reviewVerdict: 'request-changes',
           reviewRounds: rounds,
           reviewFindings: findings,
+          reviewImpact: null,
           sessionId: null,
         },
       );
@@ -1151,6 +1314,76 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       reviewVerdict: 'request-changes',
       reviewRounds: rounds,
       reviewFindings: findings,
+      reviewImpact: null,
+      sessionId: null,
+      attempts: 0,
+    });
+  };
+
+  const handleRechecking = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | void> => {
+    if (!run.sessionId) {
+      const prepared = run.worktreePath ? run : await ensureWorktree(run, context);
+      if (prepared.phase === PHASES.BLOCKED) return prepared;
+      return startSession(prepared, context, 'recheck');
+    }
+    const result = await readSessionResult(sessionClient(run), run.sessionId);
+    if (sessionFailed(run, result)) {
+      return failRun(run, context, BLOCKED_REASONS.SESSION_FAILED, SESSION_FAILED_DETAIL);
+    }
+    if (!sessionFinished(run, result)) return;
+    let recheck;
+    try {
+      recheck = parseAgentOutput(result.status === 'idle' ? result.text : '', 'recheck');
+    } catch (error) {
+      if (!(error instanceof AgentOutputError)) throw error;
+      return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, error.message);
+    }
+    const noteId = await context.api.postNote(run.projectId, run.iid ?? 0, formatRecheckComment(recheck));
+    if (recheck.verdict === 'approve') {
+      return transition(run, PHASES.VERIFYING, {
+        recheckVerdict: 'approve',
+        recheckNoteId: noteId,
+        rechecked: true,
+        sessionId: null,
+      });
+    }
+    // A recheck that rejects feeds the normal revision loop. `rechecked` stays
+    // set so the next approval pushes without a second recheck of its own: the
+    // recheck budget is one pass per run, bounded like every other loop here.
+    const rounds = (run.reviewRounds ?? 0) + 1;
+    const findings: Finding[] = [
+      ...(Array.isArray(run.reviewFindings) ? run.reviewFindings : []),
+      ...recheck.findings,
+    ];
+    await postOscillationNote(run, context, rounds, recheck.findings);
+    if (rounds > REVIEW_MAX_REVISIONS) {
+      return blockWithComment(
+        run,
+        context,
+        BLOCKED_REASONS.REVIEW_REJECTED,
+        ['独立复核要求修改，且修改轮数已达上限。累计审核发现：', ...findings.map(formatFindingLine)].join('\n'),
+        {
+          recheckVerdict: 'request-changes',
+          recheckNoteId: noteId,
+          rechecked: true,
+          reviewNoteId: noteId,
+          reviewVerdict: 'request-changes',
+          reviewRounds: rounds,
+          reviewFindings: findings,
+          reviewImpact: null,
+          sessionId: null,
+        },
+      );
+    }
+    return transition(run, PHASES.IMPLEMENTING, {
+      recheckVerdict: 'request-changes',
+      recheckNoteId: noteId,
+      rechecked: true,
+      reviewNoteId: noteId,
+      reviewVerdict: 'request-changes',
+      reviewRounds: rounds,
+      reviewFindings: findings,
+      reviewImpact: null,
       sessionId: null,
       attempts: 0,
     });
@@ -1268,6 +1501,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
         sessionId: null,
         attempts: 0,
         reviewRounds: 0,
+        reviewImpact: null,
       });
       await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-working'])
         .catch((error) => warn(`[gitlab-issues] ai-working label failed for #${run.iid}:`, error));
@@ -1373,6 +1607,28 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     }
     if (!run.evidenceNoteId) {
       return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, 'Evidence note is missing');
+    }
+    if (context.config.verifyCommand) {
+      // The agent's own verification is self-reported; a configured command is
+      // the server's independent gate, run in the worktree right before push.
+      let verified: WorkspaceCommandResult;
+      try {
+        verified = await workspace.runVerifyCommand({
+          cwd: run.worktreePath ?? '',
+          command: context.config.verifyCommand,
+          timeoutMs: VERIFY_COMMAND_TIMEOUT_MS,
+        });
+      } catch (error) {
+        if (errorName(error) === 'WorkspaceError') {
+          return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, `服务端验证命令执行失败：${errorMessage(error)}`);
+        }
+        throw error;
+      }
+      if (verified.code !== 0) {
+        const tail = `${verified.stdout}\n${verified.stderr}`.trim().slice(-2000);
+        return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED,
+          `服务端验证命令 \`${context.config.verifyCommand}\` 未通过（退出码 ${verified.code ?? 'null'}）：\n\`\`\`\n${tail || '(无输出)'}\n\`\`\``);
+      }
     }
 
     const pushCredential = await credentialFor(context, actor.account);
@@ -1495,7 +1751,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     if (isActivePhase(run.phase) && hasLabel(issue, 'ai-blocked')) return true;
     const watchers: string[] = [
       PHASES.TRIAGING, PHASES.PLANNING, PHASES.PREPARING, PHASES.IMPLEMENTING,
-      PHASES.REVIEWING, PHASES.VERIFYING, PHASES.MR_OPEN, PHASES.ADDRESSING,
+      PHASES.REVIEWING, PHASES.RECHECKING, PHASES.VERIFYING, PHASES.MR_OPEN, PHASES.ADDRESSING,
     ];
     return watchers.includes(run.phase) && !hasLabel(issue, 'ai-working');
   };
@@ -1517,7 +1773,8 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
   };
 
   const TIMED_PHASES: string[] = [
-    PHASES.PREPARING, PHASES.TRIAGING, PHASES.PLANNING, PHASES.IMPLEMENTING, PHASES.REVIEWING, PHASES.ADDRESSING,
+    PHASES.PREPARING, PHASES.TRIAGING, PHASES.PLANNING, PHASES.IMPLEMENTING,
+    PHASES.REVIEWING, PHASES.RECHECKING, PHASES.ADDRESSING,
   ];
 
   const handleTimeout = async (run: RunEntry, context: DispatchContext) => {
@@ -1551,6 +1808,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     if (run.phase === PHASES.WAITING_APPROVAL) return handleWaitingApproval(run, context);
     if (run.phase === PHASES.IMPLEMENTING) return handleImplementing(run, context);
     if (run.phase === PHASES.REVIEWING) return handleReviewing(run, context);
+    if (run.phase === PHASES.RECHECKING) return handleRechecking(run, context);
     if (run.phase === PHASES.VERIFYING) return handleVerifying(run, context);
     if (run.phase === PHASES.ADDRESSING) return handleAddressing(run, context);
   };
@@ -1573,7 +1831,8 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
         await touch(run);
         continue;
       }
-      if (run.phase === PHASES.TRIAGING || run.phase === PHASES.REVIEWING || run.phase === PHASES.ADDRESSING) {
+      if (run.phase === PHASES.TRIAGING || run.phase === PHASES.REVIEWING
+        || run.phase === PHASES.RECHECKING || run.phase === PHASES.ADDRESSING) {
         await ledger.update(keyOf(run), { sessionId: null, since: isoNow(), leaseUntil: null });
         continue;
       }

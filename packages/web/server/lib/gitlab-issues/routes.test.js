@@ -32,8 +32,7 @@ const createResponse = () => {
 // Mirrors the server helper: it trims, and leaves separator spelling alone.
 const normalizeDirectoryPath = (value) => String(value ?? '').trim() || null;
 
-const bindingFor = ({ ready = true, remoteUrl = 'https://gitlab.example.com/group/repo.git' } = {}) => ({
-  binding: {
+const bindingFor = ({ ready = true, remoteUrl = 'https://gitlab.example.com/group/repo.git' } = {}) => ({  binding: {
     providers: ready
       ? [{ provider: 'gitlab', instance: 'https://gitlab.example.com', primaryRemote: 'origin', readiness: 'ready' }]
       : [],
@@ -43,6 +42,12 @@ const bindingFor = ({ ready = true, remoteUrl = 'https://gitlab.example.com/grou
   },
 });
 
+// What the binding service throws for a folder that is not a Git repository.
+const unsupportedRepository = () => Object.assign(
+  new Error('Directory is not a supported Git repository'),
+  { code: 'UNSUPPORTED_SOURCE_CONTROL_REPOSITORY', reason: 'not-a-git-repository' },
+);
+
 const createHarness = (options = {}) => {
   const registry = createRouteRegistry();
   const createIssue = vi.fn(async () => ({ iid: 17, web_url: 'https://gitlab.example.com/group/repo/-/issues/17' }));
@@ -50,7 +55,10 @@ const createHarness = (options = {}) => {
   const readAccount = vi.fn(async () => (options.account === null
     ? null
     : { status: 'valid', token: 'secret-token', credentialId: 'acc-1', source: 'pat' }));
-  const get = vi.fn(async () => bindingFor(options.binding));
+  const get = vi.fn(async () => {
+    if (options.bindingError) throw options.bindingError;
+    return bindingFor(options.binding);
+  });
   const addLabels = vi.fn(async () => {});
   const removeLabels = vi.fn(async () => {});
   const postNote = vi.fn(async () => 1);
@@ -102,8 +110,7 @@ const createHarness = (options = {}) => {
   };
 };
 
-const runRecord = (overrides = {}) => ({
-  origin: 'https://gitlab.example.com',
+const runRecord = (overrides = {}) => ({  origin: 'https://gitlab.example.com',
   projectEntryId: 'p1',
   projectId: 42,
   projectPath: 'group/repo',
@@ -198,6 +205,22 @@ describe('GitLab issue create route', () => {
     expect(res.statusCode).toBe(409);
     expect(res.body).toEqual({ error: 'bot-account-missing' });
     expect(createIssue).not.toHaveBeenCalled();
+  });
+
+  // A project whose folder is not a Git repository can never be bound to
+  // GitLab. The binding service rejects that read, and the answer for the
+  // caller is the same one a project without a GitLab binding gets — an answer,
+  // not a failure.
+  it('reports a folder that is not a Git repository as not a GitLab project', async () => {
+    const { handler, warn, createIssue } = createHarness({ bindingError: unsupportedRepository() });
+    const res = createResponse();
+
+    await handler({ body: validBody }, res);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toEqual({ error: 'not-gitlab-project' });
+    expect(createIssue).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it('reports a project that has no ready GitLab binding', async () => {
@@ -354,6 +377,21 @@ describe('GitLab run panel routes', () => {
     ]);
   });
 
+  // The board offers the runs tab for any project, including folders that are
+  // not Git repositories (a plain folder, or a worktree whose git metadata is
+  // gone). The panel must be told there is nothing to show, not handed a
+  // server failure it cannot explain.
+  it('answers not-gitlab-project for a folder that is not a Git repository', async () => {
+    const { runsHandler, warn } = createHarness({ bindingError: unsupportedRepository() });
+    const res = createResponse();
+
+    await runsHandler({ query: { directory: '/repo' } }, res);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toEqual({ error: 'not-gitlab-project' });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it('reports an unreadable ledger as an error, never as an empty list', async () => {
     const { runsHandler } = createHarness({ ledgerFails: true });
     const res = createResponse();
@@ -364,8 +402,8 @@ describe('GitLab run panel routes', () => {
     expect(res.body).toEqual({ error: 'ledger-unreadable' });
   });
 
-  it('refuses to act as the bot account', async () => {
-    const { actionHandler, addLabels } = createHarness({ run: runRecord() });
+  it('allows acting as the bot account, so a person may share one GitLab account with the automation', async () => {
+    const { actionHandler, addLabels, removeLabels } = createHarness({ run: runRecord(), botAccountId: 'acc-2' });
     const res = createResponse();
 
     await actionHandler({
@@ -373,13 +411,14 @@ describe('GitLab run panel routes', () => {
         directory: '/repo',
         key: 'https://gitlab.example.com|42|17',
         action: 'cancel',
-        accountId: 'acc-1',
+        accountId: 'acc-2',
       },
     }, res);
 
-    expect(res.statusCode).toBe(403);
-    expect(res.body).toEqual({ error: 'account-is-bot' });
-    expect(addLabels).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    expect(addLabels).toHaveBeenCalledWith(42, 17, ['ai-blocked']);
+    expect(removeLabels).toHaveBeenCalledWith(42, 17, ['ai-working']);
   });
 
   it('refuses an action the phase does not accept', async () => {

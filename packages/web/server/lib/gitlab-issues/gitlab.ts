@@ -97,10 +97,19 @@ export const resolveProjectConfig = (project: JsonObject | SettingsProject | nul
     : '';
   const rawReviewVariant = project?.gitlabIssueReviewVariant;
   const reviewVariant = isString(rawReviewVariant) ? rawReviewVariant.trim() : '';
+  const rawReviewAgent = project?.gitlabIssueReviewAgent;
+  const reviewAgent = isString(rawReviewAgent) ? rawReviewAgent.trim() : '';
+  const rawVerifyCommand = project?.gitlabIssueVerifyCommand;
+  const verifyCommand = isString(rawVerifyCommand) ? rawVerifyCommand.trim().slice(0, 500) : '';
   const enabled = project?.autoDispatchGitlabIssues === true
     && Boolean(botAccountId) && prefixValid && timeoutValid;
+  // Both toggles are opt-out: a project that never wrote the field keeps the
+  // behavior it had before the setting existed.
+  const secondReview = project?.gitlabIssueSecondReview !== false;
+  const autoCloseNotAnIssue = project?.gitlabIssueAutoCloseNotAnIssue !== false;
   return {
-    enabled, botAccountId, prefix, timeoutMinutes, reviewModel, reviewVariant,
+    enabled, botAccountId, prefix, timeoutMinutes, reviewModel, reviewVariant, reviewAgent,
+    secondReview, autoCloseNotAnIssue, verifyCommand,
   };
 };
 

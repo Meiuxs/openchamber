@@ -108,7 +108,17 @@ describe('GitLab issue branch names', () => {
       autoDispatchGitlabIssues: true, gitlabIssueBotAccountId: 'acc-1',
     })).toEqual({
       enabled: true, botAccountId: 'acc-1', prefix: 'openchamber/', timeoutMinutes: 30,
-      reviewModel: '', reviewVariant: '',
+      reviewModel: '', reviewVariant: '', reviewAgent: '',
+      secondReview: true, autoCloseNotAnIssue: true, verifyCommand: '',
+    });
+    // Both gates are opt-out: only an explicit false turns them off.
+    expect(resolveProjectConfig({
+      autoDispatchGitlabIssues: true, gitlabIssueBotAccountId: 'acc-1',
+      gitlabIssueSecondReview: false, gitlabIssueAutoCloseNotAnIssue: false,
+      gitlabIssueVerifyCommand: '  bun run check  ', gitlabIssueReviewAgent: ' review-changes ',
+    })).toMatchObject({
+      secondReview: false, autoCloseNotAnIssue: false,
+      verifyCommand: 'bun run check', reviewAgent: 'review-changes',
     });
     expect(resolveProjectConfig({
       autoDispatchGitlabIssues: true, gitlabIssueBotAccountId: 'acc-1',

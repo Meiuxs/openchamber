@@ -45,6 +45,12 @@ export interface SettingsProject {
   gitlabIssueTimeoutMinutes?: number;
   gitlabIssueReviewModel?: string;
   gitlabIssueReviewVariant?: string;
+  gitlabIssueReviewAgent?: string;
+  // Both toggles are absent on projects stored before they existed; absence
+  // keeps the default-on behavior the dispatcher reads.
+  gitlabIssueSecondReview?: boolean;
+  gitlabIssueAutoCloseNotAnIssue?: boolean;
+  gitlabIssueVerifyCommand?: string;
   gitlabIssueTemplates?: { id: string; name: string; kind: 'bug' | 'feature' | null; body: string }[];
 }
 
@@ -361,6 +367,20 @@ export const createSettingsNormalizationRuntime = (dependencies: SettingsNormali
       if (isString(candidate.gitlabIssueReviewVariant)) {
         const reviewVariant = candidate.gitlabIssueReviewVariant.trim();
         if (reviewVariant) project.gitlabIssueReviewVariant = reviewVariant;
+      }
+      if (isString(candidate.gitlabIssueReviewAgent)) {
+        const reviewAgent = candidate.gitlabIssueReviewAgent.trim();
+        if (reviewAgent) project.gitlabIssueReviewAgent = reviewAgent;
+      }
+      if (candidate.gitlabIssueSecondReview === true || candidate.gitlabIssueSecondReview === false) {
+        project.gitlabIssueSecondReview = candidate.gitlabIssueSecondReview;
+      }
+      if (candidate.gitlabIssueAutoCloseNotAnIssue === true || candidate.gitlabIssueAutoCloseNotAnIssue === false) {
+        project.gitlabIssueAutoCloseNotAnIssue = candidate.gitlabIssueAutoCloseNotAnIssue;
+      }
+      if (isString(candidate.gitlabIssueVerifyCommand)) {
+        const verifyCommand = candidate.gitlabIssueVerifyCommand.trim().slice(0, 500);
+        if (verifyCommand) project.gitlabIssueVerifyCommand = verifyCommand;
       }
       if (Array.isArray(candidate.gitlabIssueTemplates)) {
         const templates = candidate.gitlabIssueTemplates.slice(0, 50).flatMap((entry: GitlabIssueTemplateInput) => {

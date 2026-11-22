@@ -19,6 +19,11 @@ describe('GitLab issue phase machine', () => {
     expect(canTransition(PHASES.IMPLEMENTING, PHASES.REVIEWING)).toBe(true);
     expect(canTransition(PHASES.REVIEWING, PHASES.IMPLEMENTING)).toBe(true);
     expect(canTransition(PHASES.REVIEWING, PHASES.VERIFYING)).toBe(true);
+    // The recheck is the second opinion on an approval: it pushes or sends the
+    // change back, and never runs a first review of its own.
+    expect(canTransition(PHASES.REVIEWING, PHASES.RECHECKING)).toBe(true);
+    expect(canTransition(PHASES.RECHECKING, PHASES.VERIFYING)).toBe(true);
+    expect(canTransition(PHASES.RECHECKING, PHASES.IMPLEMENTING)).toBe(true);
     expect(canTransition(PHASES.VERIFYING, PHASES.MR_OPEN)).toBe(true);
     expect(canTransition(PHASES.MR_OPEN, PHASES.DONE)).toBe(true);
     expect(canTransition(PHASES.MR_OPEN, PHASES.ADDRESSING)).toBe(true);
@@ -46,6 +51,8 @@ describe('GitLab issue phase machine', () => {
     expect(canTransition(PHASES.IMPLEMENTING, PHASES.VERIFYING)).toBe(false);
     expect(canTransition(PHASES.REVIEWING, PHASES.DONE)).toBe(false);
     expect(canTransition(PHASES.REVIEWING, PHASES.CLAIMED)).toBe(false);
+    expect(canTransition(PHASES.RECHECKING, PHASES.REVIEWING)).toBe(false);
+    expect(canTransition(PHASES.RECHECKING, PHASES.MR_OPEN)).toBe(false);
     // A feedback round returns through the review gate, never straight to the MR.
     expect(canTransition(PHASES.ADDRESSING, PHASES.MR_OPEN)).toBe(false);
     expect(canTransition(PHASES.ADDRESSING, PHASES.IMPLEMENTING)).toBe(false);

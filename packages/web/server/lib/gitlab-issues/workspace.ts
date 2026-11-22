@@ -218,6 +218,49 @@ export function createGitlabIssueWorkspace({
       if (exitCode === 1) return true;
       throw new WorkspaceError('git-failed', 'Could not compare the branch against the target');
     },
+    /**
+     * Runs the project's own check command in the worktree before the server
+     * pushes. The command comes from project settings an operator wrote, the
+     * same trust level as the worktree setup commands, so a shell is allowed;
+     * the exit code decides, never the output.
+     */
+    async runVerifyCommand({ cwd, command, timeoutMs }: { cwd: string; command: string; timeoutMs: number }) {
+      const trimmed = String(command ?? '').trim();
+      if (!trimmed) return { code: 0, stdout: '', stderr: '' };
+      return await new Promise<CommandResult>((resolve, reject) => {
+        const child = spawnImpl(trimmed, { cwd, shell: true, windowsHide: true, env: { ...process.env } });
+        let stdout = '';
+        let stderr = '';
+        let settled = false;
+        // A failing pipeline can be arbitrarily loud; cap what is kept in memory
+        // because only the tail ever reaches the issue comment.
+        const cap = 200_000;
+        child.stdout?.on('data', (chunk: Buffer | string) => {
+          if (stdout.length < cap) stdout += chunk.toString();
+        });
+        child.stderr?.on('data', (chunk: Buffer | string) => {
+          if (stderr.length < cap) stderr += chunk.toString();
+        });
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          child.kill();
+          reject(new WorkspaceError('verify-timeout', `The verify command did not finish within ${Math.round(timeoutMs / 1000)}s`));
+        }, timeoutMs);
+        child.on('error', (error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(new WorkspaceError('verify-failed', error instanceof Error ? error.message : String(error)));
+        });
+        child.on('close', (code) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve({ code, stdout, stderr });
+        });
+      });
+    },
     async pushBranch({ cwd, remote, branch, credential }: { cwd: string; remote: string; branch: string; credential: IssueCredential }) {
       if (!isValidGitRefName(branch)) {
         throw new WorkspaceError('invalid-branch', `Refusing to push invalid branch name: ${branch}`);

@@ -76,7 +76,7 @@ bug 与 feature 的实现阶段都过审核门；feature 的 `/ai-approve` 发�
 
 `GET /api/gitlab-issues/runs?directory=<path>` 返回该项目 `origin|projectId` 下全部台账条目；不带 `directory` 时返回所有启用项目的条目并排除 `done`。每条 run 的字段：`key`、`iid`、`kind`、`phase`、`blockedReason`、`lastError`、`branch`、`targetBranch`、`mrIid`、`issueUrl`、`mrUrl`、`attempts`、`reviewRounds`、`reviewVerdict`、`since`、`updatedAt`、`sessionId`、`sessionStatus`。
 
-`sessionStatus` 只对持有会话的 run 解析（复用 `readSessionResult` 的空闲判定，短超时），取值 `busy`、`idle`、`null`；解析失败一律 `null`，不编造状态。台账读取失败返回错误，不得表现为空成功列表；单条 enrich 失败降级为 `null` 字段，不影响整页。
+`sessionStatus` 只对持有会话的 run 解析（复用 `readSessionResult` 的空闲判定，短超时），取值 `busy`、`idle`、`null`；解析失败一律 `null`，不编造状态。台账读取失败返回错误，不得表现为空成功列表；单条 enrich 失败降级为 `null` 字段，不影响整页。目录不是 Git 仓库（普通文件夹，或 git 元数据已丢失的 worktree）时回答 `not-gitlab-project`，面板显示"不是 GitLab 项目"：项目属性本身就是答案，不得以 500 代替，否则面板只能显示读取失败。
 
 ### 4.3 写操作
 
@@ -90,7 +90,7 @@ bug 与 feature 的实现阶段都过审核门；feature 的 `/ai-approve` 发�
 | `reject` | 以操作者身份发 `/ai-reject` 评论 | `waiting-approval` |
 | `take` | 以操作者身份发 `/ai-take` 评论 | `blocked` 且 `blockedReason = missing-credential` |
 
-前置校验按序执行，任一失败返回 4xx 与原因：动作与 phase 不匹配返回 409（响应带当前 phase）；`accountId` 必须解析到该 `origin` 上有效的绑定账号，且不是该项目的 bot 账号；`accessLevelOf` 必须 ≥ 30。校验通过后路由只改 GitLab 侧（标签或评论），不写台账——状态转移由 dispatcher 下一轮 tick 观察 GitLab 变化自行完成，动作路径始终在状态机之外。
+前置校验按序执行，任一失败返回 4xx 与原因：动作与 phase 不匹配返回 409（响应带当前 phase）；`accountId` 必须解析到该 `origin` 上有效的绑定账号；`accessLevelOf` 必须 ≥ 30。操作账号允许与该项目 bot 账号相同——人与自动化共用一个 GitLab 账号是支持的形态：bot 发的评论一律带 `<!-- openchamber-automation -->` 隐藏标记，dispatcher 靠标记而非作者身份识别自己的评论，动作路由不按账号拒绝。校验通过后路由只改 GitLab 侧（标签或评论），不写台账——状态转移由 dispatcher 下一轮 tick 观察 GitLab 变化自行完成，动作路径始终在状态机之外。
 
 面板在发请求前弹确认层：评论类动作预览要发的评论原文，标签类动作预览要增删的标签，确认层写明落款账号（操作者本人）。取消不发请求。
 
@@ -173,7 +173,7 @@ reviewing    -> implementing | verifying | blocked
 - 回路：第 3 轮 request-changes 回灌，第 4 轮进 `review-rejected` 且 block 评论含累计发现。
 - `preparing`、`planning`、`reviewing` 超时各自中止 setup 或会话并阻塞。
 - 标签事件失败：`ai-blocked`、评论、无重试churn。
-- 动作路由：phase 不匹配 409、bot 账号拒绝、权限不足拒绝、未绑定账号拒绝。
+- 动作路由：phase 不匹配 409、权限不足拒绝、未绑定账号拒绝；操作账号与 bot 账号相同时放行（共用账号形态，评论归属靠隐藏标记区分）。
 - 读路由：台账损坏返回错误而非空列表，enrich 失败降级 `null`。
 - 面板中文文案表覆盖全部 `blockedReason`，缺一项即失败。
 
