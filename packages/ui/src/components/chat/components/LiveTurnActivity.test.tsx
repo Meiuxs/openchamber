@@ -28,7 +28,7 @@ import { PendingWorkflowApprovals } from '../workflows/PendingWorkflowApprovals'
 import { WorkflowsPanel } from '../workflows/WorkflowsPanel';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { opencodeClient } from '@/lib/opencode/client';
-import { FULL_CONTEXT_DIFF_LINES } from '@/components/views/diffView/diffContextLines';
+import { DEFAULT_CONTEXT_DIFF_LINES, FULL_CONTEXT_DIFF_LINES } from '@/components/views/diffView/diffContextLines';
 import { getSyncChildStores } from '@/sync/sync-refs';
 import { ChatColumnSessionContext } from '../chatColumnSession';
 
@@ -695,7 +695,7 @@ describe('live Activity with the real message body', () => {
             expect(arrow?.getAttribute('aria-label')).toBe('Show diff for src/a.ts');
             expect(container.querySelector('[data-turn-inline-diff]')).toBeNull();
             await act(async () => arrow?.click());
-            expect(getDiff.mock.calls).toEqual([['session', { directory: '/project', from: undefined, context: FULL_CONTEXT_DIFF_LINES }]]);
+            expect(getDiff.mock.calls).toEqual([['session', { directory: '/project', from: undefined, context: DEFAULT_CONTEXT_DIFF_LINES }]]);
             expect(container.querySelector('[data-turn-inline-diff]')?.getAttribute('data-turn-inline-diff')).toBe('ready');
             expect(arrow?.getAttribute('aria-expanded')).toBe('true');
             expect(arrow?.getAttribute('aria-label')).toBe('Hide diff for src/a.ts');
@@ -717,6 +717,38 @@ describe('live Activity with the real message body', () => {
         expect(container.querySelector('button[data-changed-file-expand]')).toBeNull();
         expect(container.querySelector('button[aria-label="Open src/c.ts"]')).toBeNull();
         expect(container.textContent).toContain('c.ts');
+    });
+
+    test('a changed file outside the project opens as a file and offers no diff', async () => {
+        const getDiff = spyOn(opencodeClient, 'getSessionTurnDiff');
+        const previousPanel = useUIStore.getState().contextPanelByDirectory['/project'];
+        const previousFocusPath = useUIStore.getState().pendingFileFocusPath;
+        try {
+            useUIStore.getState().setPendingTurnDiffFile(null);
+            await act(async () => root.render(
+                <ChatColumnSessionContext.Provider value={{ sessionId: 'session', directory: '/project' }}>
+                    <Harness record={turn([assistant('final', [text('answer', 'Done')], 'stop')])}
+                        changedFiles={[{ file: '/tmp/opencode/issue-body.md', additions: 4, deletions: 0 }]} />
+                </ChatColumnSessionContext.Provider>,
+            ));
+            expect(container.querySelector('button[data-changed-file-expand]')).toBeNull();
+            const open = container.querySelector<HTMLButtonElement>('button[aria-label="Open /tmp/opencode/issue-body.md"]');
+            expect(open?.textContent).toBe('issue-body.md');
+            await act(async () => open?.click());
+            expect(getDiff).not.toHaveBeenCalled();
+            const panel = useUIStore.getState().contextPanelByDirectory['/project'];
+            const active = panel?.tabs.find((tab) => tab.id === panel.activeTabId);
+            expect(active).toMatchObject({ mode: 'file', targetPath: '/tmp/opencode/issue-body.md' });
+            expect(useUIStore.getState().pendingTurnDiffFile).toBeNull();
+        } finally {
+            useUIStore.setState((state) => {
+                const contextPanelByDirectory = { ...state.contextPanelByDirectory };
+                if (previousPanel) contextPanelByDirectory['/project'] = previousPanel;
+                else delete contextPanelByDirectory['/project'];
+                return { contextPanelByDirectory, pendingFileFocusPath: previousFocusPath };
+            });
+            getDiff.mockRestore();
+        }
     });
 
     test('opens a historical turn diff in the VS Code editor using the column session', async () => {

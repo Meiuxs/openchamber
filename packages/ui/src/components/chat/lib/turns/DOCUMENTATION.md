@@ -89,10 +89,12 @@ waits for a finished answer because changed-file details appear only there.
 ### Why changed-file rows open the turn diff and not a tool-only diff
 
 The file list and available line counts come from the turn's own edit, write
-and patch calls. Both the file-name action and the row's inline expansion read
-the snapshot-based session turn diff, which can also describe write results
-and delegated edits absent from those call patches. A file the snapshot does
-not contain keeps no expand arrow.
+and patch calls. For a file inside the session directory, both the file-name
+action and the row's inline expansion read the snapshot-based session turn
+diff, which can also describe write results and delegated edits absent from
+those call patches. A file a tool wrote outside that directory can never be in
+the snapshot, so its row has no arrow and its name opens the file itself. A
+file the snapshot does not contain keeps no expand arrow.
 
 ### Why write-created files backfill their counts from the turn diff
 
@@ -105,7 +107,9 @@ backfill version re-projects only when data arrives. The turn diff is
 requested from the session's own directory, matching the pills' expand. A
 failed fetch is remembered and the file keeps its filename-only presentation,
 the same degradation a file absent from the snapshot gets; an uncountable diff
-entry never becomes an authoritative 0/0.
+entry never becomes an authoritative 0/0. The backfill cache is cleared with
+the view reset (session switch or changed-files toggle), so failed turns
+retry on revisit and the cache stays bounded to the active view.
 
 ### Why retry suppression checks the current assistant and idle time
 

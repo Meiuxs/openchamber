@@ -2,6 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import {
     applyTurnDiffStats,
     backfillTurnDiffStats,
+    clearTurnDiffBackfill,
+    getTurnDiffBackfillState,
+    markTurnDiffBackfillPending,
     parseTurnDiffStats,
     setTurnDiffBackfillDone,
 } from './turnDiffBackfill';
@@ -117,5 +120,17 @@ describe('backfillTurnDiffStats', () => {
         const result = backfillTurnDiffStats(projection([original]));
         expect(result.turns[0]).toBe(original);
         expect(result.turns[0]?.changedFiles?.[0]?.additions).toBeUndefined();
+    });
+
+    test('clear drops every entry so settled turns refetch after a view reset', () => {
+        markTurnDiffBackfillPending('turn-reset');
+        setTurnDiffBackfillDone('turn-reset', parseTurnDiffStats([]));
+        expect(getTurnDiffBackfillState('turn-reset')).toBeDefined();
+
+        clearTurnDiffBackfill();
+        expect(getTurnDiffBackfillState('turn-reset')).toBeUndefined();
+
+        const original = turnRecord('turn-reset', [{ file: 'src/new-file.ts', inTurnDiff: true }]);
+        expect(backfillTurnDiffStats(projection([original])).turns[0]).toBe(original);
     });
 });

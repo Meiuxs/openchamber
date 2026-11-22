@@ -14,8 +14,9 @@ import { HoverTooltip } from '@/components/ui/row-tooltip';
 import { useI18n } from '@/lib/i18n';
 import { useEffectiveDirectory } from '@/hooks/useEffectiveDirectory';
 import { hasTextSelectionInside } from '@/lib/textSelection';
+import { isFilePathWithinDirectory, toAbsoluteFilePath } from '@/lib/path-utils';
 import { DiffCount } from '@/components/ui/diff-count';
-import { FULL_CONTEXT_DIFF_LINES } from '@/components/views/diffView/diffContextLines';
+import { DEFAULT_CONTEXT_DIFF_LINES, FULL_CONTEXT_DIFF_LINES } from '@/components/views/diffView/diffContextLines';
 import { PlainDiffFallback } from '../parts/PlainDiffFallback';
 import { diffPathsMatch as pathsMatch } from '../../lib/turns/diffPaths';
 
@@ -203,13 +204,34 @@ const InteractiveFileRows = React.memo(({ files, turnId }: { files: TurnChangedF
         navigateToDiff(file, false, 'turn');
     }, [effectiveDirectory, isMobile, mobileActions, navigateToDiff, openContextDiff, runtime, sessionId, setPendingTurnDiffFile, t, turnId]);
 
+    const openFile = React.useCallback((file: string) => {
+        if (!effectiveDirectory) return;
+        const absolutePath = toAbsoluteFilePath(effectiveDirectory, file);
+        if (runtime.runtime.isVSCode && runtime.editor) {
+            void runtime.editor.openFile(absolutePath);
+            return;
+        }
+        useUIStore.getState().openContextFile(effectiveDirectory, absolutePath);
+        mobileActions?.openFiles();
+    }, [effectiveDirectory, mobileActions, runtime]);
+
+    // The turn diff is a snapshot of the session directory, so a file a tool
+    // wrote outside it can never appear there: no expand arrow, and the name
+    // opens the file instead of an empty diff.
+    const canOpenDiff = React.useCallback((file: TurnChangedFile): boolean => (
+        file.inTurnDiff !== false
+        && (!effectiveDirectory || isFilePathWithinDirectory(toAbsoluteFilePath(effectiveDirectory, file.file), effectiveDirectory))
+    ), [effectiveDirectory]);
+
     const loadPatch = React.useCallback(async (path: string): Promise<string> => {
         if (!sessionId) throw new Error(t('diffView.state.failedToLoadDiff'));
         const key = JSON.stringify([sessionId, effectiveDirectory, turnId]);
         if (!turnDiffRequest.current || turnDiffRequest.current.key !== key) {
             turnDiffRequest.current = {
                 key,
-                promise: opencodeClient.getSessionTurnDiff(sessionId, { directory: effectiveDirectory, from: turnId, context: FULL_CONTEXT_DIFF_LINES }),
+                // Hunk context, not the whole file: the row shows the changed
+                // fragments the way a tool diff does.
+                promise: opencodeClient.getSessionTurnDiff(sessionId, { directory: effectiveDirectory, from: turnId, context: DEFAULT_CONTEXT_DIFF_LINES }),
             };
         }
         let diffs: TurnFileDiff[];
@@ -226,15 +248,18 @@ const InteractiveFileRows = React.memo(({ files, turnId }: { files: TurnChangedF
 
     return (
         <>
-            {files.map((file) => (
-                <ChangedFileRow
-                    key={file.file}
-                    file={file}
-                    canExpand={file.inTurnDiff !== false}
-                    loadPatch={file.inTurnDiff === false ? undefined : () => loadPatch(file.file)}
-                    onOpen={file.inTurnDiff === false ? undefined : openTurnDiff}
-                />
-            ))}
+            {files.map((file) => {
+                const opensDiff = canOpenDiff(file);
+                return (
+                    <ChangedFileRow
+                        key={file.file}
+                        file={file}
+                        canExpand={opensDiff}
+                        loadPatch={opensDiff ? () => loadPatch(file.file) : undefined}
+                        onOpen={file.inTurnDiff === false ? undefined : opensDiff ? openTurnDiff : openFile}
+                    />
+                );
+            })}
         </>
     );
 });

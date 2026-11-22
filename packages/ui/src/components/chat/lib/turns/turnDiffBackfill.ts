@@ -17,10 +17,15 @@ type TurnDiffBackfillEntry =
     | { state: 'done'; stats: Map<string, TurnDiffStats> }
     | { state: 'failed' };
 
-// One request per turn for the lifetime of the view: pending blocks duplicates,
-// done and failed stop refetches. Turn IDs are session message IDs, so keys
-// never collide across sessions.
+// One request per turn while a session view is active: pending blocks
+// duplicates, done and failed stop refetches. Cleared when the view resets
+// (session switch or changed-files toggle), so failed turns retry on
+// revisit and the map stays bounded to the active view.
 const backfillByTurnId = new Map<string, TurnDiffBackfillEntry>();
+
+export const clearTurnDiffBackfill = (): void => {
+    backfillByTurnId.clear();
+};
 
 export const getTurnDiffBackfillState = (turnId: string): TurnDiffBackfillEntry | undefined => (
     backfillByTurnId.get(turnId)

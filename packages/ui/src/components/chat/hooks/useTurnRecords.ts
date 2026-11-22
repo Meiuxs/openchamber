@@ -4,6 +4,7 @@ import type { ChatMessageEntry, TurnProjectionResult, TurnRecord } from '../lib/
 import { buildProjectionCacheKey, getCachedProjection, setCachedProjection } from '../lib/turns/turnProjectionCache';
 import {
     backfillTurnDiffStats,
+    clearTurnDiffBackfill,
     fetchTurnDiffStats,
     getTurnDiffBackfillState,
     markTurnDiffBackfillPending,
@@ -50,6 +51,10 @@ export const useTurnRecords = (
         previousProjectionRef.current = null;
         staticTurnsRef.current = [];
         streamingTurnRef.current = undefined;
+        // The projection cache is discarded below, so the module-level
+        // backfill cache must go with it: stale entries would otherwise keep
+        // filling counts from another session's diffs forever.
+        clearTurnDiffBackfill();
     }, [options.sessionKey, options.showTurnChangedFiles]);
 
     const projection = React.useMemo(() => {
