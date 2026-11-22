@@ -3,14 +3,15 @@
 # picked up by Vite HMR and the server's file watcher; nothing is packed,
 # installed globally, or zipped.
 #
-#   dev-local.ps1 [-Port 5180] [-ApiPort 3902] [-NoBrowser]
+#   dev-local.ps1 [-Port 5180] [-ApiPort 3902] [-NoBrowser] [-RefreshCache]
 #
 # Double-click dev-local.cmd at the repo root instead of running this directly.
 
 param(
     [int]$Port = 5180,
     [int]$ApiPort = 3902,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$RefreshCache
 )
 
 $ErrorActionPreference = 'Stop'
@@ -50,11 +51,19 @@ try {
 
     $env:OPENCHAMBER_HMR_UI_PORT = "$Port"
     $env:OPENCHAMBER_HMR_API_PORT = "$ApiPort"
+    if ($RefreshCache) {
+        $env:OPENCHAMBER_HMR_REFRESH_CACHE = '1'
+        Write-Host 'Refreshing the Vite dependency cache (one-time rebuild, a few minutes).' -ForegroundColor DarkGray
+    } else {
+        Remove-Item Env:OPENCHAMBER_HMR_REFRESH_CACHE -ErrorAction SilentlyContinue
+    }
     $arguments = @('/k', 'bun', 'run', 'dev')
     Start-Process -FilePath 'cmd.exe' -ArgumentList $arguments -WorkingDirectory (Get-Location).Path
 
     Write-Host "Waiting for http://127.0.0.1:$Port ..." -ForegroundColor Cyan
-    Write-Host 'Vite clears its cache on each dev start, so the first load after a start can take several minutes.' -ForegroundColor DarkGray
+    if (-not $RefreshCache) {
+        Write-Host 'Reuses the cached dependencies; a cold cache builds them once over a few minutes.' -ForegroundColor DarkGray
+    }
     $deadline = (Get-Date).AddSeconds(600)
     $nextNotice = (Get-Date).AddSeconds(15)
     $ready = $false

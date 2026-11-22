@@ -107,7 +107,10 @@ function getLanAddresses() {
 // maintainer's own, agents' isolated instances), and with one shared cache a
 // newly started server re-optimizes it under the running ones: their next
 // lazy chunk answers 504 "Outdated Optimize Dep" and that part of the page
-// never loads.
+// never loads. Keeping the cache per port and reusing it across restarts avoids
+// a full dependency re-optimization on every start; Vite re-optimizes on its own
+// when dependencies actually change. Set OPENCHAMBER_HMR_REFRESH_CACHE=1 to
+// force a clean rebuild when the cache is suspect.
 const viteCacheDir = path.join(webRoot, `node_modules/.vite-dev-${uiPort}`);
 
 function clearViteCache() {
@@ -115,7 +118,7 @@ function clearViteCache() {
   rmSync(viteCacheDir, { recursive: true, force: true });
 }
 
-clearViteCache();
+if (process.env.OPENCHAMBER_HMR_REFRESH_CACHE === '1') clearViteCache();
 
 const api = run(
   'api',
@@ -163,7 +166,7 @@ function startVite() {
   vite = run(
     'vite',
     bunExecutable,
-    ['x', 'vite', '--force', '--host', hmrHost, '--port', uiPort, '--strictPort'],
+    ['x', 'vite', '--host', hmrHost, '--port', uiPort, '--strictPort'],
     {
       OPENCHAMBER_PORT: backendPort,
       OPENCHAMBER_DISABLE_PWA_DEV: '1',
