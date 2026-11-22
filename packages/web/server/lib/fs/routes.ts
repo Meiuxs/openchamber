@@ -495,44 +495,62 @@ const resolveGitDirsScanDepth = (value: QueryValue | undefined): keyof typeof GI
   value === 'deep' || value === 'all' ? value : 'shallow'
 );
 
-const GIT_DIRS_SKIP_LIST = new Set(['node_modules', 'dist', 'build', '.venv', 'target', '.next']);
+// Dependency caches and other dot-directories never hold a checkout a person
+// would open; `.git` itself is still read as the repository boundary marker
+// before this rule applies.
+const GIT_DIRS_SKIP_LIST = new Set(['node_modules', 'dist', 'build', '.venv', 'target', '.next', 'vendor', '__pycache__']);
+
+const isSkippedDirectoryName = (name: string) => (
+  GIT_DIRS_SKIP_LIST.has(name) || (name.startsWith('.') && name !== '.git')
+);
+
+// Scanning one directory at a time made a large workspace's discovery take
+// seconds on Windows, where every directory read is a comparatively expensive
+// round trip. A small fixed pool keeps the response bound by the slowest few
+// directories instead of their count.
+const GIT_DIRS_SCAN_CONCURRENCY = 16;
 
 const findGitDirectories = async ({ rootPath, fsPromises, path: pathModule, maxDepth, maxDirs }: {
   rootPath: string; fsPromises: typeof nodeFsPromises; path: typeof nodePath; maxDepth: number; maxDirs: number;
 }) => {
-  const results: string[] = [];
-  const walkedRealPaths = new Set<string>();
-  const queue = [{ dir: rootPath, depth: 0 }];
-  let visited = 0;
+  const found: Array<{ index: number; dir: string }> = [];
+  // One identity set holds both resolved link targets and plain paths. Plain
+  // directories are unique by construction, so resolving them costs a syscall
+  // the scan does not need; links and the root resolve, which is what keeps a
+  // link loop or a second link to a walked directory from repeating work.
+  const seen = new Set<string>();
+  const queue: Array<{ dir: string; depth: number; link: boolean }> = [{ dir: rootPath, depth: 0, link: false }];
+  const waiters: Array<() => void> = [];
+  let cursor = 0;
+  let dispatched = 0;
+  let active = 0;
 
-  const scanDirectory = async (dir: string, depth: number) => {
-    let realPath;
+  const wake = () => {
+    const pending = waiters.splice(0);
+    for (const resolve of pending) resolve();
+  };
+
+  const scanDirectory = async (index: number, dir: string, depth: number, link: boolean) => {
+    let identity: string;
     try {
-      realPath = await fsPromises.realpath(dir);
+      identity = link || dir === rootPath ? await fsPromises.realpath(dir) : dir;
     } catch (error) {
-      if (dir === rootPath) {
-        throw error;
-      }
+      if (dir === rootPath) throw error;
       return;
     }
-    if (walkedRealPaths.has(realPath)) {
-      return;
-    }
-    walkedRealPaths.add(realPath);
+    if (seen.has(identity)) return;
+    seen.add(identity);
 
     let dirents;
     try {
       dirents = await fsPromises.readdir(dir, { withFileTypes: true });
     } catch (error) {
-      if (dir === rootPath) {
-        throw error;
-      }
+      if (dir === rootPath) throw error;
       return;
     }
-    visited += 1;
 
     let isRepoBoundary = false;
-    const subdirectories = [];
+    const subdirectories: Array<{ name: string; link: boolean }> = [];
     for (const dirent of dirents) {
       if (dirent.name === '.git') {
         isRepoBoundary = true;
@@ -541,7 +559,7 @@ const findGitDirectories = async ({ rootPath, fsPromises, path: pathModule, maxD
       if (!dirent.isDirectory() && !dirent.isSymbolicLink()) {
         continue;
       }
-      if (GIT_DIRS_SKIP_LIST.has(dirent.name)) {
+      if (isSkippedDirectoryName(dirent.name)) {
         continue;
       }
       if (depth >= maxDepth) {
@@ -553,27 +571,51 @@ const findGitDirectories = async ({ rootPath, fsPromises, path: pathModule, maxD
           continue;
         }
       }
-      subdirectories.push(dirent.name);
+      subdirectories.push({ name: dirent.name, link: dirent.isSymbolicLink() });
     }
 
     if (isRepoBoundary && dir !== rootPath) {
-      results.push(dir);
+      found.push({ index, dir });
       return;
     }
 
-    subdirectories.sort();
-    for (const name of subdirectories) {
-      queue.push({ dir: pathModule.join(dir, name), depth: depth + 1 });
+    subdirectories.sort((left, right) => left.name.localeCompare(right.name));
+    for (const subdirectory of subdirectories) {
+      queue.push({ dir: pathModule.join(dir, subdirectory.name), depth: depth + 1, link: subdirectory.link });
     }
   };
 
-  for (let index = 0; index < queue.length && visited < maxDirs; index += 1) {
-    const entry = queue[index];
-    if (!entry) break;
-    const { dir, depth } = entry;
-    await scanDirectory(dir, depth);
-  }
-  return results;
+  const worker = async () => {
+    for (;;) {
+      while (cursor < queue.length && dispatched < maxDirs) {
+        const entry = queue[cursor];
+        if (!entry) break;
+        cursor += 1;
+        dispatched += 1;
+        active += 1;
+        try {
+          await scanDirectory(dispatched - 1, entry.dir, entry.depth, entry.link);
+        } finally {
+          active -= 1;
+          // Every completion can enqueue or empty the queue; waking lets
+          // waiting workers recheck, and lets them exit when root threw.
+          wake();
+        }
+      }
+      if (dispatched >= maxDirs || (cursor >= queue.length && active === 0)) {
+        wake();
+        return;
+      }
+      await new Promise<void>((resolve) => { waiters.push(resolve); });
+    }
+  };
+
+  const workerCount = Math.max(1, Math.min(GIT_DIRS_SCAN_CONCURRENCY, maxDirs));
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  // Concurrent scanning records repositories in dispatch (breadth-first,
+  // sorted-sibling) order; the index restores the serial scan's answer order.
+  return found.sort((left, right) => left.index - right.index).map((entry) => entry.dir);
 };
 
 const deriveCloneDirectoryName = (remoteUrl: string) => {

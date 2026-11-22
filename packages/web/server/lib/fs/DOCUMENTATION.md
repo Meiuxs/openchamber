@@ -75,9 +75,18 @@ The interval reopens the watcher before checking, so Linux/Windows folder deleti
       boundary, except the root's own `.git`, which the walk goes past: a
       root repository's submodules and nested checkouts are reported too, and
       the client decides whether the root or a discovered repository is the
-      one a surface works in; junk directories are skipped; symlinked
-      directories are followed, each real directory walked once, and
-      repositories are reported under the link path)
+      one a surface works in; junk directories are skipped, and every other
+      dot-directory is too, because a checkout a person opens is never hidden
+      behind one; symlinked directories are followed, each real directory
+      walked once, and repositories are reported under the link path. The walk
+      runs a 16-worker pool over the breadth-first queue with the visit cap
+      counted at dispatch, so a large parent directory answers in the time of
+      its slowest few directory reads instead of their sum; results are
+      re-sorted into dispatch order, and plain directories skip the
+      `realpath` call — only the root and symlinked entries resolve, which is
+      all the walk-once identity set needs. Which alias a link-or-target pair
+      reports is therefore timing-dependent; the guarantee the route keeps is
+      that the repository appears exactly once.)
   - Owns exec job queue state (`execJobs`) and lifecycle/TTL pruning.
   - Exec commands run with the terminal's PATH plus the user's and the project's environment variables for their directory (`environmentRuntime`, see `../environment`).
   - Enforces workspace boundary checks with active project + worktree fallback support.

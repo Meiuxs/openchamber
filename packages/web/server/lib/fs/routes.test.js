@@ -2429,6 +2429,42 @@ describe('fs git-dirs', () => {
     expect(readdir).not.toHaveBeenCalledWith('/workspace/node_modules', { withFileTypes: true });
   });
 
+  it('skips dot-directories other than the .git boundary marker', async () => {
+    const { handler, readdir } = registerGitDirs({
+      '/workspace': [['.cache', 'dir'], ['.repos', 'dir'], ['real', 'dir']],
+      '/workspace/.cache': [['tool', 'dir']],
+      '/workspace/.cache/tool': [['.git', 'dir']],
+      '/workspace/.repos': [['.git', 'dir']],
+      '/workspace/real': [['.git', 'dir']],
+    });
+
+    const res = await callGitDirs(handler, { path: '/workspace' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.repositories).toEqual([{ path: '/workspace/real', name: 'real' }]);
+    expect(readdir).not.toHaveBeenCalledWith('/workspace/.cache', { withFileTypes: true });
+    expect(readdir).not.toHaveBeenCalledWith('/workspace/.repos', { withFileTypes: true });
+  });
+
+  it('resolves only the root and linked directories, never a plain one', async () => {
+    // One realpath per directory was a large share of the scan cost on
+    // Windows; plain directories are unique by construction, so the scan
+    // must keep them off the realpath path.
+    const realpath = vi.fn(async (targetPath) => targetPath);
+    const { handler } = registerGitDirs({
+      '/workspace': [['group', 'dir'], ['link', 'symlink']],
+      '/workspace/group': [['api', 'dir']],
+      '/workspace/group/api': [['.git', 'dir']],
+      '/workspace/link': [['.git', 'dir']],
+    }, { realpath });
+
+    const res = await callGitDirs(handler, { path: '/workspace' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.repositories.map((repository) => repository.name).sort()).toEqual(['api', 'link']);
+    expect(realpath.mock.calls.map(([targetPath]) => targetPath).sort()).toEqual(['/workspace', '/workspace/link']);
+  });
+
   it('follows symlinked directories and reports repositories under the link path', async () => {
     // /workspace groups repositories kept elsewhere through links.
     const links = { '/workspace/api': '/src/api', '/workspace/web': '/src/web' };
@@ -2463,7 +2499,11 @@ describe('fs git-dirs', () => {
     const res = await callGitDirs(handler, { path: '/workspace' });
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.repositories).toEqual([{ path: '/workspace/again', name: 'again' }]);
+    // Concurrent scanning cannot promise whether the link or its target wins
+    // the identity race; it promises the stronger thing: the repository is
+    // reported exactly once and every real directory is walked once.
+    expect(res.body.repositories.length).toBe(1);
+    expect(['/workspace/again', '/workspace/real']).toContain(res.body.repositories[0].path);
     expect(readdir).toHaveBeenCalledTimes(2);
   });
 
