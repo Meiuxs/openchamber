@@ -75,6 +75,7 @@ mock.module('@/components/ui/dialog', () => {
     DialogContent: box,
     DialogHeader: box,
     DialogTitle: box,
+    DialogDescription: box,
     DialogFooter: box,
   };
 });
@@ -198,6 +199,10 @@ describe('RepositoryBindingsPage', () => {
     await act(async () => { bindButton?.click(); });
     expect(host.textContent).toContain('root');
     expect(host.textContent).not.toContain('["gitlab"');
+    expect(host.textContent).toContain('Connect this repository to a connected account');
+    expect(host.textContent).toContain('A matching Git identity profile is applied first');
+    expect(host.textContent).toContain('Account');
+    expect(host.textContent).toContain('Primary remote');
     const confirm = [...document.querySelectorAll('button')].find((button) => button.textContent === 'Confirm');
     expect(confirm).toBeTruthy();
     await act(async () => { confirm?.click(); });

@@ -6,7 +6,7 @@ const locales = ['en', 'de', 'fr', 'nl', 'es', 'ja', 'pt-BR', 'uk', 'ko', 'pl', 
 
 const SAME_AS_ENGLISH = new Map<string, string[]>([
   ['de', ['settings.page.repositories.title', 'repoBindings.action.details', 'repoBindings.detail.revision']],
-  ['nl', ['settings.page.repositories.title', 'repoBindings.action.details', 'repoBindings.status.duplicate', 'repoBindings.detail.project']],
+  ['nl', ['settings.page.repositories.title', 'repoBindings.action.details', 'repoBindings.status.duplicate', 'repoBindings.detail.project', 'repoBindings.field.account.label']],
   ['es', ['repoBindings.status.error']],
   ['fr', ['repoBindings.detail.instance', 'repoBindings.status.error']],
   ['tr', ['repoBindings.status.error']],
