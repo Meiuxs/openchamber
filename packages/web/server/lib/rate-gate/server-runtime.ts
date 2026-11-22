@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { readOpenCodeCredentialEntries, readOpenCodeCredentials } from '../opencode/auth.js';
 import { readConfigLayers } from '../opencode/config-files.js';
+import { isDebugLogging } from '../log-level.js';
 import { isRecord, isString } from '../shared/object-guards.js';
 import { createAccountResolver } from './policy.js';
 import { createRateGateRuntime } from './runtime.js';
@@ -66,4 +67,8 @@ export const createServerRateGateRuntime = (deps: ServerRateGateDependencies) =>
   authorizeRequest: deps.authorizeRequest,
   isPluginSupported: deps.isPluginSupported,
   broadcast: deps.broadcast,
+  log: (details) => {
+    if (!isDebugLogging()) return;
+    console.info('[rate-gate]', JSON.stringify(details));
+  },
 });

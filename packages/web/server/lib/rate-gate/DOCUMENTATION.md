@@ -36,11 +36,24 @@ restart once a gateway is saved.
   is used, and a reported reset time wins as the end of the window. Each grant
   spends one from the reported remainder too, so a report of "3 left" admits
   three requests, not every request until the reset.
-- `x-ratelimit-reset` arrives in epoch milliseconds, epoch seconds, or seconds
-  from now. The plugin converts before reporting and the server normalises
-  again, so an older plugin that forwards the raw value still lands correctly.
-- A 429 marks the account exhausted until the latest of the local window end,
-  the reported `retryAfterMs` and the reported reset time.
+- The plugin forwards the raw rate limit headers; the server parses them once.
+  It reads the request dimension of the three naming styles gateways use
+  (`x-ratelimit-remaining`, OpenAI's `x-ratelimit-remaining-requests`,
+  Anthropic's `anthropic-ratelimit-requests-remaining`, and the matching reset
+  headers). Token counters are ignored: a token remainder is not a request slot.
+- `x-ratelimit-reset` arrives in epoch milliseconds, epoch seconds, seconds from
+  now, a Go-style duration (`1s`, `1m30s`) or an HTTP date. `retry-after` and
+  `retry-after-ms` are read as the gateway's own recovery delay. An older plugin
+  that forwards numbers instead of headers still lands correctly.
+- A 429 marks the account exhausted until the gateway's own recovery time: the
+  later of `retryAfterMs` and the reported reset. The end of the local window is
+  used only when the gateway named no time at all, because that end is a guess
+  about a quota the server does not see.
+- Waiting sessions wake in queue order: each `wait` answer pushes the wake-up
+  back by its position in the waiting list, so the first waiter gets the freed
+  slot instead of losing a race against every other session.
+- A debug-level log line records each grant, wait, report and cooldown with the
+  account, the counts, the authoritative remainder and the queue position.
 - Budgets live in memory. A restart forgets them and the next requests start a
   fresh window.
 - `acquire` and `report` require the agent tool token, so spending from the
@@ -114,3 +127,33 @@ reports a remainder, it is authoritative, so the total is what this app spent
 plus what the gateway says is left. Deriving the total from the configured limit
 instead made a report of "2 left" out of a 100 budget read as `100 / 100`, which
 told the user the budget was gone when two slots remained.
+
+### Why the gateway's retry time wins over the local window end
+
+A 429 used to cool the account until the oldest local grant aged out, up to a
+full window. That made a gateway asking for two seconds freeze the account for
+ten minutes, because the local window is a shadow of a quota the server cannot
+read. The gateway's `Retry-After` and reset headers are the only statement about
+its real recovery, so they set the cooldown on their own. The local window end
+remains the fallback for a gateway that says nothing, where waiting out the
+window is still better than hammering it.
+
+### Why the plugin forwards raw headers instead of converting them
+
+The plugin used to convert `x-ratelimit-reset` to epoch milliseconds and pick
+one unsuffixed header name before reporting. That left a second, weaker parser
+in the generated plugin: it could not read duration strings such as `1s`, and it
+missed the `-requests` names. The server already normalises every accepted
+shape, so the plugin now forwards the rate limit headers it sees and the server
+is the single owner of names and units. Older plugins that send numbers keep
+working because the report accepts both.
+
+### Why queued sessions wake in queue order
+
+Every waiter used to wake at the same instant and race on a 250 ms jitter, so a
+session could lose the freed slot to a newer arrival for many windows in a row.
+The wait answer now adds its position in the waiting list, capped at eight
+positions, to the wake-up time. The first waiter wakes first, takes the slot, and
+the rest re-queue one place closer. The queue is still advisory: a request that
+never waited can take a free slot, because holding the slot for a session that
+may have been interrupted would waste it.

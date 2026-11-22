@@ -1,9 +1,10 @@
 export const RATE_GATE_PLUGIN_ROUTE = '/api/rate-gate';
 
 const PLUGIN_BODY = `
-const JITTER_MS = 250
+const JITTER_MS = 50
 const MAX_SLEEP_MS = 60000
 let gateOffUntil = 0
+let gateFailureLogged = false
 const admitted = new Map()
 
 const callback = () => {
@@ -27,19 +28,22 @@ const send = async (target, path, body) => {
   return response.json()
 }
 
-const headerNumber = (headers, name) => {
-  const raw = headers.get(name)
-  if (raw === null || raw === "") return undefined
-  const value = Number(raw)
-  return Number.isFinite(value) ? value : undefined
+const RATE_HEADER = /^(?:x-ratelimit-|anthropic-ratelimit-|retry-after|ratelimit-)/
+const rateLimitHeaders = (headers) => {
+  const picked = {}
+  for (const [name, value] of headers.entries()) {
+    const key = name.toLowerCase()
+    if (RATE_HEADER.test(key)) picked[key] = value
+  }
+  return picked
 }
 
-const resetAtFrom = (headers) => {
-  const raw = headerNumber(headers, "x-ratelimit-reset")
-  if (raw === undefined || raw <= 0) return undefined
-  if (raw > 1e12) return Math.round(raw)
-  if (raw > 1e9) return Math.round(raw * 1000)
-  return Date.now() + Math.round(raw * 1000)
+const gateFailed = (error) => {
+  if (!gateFailureLogged) {
+    gateFailureLogged = true
+    console.warn("[openchamber-rate-gate] request throttle unavailable; passing requests for 30s:", error && error.message ? error.message : error)
+  }
+  gateOffUntil = Date.now() + 30000
 }
 
 export default {
@@ -68,8 +72,8 @@ export default {
           const wait = Math.max(0, Number(answer.retryAt) - Date.now())
           await sleep(Math.min(wait + Math.floor(Math.random() * JITTER_MS), MAX_SLEEP_MS))
         }
-      } catch {
-        gateOffUntil = Date.now() + 30000
+      } catch (error) {
+        gateFailed(error)
       }
     })
 
@@ -83,8 +87,7 @@ export default {
         sessionID: event.sessionID,
         accountKey: admitted.get(keyOf(event.sessionID, event.model.providerID)),
         status: event.response.status,
-        remaining: headerNumber(headers, "x-ratelimit-remaining"),
-        resetAt: resetAtFrom(headers),
+        headers: rateLimitHeaders(headers),
       }).catch(() => {})
     })
 

@@ -34,12 +34,14 @@ describe('rate gate plugin source', () => {
     expect(source).toContain('gateOffUntil');
   });
 
-  it('converts the gateway reset header to epoch milliseconds before reporting', () => {
-    // A gateway answering in epoch seconds must not reach the state machine raw.
+  it('forwards the raw rate limit headers so one parser owns the units', () => {
+    // The server already understands epoch, duration and suffixed header names;
+    // converting in the plugin created a second, weaker parser.
     const source = buildRateGatePluginSource();
-    expect(source).toContain('resetAtFrom(headers)');
-    expect(source).toContain('raw > 1e12');
-    expect(source).toContain('raw * 1000');
+    expect(source).toContain('rateLimitHeaders(headers)');
+    expect(source).toContain('headers.entries()');
+    expect(source).toContain('retry-after');
+    expect(source).not.toContain('resetAtFrom');
   });
 });
 

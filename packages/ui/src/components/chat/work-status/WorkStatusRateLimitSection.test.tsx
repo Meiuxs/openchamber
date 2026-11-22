@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, jest, spyOn, test } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Window } from 'happy-dom';
@@ -134,10 +134,31 @@ describe('work status request rate section', () => {
     expect(text).toContain('1 queued');
   });
 
-  test('an account with quota says when its window resets', async () => {
+  test('an account with quota says when its next slot frees', async () => {
     await render();
     const text = container.textContent ?? '';
-    expect(text).toContain('resets in');
+    expect(text).toContain('next slot in');
     expect(text).toContain('4:00');
+  });
+
+  test('an account with nothing spent keeps the countdown out of the way', async () => {
+    served = statusWith({ accounts: [account({ used: 0, remaining: 100, resetAt: NOW })] });
+    await render();
+    const text = container.textContent ?? '';
+    expect(text).toContain('0/100');
+    expect(text).not.toContain('next slot in');
+  });
+
+  test('refreshes once the countdown reaches the next release', async () => {
+    jest.useFakeTimers();
+    try {
+      served = statusWith({ accounts: [account({ used: 100, remaining: 0, resetAt: NOW + 50 })] });
+      await render();
+      const before = fetchSpy.mock.calls.length;
+      await act(async () => { jest.advanceTimersByTime(400); });
+      expect(fetchSpy.mock.calls.length).toBeGreaterThan(before);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

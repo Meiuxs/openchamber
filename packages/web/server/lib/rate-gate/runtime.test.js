@@ -2,7 +2,7 @@ import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 
-import { createRateGateRuntime } from './runtime.js';
+import { createRateGateRuntime, WAIT_STAGGER_MS } from './runtime.js';
 
 const DEFAULT_CONFIG = { requests: 3, windowMinutes: 10, gateways: ['http://gw.corp'] };
 
@@ -187,12 +187,95 @@ describe('gateway reported quota is spent by grants', () => {
     await expect(runtime.status()).resolves.toMatchObject({ accounts: [{ remaining: 0, authoritative: true }] });
   });
 
+  it('calibrates from the raw OpenAI-style headers a gateway sends', async () => {
+    const { runtime } = await setup({ requests: 100, windowMinutes: 10, gateways: ['http://gw.corp'] });
+    await runtime.report({
+      providerID: 'intranet',
+      sessionID: 's1',
+      accountKey: 'credential:a',
+      status: 200,
+      headers: {
+        'x-ratelimit-remaining-requests': '0',
+        'x-ratelimit-remaining-tokens': '9000',
+        'x-ratelimit-reset-requests': '1s',
+        'x-ratelimit-reset-tokens': '30s',
+      },
+    });
+    const answer = await runtime.acquire(acquireBody());
+    expect(answer).toMatchObject({ action: 'wait', retryAt: 1_001_000 });
+  });
+
   it('normalises an epoch-seconds reset an older plugin forwards raw', async () => {
     const { runtime } = await setup({ requests: 100, windowMinutes: 10, gateways: ['http://gw.corp'] });
     await runtime.acquire(acquireBody());
     const resetSeconds = Math.floor((1_000_000 + 300_000) / 1000);
     await runtime.report({ providerID: 'intranet', sessionID: 's1', status: 200, remaining: 0, resetAt: resetSeconds });
     await expect(runtime.status()).resolves.toMatchObject({ accounts: [{ authoritative: true, remaining: 0 }] });
+  });
+});
+
+describe('gateway recovery time on 429', () => {
+  it('uses the gateway retry time instead of stretching it to the local window end', async () => {
+    const { runtime, advance } = await setup({ requests: 2, windowMinutes: 10, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    advance(1_000);
+    await runtime.report({ providerID: 'intranet', sessionID: 's1', accountKey: 'credential:a', status: 429, retryAfterMs: 2_000 });
+    // The local window would stay closed until 1_600_000; the gateway asked for 2 s.
+    expect(await runtime.acquire(acquireBody())).toMatchObject({ action: 'wait', retryAt: 1_003_000 });
+  });
+
+  it('uses the reported reset header as the recovery time', async () => {
+    const { runtime } = await setup({ requests: 2, windowMinutes: 10, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    await runtime.report({
+      providerID: 'intranet',
+      sessionID: 's1',
+      accountKey: 'credential:a',
+      status: 429,
+      headers: { 'retry-after': '3' },
+    });
+    expect(await runtime.acquire(acquireBody())).toMatchObject({ action: 'wait', retryAt: 1_003_000 });
+  });
+
+  it('falls back to the local window end when the gateway names no time', async () => {
+    const { runtime } = await setup({ requests: 2, windowMinutes: 10, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    await runtime.report({ providerID: 'intranet', sessionID: 's1', accountKey: 'credential:a', status: 429 });
+    expect(await runtime.acquire(acquireBody())).toMatchObject({ action: 'wait', retryAt: 1_600_000 });
+  });
+
+  it('still cools for a moment when a 429 arrives with nothing spent in the window', async () => {
+    const { runtime } = await setup({ requests: 2, windowMinutes: 10, gateways: ['http://gw.corp'] });
+    await runtime.report({ providerID: 'intranet', sessionID: 's1', accountKey: 'credential:a', status: 429 });
+    await expect(runtime.status()).resolves.toMatchObject({ accounts: [{ limitedUntil: 1_001_000 }] });
+  });
+});
+
+describe('waiting order', () => {
+  it('staggers queued sessions so the first waiter wakes first and keeps its place', async () => {
+    const { runtime } = await setup({ requests: 1, windowMinutes: 10, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody({ sessionID: 's1' }));
+    const first = await runtime.acquire(acquireBody({ sessionID: 's2' }));
+    const second = await runtime.acquire(acquireBody({ sessionID: 's3' }));
+    expect(second.retryAt - first.retryAt).toBe(WAIT_STAGGER_MS);
+    const again = await runtime.acquire(acquireBody({ sessionID: 's2' }));
+    expect(again.retryAt).toBe(first.retryAt);
+  });
+});
+
+describe('diagnostic log', () => {
+  it('reports grants, waits and calibrations', async () => {
+    const events = [];
+    const { runtime } = await setup(
+      { requests: 1, windowMinutes: 10, gateways: ['http://gw.corp'] },
+      { log: (details) => events.push(details) },
+    );
+    await runtime.acquire(acquireBody());
+    await runtime.acquire(acquireBody({ sessionID: 's2' }));
+    await runtime.report({ providerID: 'intranet', sessionID: 's2', accountKey: 'credential:a', status: 200, remaining: 0, resetAt: 1_600_000_000_000 });
+    expect(events.map((event) => event.event)).toEqual(['grant', 'wait', 'report']);
+    expect(events[1]).toMatchObject({ sessionID: 's2', granted: 1, limit: 1, queuePosition: 0, waiters: 1 });
+    expect(events[2]).toMatchObject({ status: 200, remaining: 0, resetAt: 1_600_000_000_000 });
   });
 });
 

@@ -5,8 +5,11 @@ import {
   createAccountResolver,
   matchesGateway,
   normalizeGateway,
+  parseDurationMs,
   parseGatewayText,
   parseRateLimitHeaders,
+  parseRateLimitRecord,
+  parseResetValue,
   resolveRateGateConfig,
 } from './policy.js';
 
@@ -68,10 +71,35 @@ describe('rate limit headers', () => {
     expect(parseRateLimitHeaders(headers({ 'x-ratelimit-reset': '60' }), now).resetAt).toBe(now + 60_000);
   });
 
+  it('reads the request dimension of OpenAI and Anthropic style headers', () => {
+    const now = 1_700_000_000_000;
+    expect(parseRateLimitHeaders(headers({
+      'x-ratelimit-remaining-requests': '42',
+      'x-ratelimit-remaining-tokens': '9000',
+      'x-ratelimit-reset-requests': '1s',
+      'x-ratelimit-reset-tokens': '10s',
+    }), now)).toEqual({ remaining: 42, resetAt: now + 1_000, retryAfterMs: null });
+
+    expect(parseRateLimitHeaders(headers({
+      'anthropic-ratelimit-requests-remaining': '3',
+      'anthropic-ratelimit-requests-reset': '2026-11-22T10:00:00Z',
+    }), now)).toEqual({ remaining: 3, resetAt: Date.parse('2026-11-22T10:00:00Z'), retryAfterMs: null });
+  });
+
+  it('parses durations, retry-after headers and an already-decoded record', () => {
+    const now = 1_700_000_000_000;
+    expect(parseDurationMs('1m30s')).toBe(90_000);
+    expect(parseDurationMs('250ms')).toBe(250);
+    expect(parseDurationMs('soon')).toBeNull();
+    expect(parseResetValue('2m', now)).toBe(now + 120_000);
+    expect(parseRateLimitRecord({ 'Retry-After': '2' }, now).retryAfterMs).toBe(2_000);
+    expect(parseRateLimitRecord({ 'retry-after-ms': '750' }, now).retryAfterMs).toBe(750);
+  });
+
   it('ignores missing and garbage values', () => {
-    expect(parseRateLimitHeaders(headers({}), 1)).toEqual({ remaining: null, resetAt: null });
+    expect(parseRateLimitHeaders(headers({}), 1)).toEqual({ remaining: null, resetAt: null, retryAfterMs: null });
     expect(parseRateLimitHeaders(headers({ 'x-ratelimit-remaining': 'lots', 'x-ratelimit-reset': 'soon' }), 1))
-      .toEqual({ remaining: null, resetAt: null });
+      .toEqual({ remaining: null, resetAt: null, retryAfterMs: null });
   });
 });
 

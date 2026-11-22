@@ -2,7 +2,7 @@
 export const rateGateI18n = {
   en: {
     'chat.workStatus.section.rateLimit': 'Request rate',
-    'chat.workStatus.rateLimit.resetIn': 'resets in {time}',
+    'chat.workStatus.rateLimit.resetIn': 'next slot in {time}',
     'chat.workStatus.rateLimit.limitedUntil': 'limited until {time}',
     'chat.workStatus.rateLimit.queued': '{count} queued',
     'chat.workStatus.rateLimit.refresh': 'Refresh request rate',
@@ -10,7 +10,7 @@ export const rateGateI18n = {
   },
   'zh-CN': {
     'chat.workStatus.section.rateLimit': '请求速率',
-    'chat.workStatus.rateLimit.resetIn': '{time} 后重置',
+    'chat.workStatus.rateLimit.resetIn': '{time} 后释放一个额度',
     'chat.workStatus.rateLimit.limitedUntil': '限流至 {time}',
     'chat.workStatus.rateLimit.queued': '{count} 个排队',
     'chat.workStatus.rateLimit.refresh': '刷新请求速率',
@@ -18,7 +18,7 @@ export const rateGateI18n = {
   },
   'zh-TW': {
     'chat.workStatus.section.rateLimit': '請求速率',
-    'chat.workStatus.rateLimit.resetIn': '{time} 後重置',
+    'chat.workStatus.rateLimit.resetIn': '{time} 後釋放一個額度',
     'chat.workStatus.rateLimit.limitedUntil': '限流至 {time}',
     'chat.workStatus.rateLimit.queued': '{count} 個排隊',
     'chat.workStatus.rateLimit.refresh': '重新整理請求速率',
@@ -26,7 +26,7 @@ export const rateGateI18n = {
   },
   nl: {
     'chat.workStatus.section.rateLimit': 'Verzoeksnelheid',
-    'chat.workStatus.rateLimit.resetIn': 'reset over {time}',
+    'chat.workStatus.rateLimit.resetIn': 'volgend slot over {time}',
     'chat.workStatus.rateLimit.limitedUntil': 'beperkt tot {time}',
     'chat.workStatus.rateLimit.queued': '{count} in wachtrij',
     'chat.workStatus.rateLimit.refresh': 'Verzoeksnelheid vernieuwen',
@@ -34,7 +34,7 @@ export const rateGateI18n = {
   },
   uk: {
     'chat.workStatus.section.rateLimit': 'Частота запитів',
-    'chat.workStatus.rateLimit.resetIn': 'скидання через {time}',
+    'chat.workStatus.rateLimit.resetIn': 'наступний слот через {time}',
     'chat.workStatus.rateLimit.limitedUntil': 'обмежено до {time}',
     'chat.workStatus.rateLimit.queued': '{count} у черзі',
     'chat.workStatus.rateLimit.refresh': 'Оновити частоту запитів',
@@ -42,7 +42,7 @@ export const rateGateI18n = {
   },
   de: {
     'chat.workStatus.section.rateLimit': 'Anfragenrate',
-    'chat.workStatus.rateLimit.resetIn': 'zurückgesetzt in {time}',
+    'chat.workStatus.rateLimit.resetIn': 'nächster Platz in {time}',
     'chat.workStatus.rateLimit.limitedUntil': 'begrenzt bis {time}',
     'chat.workStatus.rateLimit.queued': '{count} in Warteschlange',
     'chat.workStatus.rateLimit.refresh': 'Anfragenrate aktualisieren',
@@ -50,7 +50,7 @@ export const rateGateI18n = {
   },
   es: {
     'chat.workStatus.section.rateLimit': 'Tasa de solicitudes',
-    'chat.workStatus.rateLimit.resetIn': 'se restablece en {time}',
+    'chat.workStatus.rateLimit.resetIn': 'próximo cupo en {time}',
     'chat.workStatus.rateLimit.limitedUntil': 'limitado hasta {time}',
     'chat.workStatus.rateLimit.queued': '{count} en cola',
     'chat.workStatus.rateLimit.refresh': 'Actualizar la tasa de solicitudes',
@@ -58,7 +58,7 @@ export const rateGateI18n = {
   },
   fr: {
     'chat.workStatus.section.rateLimit': 'Débit de requêtes',
-    'chat.workStatus.rateLimit.resetIn': 'réinitialisé dans {time}',
+    'chat.workStatus.rateLimit.resetIn': 'prochain créneau dans {time}',
     'chat.workStatus.rateLimit.limitedUntil': 'limité jusqu’à {time}',
     'chat.workStatus.rateLimit.queued': '{count} en file',
     'chat.workStatus.rateLimit.refresh': 'Actualiser le débit de requêtes',
@@ -66,7 +66,7 @@ export const rateGateI18n = {
   },
   ja: {
     'chat.workStatus.section.rateLimit': 'リクエストレート',
-    'chat.workStatus.rateLimit.resetIn': '{time} 後にリセット',
+    'chat.workStatus.rateLimit.resetIn': '{time} 後に次の枠が空きます',
     'chat.workStatus.rateLimit.limitedUntil': '{time} まで制限',
     'chat.workStatus.rateLimit.queued': '{count} 件待機',
     'chat.workStatus.rateLimit.refresh': 'リクエストレートを更新',
@@ -74,7 +74,7 @@ export const rateGateI18n = {
   },
   ko: {
     'chat.workStatus.section.rateLimit': '요청 속도',
-    'chat.workStatus.rateLimit.resetIn': '{time} 후 재설정',
+    'chat.workStatus.rateLimit.resetIn': '{time} 후 다음 슬롯이 비워집니다',
     'chat.workStatus.rateLimit.limitedUntil': '{time}까지 제한',
     'chat.workStatus.rateLimit.queued': '{count}개 대기 중',
     'chat.workStatus.rateLimit.refresh': '요청 속도 새로 고침',
@@ -82,7 +82,7 @@ export const rateGateI18n = {
   },
   pl: {
     'chat.workStatus.section.rateLimit': 'Tempo żądań',
-    'chat.workStatus.rateLimit.resetIn': 'reset za {time}',
+    'chat.workStatus.rateLimit.resetIn': 'następne miejsce za {time}',
     'chat.workStatus.rateLimit.limitedUntil': 'ograniczone do {time}',
     'chat.workStatus.rateLimit.queued': '{count} w kolejce',
     'chat.workStatus.rateLimit.refresh': 'Odśwież tempo żądań',
@@ -90,7 +90,7 @@ export const rateGateI18n = {
   },
   'pt-BR': {
     'chat.workStatus.section.rateLimit': 'Taxa de requisições',
-    'chat.workStatus.rateLimit.resetIn': 'reinicia em {time}',
+    'chat.workStatus.rateLimit.resetIn': 'próxima vaga em {time}',
     'chat.workStatus.rateLimit.limitedUntil': 'limitado até {time}',
     'chat.workStatus.rateLimit.queued': '{count} na fila',
     'chat.workStatus.rateLimit.refresh': 'Atualizar a taxa de requisições',
@@ -98,7 +98,7 @@ export const rateGateI18n = {
   },
   tr: {
     'chat.workStatus.section.rateLimit': 'İstek hızı',
-    'chat.workStatus.rateLimit.resetIn': '{time} içinde sıfırlanır',
+    'chat.workStatus.rateLimit.resetIn': 'sonraki hak {time} içinde',
     'chat.workStatus.rateLimit.limitedUntil': '{time} saatine kadar sınırlı',
     'chat.workStatus.rateLimit.queued': '{count} sırada',
     'chat.workStatus.rateLimit.refresh': 'İstek hızını yenile',
@@ -106,7 +106,7 @@ export const rateGateI18n = {
   },
   ar: {
     'chat.workStatus.section.rateLimit': 'معدل الطلبات',
-    'chat.workStatus.rateLimit.resetIn': 'يُعاد الضبط بعد {time}',
+    'chat.workStatus.rateLimit.resetIn': 'الفتحة التالية بعد {time}',
     'chat.workStatus.rateLimit.limitedUntil': 'مقيَّد حتى {time}',
     'chat.workStatus.rateLimit.queued': '{count} في الانتظار',
     'chat.workStatus.rateLimit.refresh': 'تحديث معدل الطلبات',
@@ -114,7 +114,7 @@ export const rateGateI18n = {
   },
   he: {
     'chat.workStatus.section.rateLimit': 'קצב בקשות',
-    'chat.workStatus.rateLimit.resetIn': 'מתאפס בעוד {time}',
+    'chat.workStatus.rateLimit.resetIn': 'המשבצת הבאה בעוד {time}',
     'chat.workStatus.rateLimit.limitedUntil': 'מוגבל עד {time}',
     'chat.workStatus.rateLimit.queued': '{count} בתור',
     'chat.workStatus.rateLimit.refresh': 'רענון קצב הבקשות',

@@ -5,10 +5,13 @@ import { runtimeFetch } from '@/lib/runtime-fetch';
 import { subscribeOpenchamberEvents } from '@/lib/openchamberEvents';
 import { subscribeRuntimeEndpointChanged } from '@/lib/runtime-switch';
 import { rateGateStatusSchema, type RateGateStatus } from '@/lib/rate-gate/status';
+import { nextReleaseAt } from '@/lib/rate-gate/nextRelease';
+import { scheduleAt } from '@/lib/timing/scheduleAt';
 import { subscribePolling } from '@/lib/timing/subscribePolling';
 
 const POLL_INTERVAL_MS = 30_000;
 const LOAD_TIMEOUT_MS = 8_000;
+const RELEASE_REFRESH_GRACE_MS = 250;
 
 type RateGateStore = {
   status: RateGateStatus | null;
@@ -19,6 +22,23 @@ type RateGateStore = {
 
 let stopSubscription: (() => void) | null = null;
 let consumers = 0;
+let releaseTimer: (() => void) | null = null;
+
+const cancelReleaseRefresh = (): void => {
+  releaseTimer?.();
+  releaseTimer = null;
+};
+
+const scheduleReleaseRefresh = (status: RateGateStatus | null): void => {
+  cancelReleaseRefresh();
+  if (status === null || consumers === 0) return;
+  const at = nextReleaseAt(status.accounts, Date.now());
+  if (at === null) return;
+  releaseTimer = scheduleAt(at + RELEASE_REFRESH_GRACE_MS, () => {
+    releaseTimer = null;
+    void useRateGateStore.getState().fetchStatus();
+  });
+};
 
 const subscribe = (): void => {
   consumers += 1;
@@ -30,9 +50,11 @@ const subscribe = (): void => {
   const unsubscribeEvents = subscribeOpenchamberEvents((event) => {
     if (event.type !== 'rate-gate') return;
     useRateGateStore.setState({ status: event.status });
+    scheduleReleaseRefresh(event.status);
   });
   const unsubscribeRuntime = subscribeRuntimeEndpointChanged(() => {
     useRateGateStore.setState({ status: null });
+    cancelReleaseRefresh();
     read();
   });
   const unsubscribePolling = subscribePolling(read, POLL_INTERVAL_MS);
@@ -42,6 +64,7 @@ const subscribe = (): void => {
     unsubscribeEvents();
     unsubscribeRuntime();
     unsubscribePolling();
+    cancelReleaseRefresh();
   };
 };
 
@@ -66,7 +89,10 @@ export const useRateGateStore = create<RateGateStore>((set, get) => ({
         return;
       }
       const parsed = rateGateStatusSchema.safeParse(await response.json());
-      if (parsed.success) set({ status: parsed.data });
+      if (parsed.success) {
+        set({ status: parsed.data });
+        scheduleReleaseRefresh(parsed.data);
+      }
     } catch {
       return;
     } finally {

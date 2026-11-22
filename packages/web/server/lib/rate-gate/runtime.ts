@@ -4,13 +4,18 @@ import { z } from 'zod';
 import {
   isRateGateConfigured,
   matchesGateway,
-  normalizeResetAt,
+  parseRateLimitRecord,
+  parseResetValue,
   resolveRateGateConfig,
 } from './policy.js';
 import type { AccountResolution, RateGatePolicyInput, RateGateSettingsInput } from './policy.js';
 import { buildRateGatePluginSource } from './plugin-source.js';
 
 export const WAITING_TTL_MS = 90_000;
+export const WAIT_STAGGER_MS = 250;
+const FALLBACK_COOLDOWN_MS = 1_000;
+const MAX_STAGGER_POSITIONS = 8;
+export type RateGateLogDetails = Record<string, string | number | boolean | null | undefined>;
 
 export type RateGateAcquireInput = {
   providerID: string;
@@ -71,6 +76,7 @@ export type RateGateRuntimeDependencies = {
   authorizeRequest: (req: Pick<Request, 'socket' | 'headers'>) => boolean;
   isPluginSupported: () => Promise<boolean>;
   broadcast?: (status: RateGateStatus) => void;
+  log?: (details: RateGateLogDetails) => void;
   now?: () => number;
 };
 
@@ -99,8 +105,9 @@ const reportSchema = z.object({
   accountKey: z.string().min(1).optional(),
   status: z.number().int(),
   retryAfterMs: z.number().finite().nonnegative().optional(),
-  remaining: z.number().int().nonnegative().optional(),
-  resetAt: z.number().finite().optional(),
+  remaining: z.union([z.number().finite(), z.string()]).optional(),
+  resetAt: z.union([z.number().finite(), z.string()]).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
 });
 
 type ParsedReport = z.infer<typeof reportSchema>;
@@ -111,6 +118,14 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
   const pluginDirectory = deps.path.join(deps.instanceDir, 'openchamber-rate-gate');
   let lastBroadcastAt = 0;
   let broadcastTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const log = (details: RateGateLogDetails) => {
+    try {
+      deps.log?.(details);
+    } catch {
+      void 0;
+    }
+  };
 
   const resolveConfigAsync = async () => {
     const settings = await deps.readSettings().catch(() => null);
@@ -179,17 +194,30 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
     return future.length > 0 ? Math.min(...future) : at + 1_000;
   };
 
+  const reportLimits = (input: RateGateReportInput, at: number) => {
+    const parsed = input.headers ? parseRateLimitRecord(input.headers, at) : null;
+    const remaining = input.remaining === undefined
+      ? parsed?.remaining ?? null
+      : Math.max(0, Math.floor(Number(input.remaining)));
+    const resetAt = input.resetAt === undefined
+      ? parsed?.resetAt ?? null
+      : parseResetValue(input.resetAt, at);
+    const retryAfterMs = Math.max(input.retryAfterMs ?? 0, parsed?.retryAfterMs ?? 0) || null;
+    return { remaining: Number.isFinite(remaining) ? remaining : null, resetAt, retryAfterMs };
+  };
+
   const applyReport = (state: AccountState, input: RateGateReportInput, at: number, windowMs: number) => {
-    const reportedResetAt = input.resetAt === undefined ? null : normalizeResetAt(input.resetAt, at);
+    const limits = reportLimits(input, at);
+    const reportedReset = limits.resetAt !== null && limits.resetAt > at ? limits.resetAt : 0;
     if (input.status === 429) {
       prune(state, at, windowMs);
-      const localNext = state.grants[0] ? state.grants[0] + windowMs : at;
-      const reportedReset = reportedResetAt !== null && reportedResetAt > at ? reportedResetAt : 0;
-      state.limitedUntil = Math.max(localNext, at + (input.retryAfterMs ?? 0), reportedReset);
+      const localNext = state.grants[0] ? state.grants[0] + windowMs : at + FALLBACK_COOLDOWN_MS;
+      const gatewayNext = Math.max(at + (limits.retryAfterMs ?? 0), reportedReset);
+      state.limitedUntil = gatewayNext > at ? gatewayNext : localNext;
       return;
     }
-    if (input.remaining !== undefined && reportedResetAt !== null && reportedResetAt > at) {
-      state.authoritative = { remaining: Math.max(0, Math.floor(input.remaining)), resetAt: reportedResetAt };
+    if (limits.remaining !== null && reportedReset > at) {
+      state.authoritative = { remaining: limits.remaining, resetAt: reportedReset };
     }
   };
 
@@ -267,21 +295,57 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
     const state = getOrCreate(account, input.providerID);
     prune(state, at, windowMs);
 
-    if (effectiveRemaining(state, config.requests) > 0) {
+    const remaining = effectiveRemaining(state, config.requests);
+    if (remaining > 0) {
+      state.waiting.delete(input.sessionID);
       spendGrant(state, at);
-      scheduleBroadcast();
-      return {
-        action: 'pass',
-        gated: true,
+      const answer = {
+        action: 'pass' as const,
+        gated: true as const,
         accountKey: account.key,
         remaining: effectiveRemaining(state, config.requests),
         resetAt: retryAtFor(state, at, windowMs),
       };
+      log({
+        event: 'grant',
+        accountKey: account.key,
+        providerID: input.providerID,
+        modelID: input.modelID,
+        kind: input.kind,
+        sessionID: input.sessionID,
+        granted: state.grants.length,
+        limit: config.requests,
+        remaining: answer.remaining,
+        resetAt: answer.resetAt,
+        limitedUntil: state.limitedUntil,
+        authoritativeRemaining: state.authoritative?.remaining ?? null,
+      });
+      scheduleBroadcast();
+      return answer;
     }
 
     state.waiting.set(input.sessionID, at + WAITING_TTL_MS);
+    const queuePosition = Math.max(0, [...state.waiting.keys()].indexOf(input.sessionID));
+    const retryAt = retryAtFor(state, at, windowMs) + Math.min(queuePosition, MAX_STAGGER_POSITIONS) * WAIT_STAGGER_MS;
+    log({
+      event: 'wait',
+      accountKey: account.key,
+      providerID: input.providerID,
+      modelID: input.modelID,
+      kind: input.kind,
+      sessionID: input.sessionID,
+      granted: state.grants.length,
+      limit: config.requests,
+      remaining,
+      queuePosition,
+      retryAt,
+      resetAt: retryAtFor(state, at, windowMs),
+      limitedUntil: state.limitedUntil,
+      authoritativeRemaining: state.authoritative?.remaining ?? null,
+      waiters: state.waiting.size,
+    });
     scheduleBroadcast();
-    return { action: 'wait', gated: true, accountKey: account.key, retryAt: retryAtFor(state, at, windowMs) };
+    return { action: 'wait', gated: true, accountKey: account.key, retryAt };
   };
 
   const report = async (input: RateGateReportInput): Promise<void> => {
@@ -299,14 +363,24 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
       }
     }
 
-    if (accountKey) {
-      applyReport(getOrCreate({ key: accountKey, label: null }, input.providerID), input, at, windowMs);
-    } else {
-      for (const state of states.values()) {
-        if (!state.providerIds.has(input.providerID)) continue;
-        applyReport(state, input, at, windowMs);
-      }
-    }
+    const targets = accountKey
+      ? [getOrCreate({ key: accountKey, label: null }, input.providerID)]
+      : [...states.values()].filter((state) => state.providerIds.has(input.providerID));
+    for (const state of targets) applyReport(state, input, at, windowMs);
+
+    const limits = reportLimits(input, at);
+    log({
+      event: 'report',
+      accountKey,
+      providerID: input.providerID,
+      sessionID: input.sessionID,
+      status: input.status,
+      remaining: limits.remaining,
+      resetAt: limits.resetAt,
+      retryAfterMs: limits.retryAfterMs,
+      limitedUntil: targets[0]?.limitedUntil ?? null,
+      headers: input.headers ? Object.keys(input.headers).join(',') : null,
+    });
     scheduleBroadcast();
   };
 

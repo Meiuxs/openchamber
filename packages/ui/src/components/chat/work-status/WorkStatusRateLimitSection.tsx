@@ -81,9 +81,10 @@ export const WorkStatusRateLimitSection: React.FC<{ visible?: boolean }> = ({ vi
       {accounts.map((account) => {
         const limited = account.limitedUntil !== null && account.limitedUntil > now;
         const until = account.limitedUntil;
+        const spent = account.remaining < account.limit;
         const detail = limited && until !== null
           ? t('chat.workStatus.rateLimit.limitedUntil', { time: clock(until, now) })
-          : t('chat.workStatus.rateLimit.resetIn', { time: clock(account.resetAt, now) });
+          : spent ? t('chat.workStatus.rateLimit.resetIn', { time: clock(account.resetAt, now) }) : null;
         return (
           <WorkStatusRow
             key={account.key}
@@ -91,7 +92,7 @@ export const WorkStatusRateLimitSection: React.FC<{ visible?: boolean }> = ({ vi
             value={<WorkStatusValue tone={limited ? 'error' : 'default'}>{`${account.used}/${account.limit}`}</WorkStatusValue>}
             detail={(
               <span className="inline-flex items-center gap-1.5">
-                <span>{detail}</span>
+                {detail ? <span>{detail}</span> : null}
                 {account.waiting.length > 0 ? (
                   <span className="text-muted-foreground">
                     {t('chat.workStatus.rateLimit.queued', { count: account.waiting.length })}

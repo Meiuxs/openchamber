@@ -9,7 +9,7 @@ const MAX_WINDOW_MINUTES = 1440;
 export type RateGateConfig = { requests: number; windowMinutes: number; gateways: string[] };
 export type RateGateCaps = { requests: number | null; windowMinutes: number | null };
 export type RateGateResolution = { config: RateGateConfig; caps: RateGateCaps };
-export type RateLimitHeaders = { remaining: number | null; resetAt: number | null };
+export type RateLimitHeaders = { remaining: number | null; resetAt: number | null; retryAfterMs: number | null };
 export type RateGateSettingsInput = {
   modelRateLimitRequests?: unknown;
   modelRateLimitWindowMinutes?: unknown;
@@ -125,20 +125,95 @@ export const normalizeResetAt = (value: number, now = Date.now()): number => {
   return now + Math.round(value * 1000);
 };
 
+const DURATION_PATTERN = /^(?:\d+(?:\.\d+)?(?:ms|s|m|h|d))+$/;
+const DURATION_PART = /(\d+(?:\.\d+)?)(ms|s|m|h|d)/g;
+const PLAIN_NUMBER = /^\d+(?:\.\d+)?$/;
+
+const durationUnitMs = (unit: string): number => {
+  switch (unit) {
+    case 'ms': return 1;
+    case 's': return 1_000;
+    case 'm': return 60_000;
+    case 'h': return 3_600_000;
+    case 'd': return 86_400_000;
+    default: return 1;
+  }
+};
+
+const REMAINING_HEADERS = ['x-ratelimit-remaining', 'x-ratelimit-remaining-requests', 'anthropic-ratelimit-requests-remaining'];
+const RESET_HEADERS = ['x-ratelimit-reset', 'x-ratelimit-reset-requests', 'anthropic-ratelimit-requests-reset'];
+
+export const parseDurationMs = (raw: string): number | null => {
+  const text = raw.trim().toLowerCase();
+  if (!DURATION_PATTERN.test(text)) return null;
+  let total = 0;
+  for (const match of text.matchAll(DURATION_PART)) total += Number(match[1]) * durationUnitMs(match[2] ?? 'ms');
+  return total;
+};
+
+const firstHeader = (record: Record<string, string>, names: readonly string[]): string | null => {
+  for (const name of names) {
+    const value = record[name];
+    if (value !== undefined && value.trim() !== '') return value.trim();
+  }
+  return null;
+};
+
+const parseRetryAfterMs = (record: Record<string, string>, now: number): number | null => {
+  const millis = firstHeader(record, ['retry-after-ms']);
+  if (millis !== null) {
+    const value = Number(millis);
+    if (Number.isFinite(value) && value >= 0) return Math.round(value);
+  }
+  const raw = firstHeader(record, ['retry-after']);
+  if (raw === null) return null;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) return Math.max(0, Math.round(seconds * 1_000));
+  const date = Date.parse(raw);
+  return Number.isNaN(date) ? null : Math.max(0, date - now);
+};
+
+export const parseResetValue = (raw: number | string, now = Date.now()): number | null => {
+  const text = String(raw).trim();
+  if (text === '') return null;
+  if (PLAIN_NUMBER.test(text)) {
+    const value = Number(text);
+    return Number.isFinite(value) && value > 0 ? normalizeResetAt(value, now) : null;
+  }
+  const duration = parseDurationMs(text);
+  if (duration !== null) return now + Math.round(duration);
+  const date = Date.parse(text);
+  return Number.isNaN(date) ? null : date;
+};
+
+export const parseRateLimitRecord = (record: Record<string, string>, now = Date.now()): RateLimitHeaders => {
+  const lower: Record<string, string> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (value.trim() !== '') lower[key.toLowerCase()] = value;
+  }
+
+  const remainingRaw = firstHeader(lower, REMAINING_HEADERS);
+  const remaining = remainingRaw !== null && Number.isFinite(Number(remainingRaw))
+    ? Math.max(0, Math.floor(Number(remainingRaw)))
+    : null;
+
+  const resetRaw = firstHeader(lower, RESET_HEADERS);
+  const resetAt = resetRaw === null ? null : parseResetValue(resetRaw, now);
+
+  return { remaining, resetAt, retryAfterMs: parseRetryAfterMs(lower, now) };
+};
+
 export const parseRateLimitHeaders = (
   headers: { get(name: string): string | null },
   now = Date.now(),
 ): RateLimitHeaders => {
-  const remainingRaw = headers.get('x-ratelimit-remaining');
-  const remaining = remainingRaw !== null && remainingRaw.trim() !== '' && Number.isFinite(Number(remainingRaw))
-    ? Math.max(0, Math.floor(Number(remainingRaw)))
-    : null;
-
-  const resetRaw = headers.get('x-ratelimit-reset');
-  const reset = resetRaw !== null && resetRaw.trim() !== '' ? Number(resetRaw) : Number.NaN;
-  const resetAt = Number.isFinite(reset) && reset > 0 ? normalizeResetAt(reset, now) : null;
-
-  return { remaining, resetAt };
+  const record: Record<string, string> = {};
+  const read = (name: string) => {
+    const value = headers.get(name);
+    if (value !== null) record[name] = value;
+  };
+  for (const name of [...REMAINING_HEADERS, ...RESET_HEADERS, 'retry-after', 'retry-after-ms']) read(name);
+  return parseRateLimitRecord(record, now);
 };
 
 export const accountKeyFromSecret = (secret: string) => createHash('sha256').update(secret).digest('hex').slice(0, 16);

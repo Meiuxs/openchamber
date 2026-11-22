@@ -72,6 +72,11 @@ own data fetching and reconciliation; the layout's right slot owns column width.
   is happening now.
 - Confirmed absence of quota providers creates no ongoing refresh demand after
   discovery. Credential changes invalidate that absence.
+- The request-rate section reads one fetch when the next slot frees or a cooldown
+  ends, because the server announces grants and reports only and the count would
+  otherwise sit still while its countdown reaches zero. Its countdown names the
+  next released slot, not a window reset: the budget is a sliding window whose
+  count falls one grant at a time.
 - Whole-session token totals remain unavailable when counters are stripped from
   a persisted snapshot or contain only zeros, until live usage arrives.
 - Telemetry unions overlapping tool intervals before subtracting tool time, so
