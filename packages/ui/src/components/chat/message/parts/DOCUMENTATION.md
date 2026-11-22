@@ -399,9 +399,9 @@ while skipping filesystem probes. Selection-ending clicks are consumed without
 opening a file, and platform-specific Cmd/Ctrl clicks retain external opening.
 A `file:` link the click rules do not take as a file, usually a folder, opens
 through the runtime's `files.revealPath` (the system file manager), on the same
-runtimes where the Files tree shows its reveal action: the desktop app. A
-browser client keeps the plain link, since the folder lives on the server's
-machine, and so does VS Code, which mounts no Files tree.
+runtimes where the Files tree shows its reveal action: everywhere but VS Code,
+which mounts no Files tree. In a browser the reveal runs on the machine running
+the server, so the folder opens there.
 
 #### Why KaTeX is pinned by an override
 

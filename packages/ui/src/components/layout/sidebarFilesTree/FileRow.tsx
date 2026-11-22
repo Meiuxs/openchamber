@@ -127,9 +127,8 @@ const FileRow: React.FC<FileRowProps> = ({
   const uploadDirectory = isDir ? node.path : getParentPath(node.path);
   const { canRename, canCreateFile, canCreateFolder, canDelete, canReveal, canOpenWith } = permissions;
   const canDownload = !isDir && Boolean(downloadFile);
-  const canRevealPath = canReveal && !isBrowserClient;
   const canUploadHere = isDir && canUpload;
-  const hasMenuActions = canRename || canCreateFile || canCreateFolder || canUploadHere || canDelete || canDownload || canRevealPath || canOpenWith;
+  const hasMenuActions = canRename || canCreateFile || canCreateFolder || canUploadHere || canDelete || canDownload || canReveal || canOpenWith;
 
   // Menu open state is local to each row so opening a menu in one row
   // never re-renders its siblings. Previously this state lived on the
@@ -205,7 +204,7 @@ const FileRow: React.FC<FileRowProps> = ({
           <Icon name="download" className="me-2 h-4 w-4" /> {t(isBrowserClient ? 'sidebarFilesTree.menu.download' : 'sidebarFilesTree.menu.save')}
         </Item>
       )}
-      {canRevealPath && (
+      {canReveal && (
         <Item onClick={(e: React.MouseEvent) => { e.stopPropagation(); onRevealPath(node.path); }}>
           <Icon name="folder-received" className="me-2 h-4 w-4" /> {t(getRevealLabelKey())}
         </Item>

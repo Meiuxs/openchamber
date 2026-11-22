@@ -196,7 +196,7 @@ test('on the phone a file link also opens the files drawer (#5486)', async () =>
   }
 });
 
-test('a file:// folder link opens in the file manager in the desktop app only, as the Files tree reveal does (#5521)', async () => {
+test('a file:// folder link opens in the file manager wherever the Files tree reveals, and not in VS Code (#5521)', async () => {
   const { RuntimeAPIContext } = await import('@/contexts/runtimeAPIContext');
   const { createWebAPIs } = await import('../../../../web/src/api/index');
   const web = createWebAPIs();
@@ -212,9 +212,9 @@ test('a file:// folder link opens in the file manager in the desktop app only, a
       await act(() => root.render(React.createElement(I18nProvider, null, React.createElement(RuntimeAPIContext.Provider, { value: apis }, content))));
       const event = new window.MouseEvent('click', { bubbles: true, cancelable: true });
       host.querySelector('a')?.dispatchEvent(event);
-      expect([surface, event.defaultPrevented]).toEqual([surface, electron]);
+      expect([surface, event.defaultPrevented]).toEqual([surface, platform !== 'vscode']);
     }
-    expect(revealed).toEqual(['/Users/me/some_path/']);
+    expect(revealed).toEqual(['/Users/me/some_path/', '/Users/me/some_path/']);
   } finally {
     Object.assign(window, { __OPENCHAMBER_ELECTRON__: undefined });
   }

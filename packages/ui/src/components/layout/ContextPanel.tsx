@@ -16,7 +16,7 @@ import { type RepositoryUrlMatcher, useRepositoryUrlMatcher } from '@/lib/source
 import { type TrackerUrlMatcher, useTrackerUrlMatcher } from '@/lib/trackers/matchTrackerUrl';
 import { trackerPresentation } from '@/lib/trackers/presentation';
 import { lazyWithChunkRecovery } from '@/lib/chunkLoadRecovery';
-import { isBrowserClientRuntime, isDesktopShell } from '@/lib/desktop';
+import { isDesktopShell } from '@/lib/desktop';
 import { getDisambiguatingFolders } from '@/lib/path-utils';
 import { getRelativePathLabel } from './contextPanelPaths';
 import { copyTextToClipboard } from '@/lib/clipboard';
@@ -378,7 +378,7 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
   const layoutAnimationMs = useLayoutAnimationMs();
   const isVertical = geometry.axis === 'y';
   const { t, direction } = useI18n();
-  const { files, runtime } = useRuntimeAPIs();
+  const { files } = useRuntimeAPIs();
   const isRtl = direction === 'rtl';
   const effectiveDirectory = useEffectiveDirectory() ?? '';
   const changeRequestTerm = useChangeRequestTerm(useRepositoryReferenceProvider(effectiveDirectory || null));
@@ -820,7 +820,7 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
               <ContextMenuItem onClick={() => copyPath(getRelativePathLabel(filePath, effectiveDirectory), true)}>
                 <Icon name="file-copy-2" className="me-2 size-4" /> {t('filesView.tree.menu.copyRelativePath')}
               </ContextMenuItem>
-              {files.revealPath && !isBrowserClientRuntime(runtime.platform) && (
+              {files.revealPath && (
                 <ContextMenuItem onClick={() => {
                   void files.revealPath?.(filePath).catch(() => toast.error(t('sidebarFilesTree.toast.revealFailed')));
                 }}>
@@ -861,7 +861,7 @@ export const ContextPanel: React.FC<{ zone?: ContextZone }> = ({ zone = 'right' 
         </>
       );
     },
-    [activeTab, closeContextPanelTabs, directoryKey, effectiveDirectory, files, isRtl, runtime.platform, t, tabs],
+    [activeTab, closeContextPanelTabs, directoryKey, effectiveDirectory, files, isRtl, t, tabs],
   );
 
   const handleTabDragOut = React.useCallback((tabId: string, isOutside: (point: { x: number; y: number }) => boolean) => {

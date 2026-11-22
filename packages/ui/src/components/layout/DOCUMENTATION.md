@@ -12,8 +12,10 @@ its scopes and seeding belong to `stores/DOCUMENTATION.md`
 The menu of a file tab in `ContextPanel.tsx` acts on the right-clicked tab,
 including when it is inactive. Copy relative path uses the current project
 directory (`contextPanelPaths.ts`, which also labels same-named tabs); reveal
-shows only where the file tree offers it (`files.revealPath` outside a browser
-client). VS Code does not mount `ContextPanel`, so it has no such menu.
+follows the file tree and shows whenever `files.revealPath` exists, in a
+browser included: `POST /api/fs/reveal` opens the folder on the machine running
+the server, which for a local server is the reader's own machine. VS Code does
+not mount `ContextPanel`, so it has no such menu.
 
 ## Context panel file tabs
 

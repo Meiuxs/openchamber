@@ -10,7 +10,7 @@ This module owns shared Markdown parsing, sanitization, presentation, code highl
 - Mobile file taps retain text selection and native inline-code sizing. Adding `role="button"` makes code unselectable and applies the 36px mobile control height; surrounding links, buttons and disclosures retain their own clicks.
 - A delayed mobile file confirmation checks that the session and directory still match before opening the Files drawer. Ambiguous matches remain distinct from missing files. The drawer opens on Files so the staged file is visible.
 - Automatic file probes exclude emails, handles and digit-leading suffixes. Click classification stays broader so file-looking links cannot fall through to `target="_blank"`. An `@` with a slash can identify a scoped package path.
-- File links that reach system reveal use the Files tree's runtime restrictions. Browsers and VS Code have no matching system-file-manager action.
+- File links that reach system reveal use the Files tree's runtime restrictions. VS Code, which mounts no Files tree, has no matching system-file-manager action; a browser's reveal opens the folder on the machine running the server, as the tree's item does.
 - Scheme parsing avoids constructing a URL for ordinary highlighted identifiers and paths. Malformed href escapes retain their literal spelling.
 - Unsafe or unsupported links remain inert after policy filtering. VS Code does not resolve web-session links against its separate session backend.
 - App-owned tracker, repository and commit routes take priority over extension claims. Click-time registry reads preserve that priority without subscribing every rendered link to registry changes.
