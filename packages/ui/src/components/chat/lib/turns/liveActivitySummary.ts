@@ -59,7 +59,7 @@ export interface LiveActivitySummary {
     subagents: number;
 }
 
-function countPatch(patch: string | undefined): { additions: number; deletions: number } | undefined {
+export function countPatch(patch: string | undefined): { additions: number; deletions: number } | undefined {
     if (!patch) return undefined;
     let additions = 0;
     let deletions = 0;

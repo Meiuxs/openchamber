@@ -96,6 +96,7 @@ const MessageList = React.forwardRef<MessageListHandle, MessageListProps>(({
         stickyUserHeader,
         defaultActivityExpanded,
         turnExpansion,
+        directory,
     });
     const footerWithApprovals = useApprovalFooter(sessionKey, directory, baseDisplayMessages, trailingStreamingEntry, listFooter);
 

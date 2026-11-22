@@ -19,12 +19,14 @@ export const useTimelineRows = (
         stickyUserHeader: boolean;
         defaultActivityExpanded: boolean;
         turnExpansion: Map<string, boolean>;
+        directory?: string;
     },
 ) => {
-    const { showTurnChangedFiles, showReasoningTraces, stickyUserHeader, defaultActivityExpanded, turnExpansion } = options;
+    const { showTurnChangedFiles, showReasoningTraces, stickyUserHeader, defaultActivityExpanded, turnExpansion, directory } = options;
     const { projection, staticTurns, streamingTurn } = useTurnRecords(displayMessages, {
         sessionKey,
         showTurnChangedFiles,
+        directory,
     });
     const hasUngroupedStaticEntries = projection.ungroupedMessageIds.size > 0;
     const tailHasAssistant = Boolean(streamingTurn?.assistantMessages.length);

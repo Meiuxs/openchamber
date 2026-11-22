@@ -1579,9 +1579,9 @@
       "id": "changed-files",
       "name": "Files a turn changed",
       "sources": ["packages/ui/src/components/chat/ChatContainer.tsx", "packages/ui/src/components/chat/column/ChatViewport.tsx", "packages/ui/src/components/chat/MessageList.tsx", "packages/ui/src/components/chat/ChatMessage.tsx", "packages/ui/src/components/chat/message/MessageBody.tsx", "packages/ui/src/components/chat/timeline/", "packages/ui/src/components/chat/message/body/TurnChangedFilePills.tsx", "packages/ui/src/components/chat/message/body/AssistantTurnFooter.tsx", "packages/ui/src/components/chat/message/openTurnFileDiffInEditor.ts", "packages/ui/src/components/sections/openchamber/ChatSettings.tsx"],
-      "what": "With Show changed files on, the turn footer lists the files the turn changed; a file opens its diff, and past four files a +N chip shows the rest.",
+      "what": "With Show changed files on, the turn footer shows a card of the files the turn changed; a file name opens its diff, its arrow expands the diff inline, and past four files a +N row shows the rest.",
       "reach": "Settings > Chat > Show changed files, then a turn that edits files.",
-      "proof": "No file pill before the setting and a pill for src/api/retry.ts after it; the pill opens Changes on that file's diff; +1 shows the fifth file and Show fewer hides it again.",
+      "proof": "No card before the setting and a row for src/api/retry.ts after it; the file name opens Changes on that file's diff and its arrow expands that diff under the answer; +1 shows the fifth file and Show fewer hides it again.",
       "scenarios": [
         {
           "id": "pills",
@@ -1615,6 +1615,22 @@
             {"do": "click", "on": "chat.changedFile", "path": "src/api/retry.ts"},
             {"do": "see", "on": "panel.surfaceOn", "surface": "diff"},
             {"do": "see", "on": "diff.added", "text": "isAbortError"}
+          ]
+        },
+        {
+          "id": "expand",
+          "kind": "path",
+          "title": "A changed file's arrow expands its diff under the answer and collapses it again",
+          "steps": [
+            {"do": "settings", "values": {"showTurnChangedFiles": true}},
+            {"do": "session.create", "as": "s", "title": "Chat changed files expand"},
+            {"do": "session.send", "session": "s", "prompt": "Так, виправ у retry.ts."},
+            {"do": "open", "session": "s"},
+            {"do": "click", "on": "chat.changedFileExpand"},
+            {"do": "see", "on": "diff.unified"},
+            {"do": "see", "on": "diff.added", "text": "isAbortError"},
+            {"do": "click", "on": "chat.changedFileExpand"},
+            {"do": "gone", "on": "diff.unified"}
           ]
         },
         {

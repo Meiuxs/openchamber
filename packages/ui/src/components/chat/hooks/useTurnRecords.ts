@@ -2,11 +2,20 @@ import React from 'react';
 import { projectTurnRecords } from '../lib/turns/projectTurnRecords';
 import type { ChatMessageEntry, TurnProjectionResult, TurnRecord } from '../lib/turns/types';
 import { buildProjectionCacheKey, getCachedProjection, setCachedProjection } from '../lib/turns/turnProjectionCache';
+import {
+    backfillTurnDiffStats,
+    fetchTurnDiffStats,
+    getTurnDiffBackfillState,
+    markTurnDiffBackfillPending,
+    setTurnDiffBackfillDone,
+    setTurnDiffBackfillFailed,
+} from '../lib/turns/turnDiffBackfill';
 import { streamPerfMeasure } from '@/stores/utils/streamDebug';
 
 interface UseTurnRecordsOptions {
     sessionKey?: string;
     showTurnChangedFiles: boolean;
+    directory?: string;
 }
 
 interface TurnRecordsResult {
@@ -24,6 +33,7 @@ export const useTurnRecords = (
     const streamingTurnRef = React.useRef<TurnRecord | undefined>(undefined);
     const previousSessionKeyRef = React.useRef<string | undefined>(options.sessionKey);
     const previousShowTurnChangedFilesRef = React.useRef(options.showTurnChangedFiles);
+    const [backfillVersion, bumpBackfillVersion] = React.useReducer((value: number) => value + 1, 0);
 
     if (
         previousSessionKeyRef.current !== options.sessionKey
@@ -44,16 +54,17 @@ export const useTurnRecords = (
 
     const projection = React.useMemo(() => {
         const sessionKey = options.sessionKey ?? '';
-        const cacheKey = buildProjectionCacheKey(
+        const cacheKey = `${buildProjectionCacheKey(
             sessionKey,
             messages,
             options.showTurnChangedFiles,
             'merge',
-        );
+        )}|bf:${backfillVersion}`;
         const cached = getCachedProjection(cacheKey);
         if (cached) {
-            previousProjectionRef.current = cached;
-            return cached;
+            const backfilled = backfillTurnDiffStats(cached);
+            previousProjectionRef.current = backfilled;
+            return backfilled;
         }
 
         return streamPerfMeasure('ui.turns.projection_ms', () => {
@@ -62,13 +73,42 @@ export const useTurnRecords = (
                 showTurnChangedFiles: options.showTurnChangedFiles,
                 mergeHiddenUserTurns: true,
             });
-            previousProjectionRef.current = nextProjection;
+            const backfilled = backfillTurnDiffStats(nextProjection);
+            previousProjectionRef.current = backfilled;
 
-            setCachedProjection(cacheKey, nextProjection);
+            setCachedProjection(cacheKey, backfilled);
 
-            return nextProjection;
+            return backfilled;
         });
-    }, [messages, options.showTurnChangedFiles, options.sessionKey]);
+    }, [messages, options.showTurnChangedFiles, options.sessionKey, backfillVersion]);
+
+    // Write calls carry no line counts in their metadata, so their changed
+    // files render without +N −M. For completed turns only, fetch the
+    // snapshot-based session turn diff once per turn and let the projection
+    // fill the counts. Failures keep the filename-only presentation. The bump
+    // after a fetch must not be guarded by effect cleanup: StrictMode and
+    // sibling fetches retire earlier effect runs whose cleanup would otherwise
+    // strand the settled data in the module cache with no recompute.
+    React.useEffect(() => {
+        const sessionId = options.sessionKey;
+        if (!options.showTurnChangedFiles || !sessionId) return;
+        for (const turn of projection.turns) {
+            if (turn.stream.isStreaming) continue;
+            // State first: settled turns must not re-read their lazy details.
+            if (getTurnDiffBackfillState(turn.turnId)) continue;
+            const files = turn.changedFiles;
+            if (!files || !files.some((file) => file.additions === undefined)) continue;
+            markTurnDiffBackfillPending(turn.turnId);
+            void fetchTurnDiffStats(sessionId, turn.turnId, options.directory)
+                .then((stats) => {
+                    setTurnDiffBackfillDone(turn.turnId, stats);
+                    bumpBackfillVersion();
+                })
+                .catch(() => {
+                    setTurnDiffBackfillFailed(turn.turnId);
+                });
+        }
+    }, [projection, options.showTurnChangedFiles, options.sessionKey, options.directory]);
 
     const lastMessageId = messages[messages.length - 1]?.info.id;
     const tailIsTurn = !lastMessageId || !projection.ungroupedMessageIds.has(lastMessageId);

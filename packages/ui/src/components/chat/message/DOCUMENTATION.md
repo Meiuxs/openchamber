@@ -168,3 +168,14 @@ message link because its private OpenCode sessions may be absent from desktop.
 
 A chat preview's column is too narrow for side-by-side content. Dynamic layout
 therefore resolves to unified, matching the walkthrough.
+
+### Why changed files are a card with in-place diffs
+
+The changed files under the answer used to be a row of small chips. They now
+form one tone-step card: a header carries the whole turn's `+`/`-` totals, and
+each file gets a row with its own counts. The row's arrow expands that file's
+snapshot diff under the row through the chat's lazy unified preview, so the
+reader stays in the transcript; the file name still opens the full turn diff.
+The card takes a tone step and the rows take spacing rather than borders, and
+a file outside the turn diff has no arrow. The four-row fold and its labels
+stay as they were.

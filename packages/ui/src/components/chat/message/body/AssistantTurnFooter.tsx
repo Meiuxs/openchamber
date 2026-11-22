@@ -127,13 +127,11 @@ export const AssistantTurnFooter = ({
                         )}
                       </div>
                         {!isMiniChatSurface && isLastAssistantInTurn && hasStopFinish ? (
-                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                                <TurnChangedFilePills
-                                    files={turnGroupingContext?.changedFiles}
-                                    turnId={turnGroupingContext?.snapshotTurnId}
-                                    isLatestTurn={turnGroupingContext?.isLatestTurn === true}
-                                />
-                            </div>
+                            <TurnChangedFilePills
+                                files={turnGroupingContext?.changedFiles}
+                                turnId={turnGroupingContext?.snapshotTurnId}
+                                isLatestTurn={turnGroupingContext?.isLatestTurn === true}
+                            />
                         ) : null}
                         <MobileOverlayPanel
                             open={actionSheetOpen}

@@ -73,9 +73,7 @@ const themeContext: ThemeContextValue = {
     darkThemeId: theme.metadata.id, setLightThemePreference: unexpectedThemeChange, setDarkThemePreference: unexpectedThemeChange,
 };
 const sdk = OpenCode.make({ baseUrl: 'http://localhost', fetch: async () => new Response('[]', { headers: { 'Content-Type': 'application/json' } }) });
-// The answer's action bar also has an aria-expanded button, the branch menu
-// trigger, so the changed-file toggle is the one that opens no popup.
-const changedFilesToggle = () => document.querySelector<HTMLButtonElement>('[data-fixture-message="final"] button[aria-expanded]:not([aria-haspopup])');
+const changedFilesToggle = () => document.querySelector<HTMLButtonElement>('[data-fixture-message="final"] button[data-changed-files-more]');
 let MessageBody: typeof import('../message/MessageBody').default;
 
 function assistant(id: string, parts: Part[], finish?: AssistantMessage['finish']): ChatMessageEntry {
@@ -627,9 +625,9 @@ describe('live Activity with the real message body', () => {
         await act(async () => toggle.click());
         expect(toggle.getAttribute('aria-expanded')).toBe('true');
         expect(toggle.getAttribute('aria-label')).toBe('Show fewer files');
-        expect(Array.from(container.querySelectorAll('button[aria-label^="Open src/file-"]'), (button) => button.getAttribute('title')))
-            .toEqual(files.map((file) => file.file));
-        expect(toggle.previousElementSibling?.getAttribute('title')).toBe('src/file-99.ts');
+        const nameButtons = Array.from(container.querySelectorAll('button[aria-label^="Open src/file-"]'));
+        expect(nameButtons.map((button) => button.getAttribute('title'))).toEqual(files.map((file) => file.file));
+        expect(container.textContent).toContain('100 changed files');
         await act(async () => root.render(<Harness record={record} changedFiles={[...files]} />));
         expect(toggle.getAttribute('aria-expanded')).toBe('true');
         await act(async () => {
@@ -653,10 +651,72 @@ describe('live Activity with the real message body', () => {
             { file: 'src/b.ts', additions: 1, deletions: 2 },
             { file: 'src/c.ts', additions: 1, deletions: 0, inTurnDiff: false },
         ]} />));
+        const bButton = container.querySelector<HTMLButtonElement>('button[aria-label="Open src/b.ts"]');
         expect(container.querySelector('button[aria-label="Open src/a.ts"]')?.textContent).toBe('a.ts');
-        expect(container.querySelector('button[aria-label="Open src/b.ts"]')?.textContent).toBe('b.ts+1 −2');
+        expect(bButton?.textContent).toBe('b.ts');
+        expect(bButton?.parentElement?.parentElement?.textContent).toContain('+1');
+        expect(bButton?.parentElement?.parentElement?.textContent).toContain('−2');
         expect(container.querySelector('button[aria-label="Open src/c.ts"]')).toBeNull();
-        expect(container.querySelector('span[title="src/c.ts"]')?.textContent).toBe('c.ts+1 −0');
+        expect(container.querySelector<HTMLSpanElement>('span[title="src/c.ts"]')?.textContent).toBe('c.ts');
+    });
+
+    test('the card header sums the whole turn, including files folded behind the more row', async () => {
+        const record = turn([assistant('final', [text('answer', 'Done')], 'stop')]);
+        const files = [
+            { file: 'src/a.ts', additions: 2, deletions: 3 },
+            { file: 'src/b.ts', additions: 2, deletions: 2 },
+            { file: 'src/c.ts', additions: 3, deletions: 3 },
+            { file: 'src/d-0.ts', additions: 1, deletions: 1 },
+            { file: 'src/d-1.ts', additions: 1, deletions: 1 },
+        ];
+        await act(async () => root.render(<Harness record={record} changedFiles={files} />));
+        expect(container.textContent).toContain('5 changed files');
+        expect(container.textContent).toContain('+9');
+        expect(container.textContent).toContain('−10');
+        expect(container.textContent).not.toContain('d-1.ts');
+    });
+
+    test('the arrow expands one file diff in place, a second click hides it and reuse needs no refetch', async () => {
+        const patch = '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1 +1 @@\n-old line\n+new line\n';
+        const getDiff = spyOn(opencodeClient, 'getSessionTurnDiff').mockResolvedValue([
+            { file: 'src/a.ts', patch, status: 'modified', additions: 1, deletions: 1 },
+        ]);
+        const previousSessionId = useSessionUIStore.getState().currentSessionId;
+        try {
+            await act(async () => {
+                useSessionUIStore.setState({ currentSessionId: 'session' });
+                root.render(
+                    <ChatColumnSessionContext.Provider value={{ sessionId: 'session', directory: '/project' }}>
+                        <Harness record={turn([assistant('final', [text('answer', 'Done')], 'stop')])} changedFiles={[{ file: 'src/a.ts', additions: 1, deletions: 1 }]} />
+                    </ChatColumnSessionContext.Provider>,
+                );
+            });
+            const arrow = container.querySelector<HTMLButtonElement>('button[data-changed-file-expand]');
+            expect(arrow?.getAttribute('aria-label')).toBe('Show diff for src/a.ts');
+            expect(container.querySelector('[data-turn-inline-diff]')).toBeNull();
+            await act(async () => arrow?.click());
+            expect(getDiff.mock.calls).toEqual([['session', { directory: '/project', from: undefined, context: FULL_CONTEXT_DIFF_LINES }]]);
+            expect(container.querySelector('[data-turn-inline-diff]')?.getAttribute('data-turn-inline-diff')).toBe('ready');
+            expect(arrow?.getAttribute('aria-expanded')).toBe('true');
+            expect(arrow?.getAttribute('aria-label')).toBe('Hide diff for src/a.ts');
+            await act(async () => arrow?.click());
+            expect(container.querySelector('[data-turn-inline-diff]')).toBeNull();
+            await act(async () => arrow?.click());
+            expect(getDiff.mock.calls).toHaveLength(1);
+        } finally {
+            getDiff.mockRestore();
+            await act(async () => useSessionUIStore.setState({ currentSessionId: previousSessionId }));
+        }
+    });
+
+    test('a file outside the turn diff has no arrow and cannot open a diff', async () => {
+        const record = turn([assistant('final', [text('answer', 'Done')], 'stop')]);
+        await act(async () => root.render(<Harness record={record} changedFiles={[
+            { file: 'src/c.ts', additions: 1, deletions: 0, inTurnDiff: false },
+        ]} />));
+        expect(container.querySelector('button[data-changed-file-expand]')).toBeNull();
+        expect(container.querySelector('button[aria-label="Open src/c.ts"]')).toBeNull();
+        expect(container.textContent).toContain('c.ts');
     });
 
     test('opens a historical turn diff in the VS Code editor using the column session', async () => {
