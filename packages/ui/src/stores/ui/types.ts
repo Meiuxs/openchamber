@@ -149,6 +149,8 @@ export interface UIStore {
   isSessionCreateDialogOpen: boolean;
   isScheduledTasksDialogOpen: boolean;
   isArchivePageOpen: boolean;
+  isAutomationSessionsPageOpen: boolean;
+  automationSessionsPageOpenCount: number;
   isIntegrationsCatalogOpen: boolean;
   archivePageOpenCount: number;
   isUsageStatsPageOpen: boolean;
@@ -421,6 +423,7 @@ export interface UIStore {
   setSessionCreateDialogOpen: (open: boolean) => void;
   setScheduledTasksDialogOpen: (open: boolean) => void;
   setArchivePageOpen: (open: boolean) => void;
+  setAutomationSessionsPageOpen: (open: boolean) => void;
   setIntegrationsCatalogOpen: (open: boolean) => void;
   setUsageStatsPageOpen: (open: boolean) => void;
   setSourceBoardOpen: (open: boolean) => void;

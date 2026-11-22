@@ -1354,6 +1354,14 @@ export interface ProjectEntry {
   gitlabIssueReviewModel?: string;
   /** Variant for the review model; defaults to the project variant. */
   gitlabIssueReviewVariant?: string;
+  /** OpenCode agent id the review session runs as; defaults to the project default agent. */
+  gitlabIssueReviewAgent?: string;
+  /** A passing first review is checked again by an independent blind review; absent means on. */
+  gitlabIssueSecondReview?: boolean;
+  /** Issues judged "not an issue" are closed automatically; absent means on. */
+  gitlabIssueAutoCloseNotAnIssue?: boolean;
+  /** Command the server runs in the automation workspace before pushing; a non-zero exit pauses the run. */
+  gitlabIssueVerifyCommand?: string;
   /** Description templates offered when filing a GitLab issue. */
   gitlabIssueTemplates?: Array<{
     id: string;

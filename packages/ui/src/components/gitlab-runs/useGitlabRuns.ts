@@ -27,9 +27,10 @@ type UseGitlabRunsResult = RunsState & { refresh: () => void };
 
 export const useGitlabRuns = (
   directory: string | null,
-  options?: { pollWhileActive?: boolean },
+  options?: { pollWhileActive?: boolean; includeDone?: boolean },
 ): UseGitlabRunsResult => {
   const pollWhileActive = options?.pollWhileActive === true;
+  const includeDone = options?.includeDone === true;
   const [state, setState] = React.useState<RunsState>({
     runs: null, bot: null, error: false, loading: true, notBound: false,
   });
@@ -38,9 +39,11 @@ export const useGitlabRuns = (
   const load = React.useCallback(async () => {
     const current = ++revision.current;
     try {
-      const url = directory
-        ? `/api/gitlab-issues/runs?directory=${encodeURIComponent(directory)}`
-        : '/api/gitlab-issues/runs';
+      const query = new URLSearchParams();
+      if (directory) query.set('directory', directory);
+      if (includeDone && !directory) query.set('includeDone', '1');
+      const suffix = query.toString();
+      const url = `/api/gitlab-issues/runs${suffix ? `?${suffix}` : ''}`;
       const response = await runtimeFetch(url);
       if (!response.ok) {
         // SAFETY: the error body is the server's `{ error: code }` envelope;
@@ -70,7 +73,7 @@ export const useGitlabRuns = (
       // A failed read keeps the last list visible and says so.
       setState((previous) => ({ ...previous, error: true, loading: false }));
     }
-  }, [directory]);
+  }, [directory, includeDone]);
 
   React.useEffect(() => {
     setState((previous) => ({ ...previous, loading: previous.runs === null }));

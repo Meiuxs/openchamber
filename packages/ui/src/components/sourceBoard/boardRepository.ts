@@ -150,8 +150,11 @@ function useFolderRepositories(root: string | null) {
         if (root && rootIsGitRepo === null) void ensureStatus(root, git);
     }, [ensureStatus, git, root, rootIsGitRepo]);
     React.useEffect(() => {
-        if (root && searchesNested && rootIsGitRepo !== null) void ensureNestedRepos(root);
-    }, [ensureNestedRepos, root, rootIsGitRepo, searchesNested]);
+        // Discovery answers for both answers of "is the root a repository",
+        // so it starts immediately instead of waiting for the status read;
+        // the in-flight map keeps the two reads to one request either way.
+        if (root && searchesNested) void ensureNestedRepos(root);
+    }, [ensureNestedRepos, root, searchesNested]);
 
     const retry = React.useCallback(() => {
         if (root && searchesNested) void ensureNestedRepos(root, { force: true });

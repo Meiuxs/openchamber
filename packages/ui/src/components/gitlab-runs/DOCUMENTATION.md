@@ -13,13 +13,21 @@ one run that belongs to the item it has open.
   through it, so a new ledger field is added once. `projectEntryId`, `sessions`,
   `events` and `issueState` are optional: a server older than those fields still
   lists, and only the global view's actions need the first one.
-- `useGitlabRuns(directory, { pollWhileActive })` reads
+- `useGitlabRuns(directory, { pollWhileActive, includeDone })` reads
   `/api/gitlab-issues/runs`; a `null` directory asks for every project. A failed
   read keeps the last list and sets `error`. A directory the server says is not
   bound to GitLab sets `notBound` instead, because that is an answer, not a
-  failure.
+  failure — a folder that is not a Git repository is answered that way too, so
+  the board's tab says "not a GitLab project" rather than nothing. `error` is
+  shown with a retry on the page and in the board's tab alike: with no list
+  behind it, a tab that rendered nothing read as a load that never finished.
+  `includeDone` adds the ledger's finished runs to the global answer
+  for the automation session archive.
 - `requestRunAction` is the only write. It posts the action as the bound account
-  and never as the bot; the server decides what the action means in GitLab.
+  the caller names; that account may be the project's bot account, because the
+  dispatcher tags its own notes with a hidden `<!-- openchamber-automation -->`
+  marker instead of relying on author identity. The server decides what the
+  action means in GitLab.
 - `useRunAccounts` decides which bound accounts may act on a run, matched by
   host: the ledger stores a base URL, an identity may spell the same host
   without the scheme.
@@ -32,21 +40,34 @@ for `pollWhileActive`, which polls only while a run is still moving
 refresh or for the tab to become visible again. Both read once when the tab
 returns.
 
-## The runs page's card
+## The runs page
 
-One card per run, closed until it is asked to open. Closed, it carries only what
-a person scanning the list needs: the issue title (no `#`, the issue number lives
-with the state on the right), the phase the run is in with a dot while its
-session is working, its age, and the issue's own state with a dot per automation
-label. Approving or rejecting a plan is the
-one action that stays outside, because `waiting-approval` is the only phase where
-the list is waiting on the person rather than the server.
+The page is a split view. The left column is the scanning list, in work-state
+order: what waits on the person, what is blocked, what is running, and the
+finished history. Each row carries the issue title, the owning project's path
+so two runs with similar titles stay apart in the global view, the phase with a
+dot while its session is working, its age, and the issue's own state with a dot
+per automation label. Selecting a row fills the right pane; the first row is
+selected until then. The project is named the way the sidebar names it — its
+label, else its folder name, never the directory path (`projectLabelOf`).
 
-Open, a card adds the steps, the branch and merge-request links, the blocked
-explanation and every other action. `RunSteps` draws that list: one line per stop
-with its name, the time the run entered it, the sessions the run opened there,
-and the events that happened while it was there. `RunRail` stays the one-line
-version for the board's row, where there is no room for names.
+`RunDetail` is that pane. Its header names the run and the account acting on it
+(the account badge sits beside the title, and is left out when the action will
+ask which of several accounts to use), then one line of facts — the kind, the
+issue, the merge request, and the branch right-aligned with its icon, clipped
+visually while `title` keeps the whole name. The blocked explanation gets its
+own line there instead of competing with the facts for width. Below come the
+section nav and the report sections: requirements and design, execution plan,
+changed files, review, impact, verification. `useRunFiles` reads
+the sessions' message histories and collects file-change tools by path, so the
+file list shows what the run produced before the audit trail explains how. One
+unreadable session leaves the other sessions' files in place. `FlowAudit` draws
+the stops, the events at each stop and one "open session" action per session;
+that action opens the session's chat view, where its tools and output are
+readable. The ledger only records event summaries, so the chat view is the log
+detail and the trail is its index. `RunSteps` stays the in-card version for the
+board's per-item status, and `RunRail` stays the one-line version where there is
+no room for names.
 
 Which stops show is `railOf(run)`; a blocked run marks the stop it was blocked
 from instead of adding one, because `blocked` is a state of the run and not a
@@ -90,6 +111,37 @@ The confirmation before an action names the labels it moves (`+ ai-ready`,
 `− ai-blocked`) and the account as `@username`, because the whole identity string
 of an account is longer than the dialog and says less than the address that will
 appear on the issue.
+
+## The automation session archive
+
+`AutomationSessionsView.tsx` is a separate page, reached from the sidebar. It
+asks for every project's runs with `includeDone` so finished runs stay
+reachable, then flattens each run's `sessions` into one row per session through
+`archiveRowsOf`. Rows group by the project that owns their run. Automation
+sessions are hidden from the global session list, so the ledger is the only
+index that names them; opening a row passes the run's `worktreePath` to
+`setCurrentSession`, which is what lets a hidden session be admitted and read
+by ID. "View run" moves to the runs page for the row's project.
+
+### Why the archive reads the ledger instead of the session list
+
+Hidden sessions are removed from `session.list`, so no session-list query can
+show them without undoing the hiding. The ledger already carries the session
+ID, stage and time under each run, plus the project and worktree needed to open
+it, so the archive needs no new route and stays consistent with the runs page.
+
+### Deleting a session
+
+Each session row has a delete action (`automationSessionRemoval.ts`, after the
+confirm dialog). It removes the session on this machine only: the ledger keeps
+its record, so the row stays until the ledger's retention drops it and says the
+session is gone. An automation session never reached the client's session list,
+so the deletion registers the run's `worktreePath` as the session's folder
+first; otherwise the request would be answered in whichever folder happens to
+be open. Every stage of a run works in one worktree, so it is removed only once
+no session of that run still needs it (`worktreeFreedBy`) and no other run
+points at the same directory; a worktree that fails to go leaves the deletion
+intact and reports the failure.
 
 ## The board's row
 

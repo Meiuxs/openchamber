@@ -115,7 +115,7 @@ export const SourceBoardGitlabRun: React.FC<{
           <button
             type="button"
             className="inline-flex items-center gap-1 text-foreground hover:underline"
-            onClick={() => useSessionUIStore.getState().setCurrentSession(sessionId, run.origin)}
+            onClick={() => useSessionUIStore.getState().setCurrentSession(sessionId, run.worktreePath ?? undefined)}
           >
             <SessionDot status={run.sessionStatus} />
             {t('gitlabRuns.action.openSession')}

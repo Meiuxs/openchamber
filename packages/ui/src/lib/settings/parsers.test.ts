@@ -57,10 +57,14 @@ describe('parseProjects', () => {
         gitlabIssueBranchPrefix: 'team/bot/', gitlabIssueBotAccountId: 'acc-1',
         gitlabIssueTimeoutMinutes: 45,
         gitlabIssueReviewModel: 'opencode/big-pickle', gitlabIssueReviewVariant: 'high',
+        gitlabIssueReviewAgent: 'reviewer', gitlabIssueSecondReview: true,
+        gitlabIssueAutoCloseNotAnIssue: false, gitlabIssueVerifyCommand: 'bun run check:changed',
       },
       { path: '/repo/lib' },
-      { path: '/repo/bad', gitlabIssueTimeoutMinutes: 0, gitlabIssueBranchPrefix: '', gitlabIssueReviewModel: '  ', gitlabIssueReviewVariant: '' },
-      { path: '/repo/edited', gitlabIssueBranchPrefix: 'bad prefix/', gitlabIssueTimeoutMinutes: 0 },
+      { path: '/repo/bad', gitlabIssueTimeoutMinutes: 0, gitlabIssueBranchPrefix: '', gitlabIssueReviewModel: '  ', gitlabIssueReviewVariant: '',
+        gitlabIssueReviewAgent: '  ', gitlabIssueSecondReview: 'yes', gitlabIssueVerifyCommand: '  ' },
+      { path: '/repo/edited', gitlabIssueBranchPrefix: 'bad prefix/', gitlabIssueTimeoutMinutes: 0,
+        gitlabIssueSecondReview: false, gitlabIssueAutoCloseNotAnIssue: false },
     ];
     const parsed = parseProjects(projects, { projects });
 
@@ -71,15 +75,26 @@ describe('parseProjects', () => {
       gitlabIssueTimeoutMinutes: 45,
       gitlabIssueReviewModel: 'opencode/big-pickle',
       gitlabIssueReviewVariant: 'high',
+      gitlabIssueReviewAgent: 'reviewer',
+      gitlabIssueSecondReview: true,
+      gitlabIssueAutoCloseNotAnIssue: false,
+      gitlabIssueVerifyCommand: 'bun run check:changed',
     });
     expect(parsed?.[1]).not.toHaveProperty('gitlabIssueTimeoutMinutes');
+    expect(parsed?.[1]).not.toHaveProperty('gitlabIssueSecondReview');
+    expect(parsed?.[1]).not.toHaveProperty('gitlabIssueAutoCloseNotAnIssue');
     expect(parsed?.[2]).not.toHaveProperty('gitlabIssueBranchPrefix');
     expect(parsed?.[2]).not.toHaveProperty('gitlabIssueReviewModel');
     expect(parsed?.[2]).not.toHaveProperty('gitlabIssueReviewVariant');
+    expect(parsed?.[2]).not.toHaveProperty('gitlabIssueReviewAgent');
+    expect(parsed?.[2]).not.toHaveProperty('gitlabIssueSecondReview');
+    expect(parsed?.[2]).not.toHaveProperty('gitlabIssueVerifyCommand');
     expect(parsed?.[2]).toMatchObject({ gitlabIssueTimeoutMinutes: 0 });
     expect(parsed?.[3]).toMatchObject({
       gitlabIssueBranchPrefix: 'bad prefix/',
       gitlabIssueTimeoutMinutes: 0,
+      gitlabIssueSecondReview: false,
+      gitlabIssueAutoCloseNotAnIssue: false,
     });
     expect(parseProjects(parsed, { projects: parsed })).toEqual(parsed);
   });

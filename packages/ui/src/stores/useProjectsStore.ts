@@ -79,6 +79,10 @@ interface ProjectsStore {
     gitlabIssueTimeoutMinutes?: number | null;
     gitlabIssueReviewModel?: string | null;
     gitlabIssueReviewVariant?: string | null;
+    gitlabIssueReviewAgent?: string | null;
+    gitlabIssueSecondReview?: boolean;
+    gitlabIssueAutoCloseNotAnIssue?: boolean;
+    gitlabIssueVerifyCommand?: string | null;
     gitlabIssueTemplates?: Array<{
       id: string;
       name: string;
@@ -374,6 +378,18 @@ const sanitizeProjects = (value: unknown): ProjectEntry[] => {
     if (gitlabReviewModel) project.gitlabIssueReviewModel = gitlabReviewModel;
     const gitlabReviewVariant = parseNonEmptyTrimmedString(candidate.gitlabIssueReviewVariant, {});
     if (gitlabReviewVariant) project.gitlabIssueReviewVariant = gitlabReviewVariant;
+    const gitlabReviewAgent = parseNonEmptyTrimmedString(candidate.gitlabIssueReviewAgent, {});
+    if (gitlabReviewAgent) project.gitlabIssueReviewAgent = gitlabReviewAgent;
+    // These gates default to on, so an explicit `false` is a real value and
+    // must survive the sanitizer instead of being read as "unset".
+    if (typeof candidate.gitlabIssueSecondReview === 'boolean') {
+      project.gitlabIssueSecondReview = candidate.gitlabIssueSecondReview;
+    }
+    if (typeof candidate.gitlabIssueAutoCloseNotAnIssue === 'boolean') {
+      project.gitlabIssueAutoCloseNotAnIssue = candidate.gitlabIssueAutoCloseNotAnIssue;
+    }
+    const gitlabVerifyCommand = parseNonEmptyTrimmedString(candidate.gitlabIssueVerifyCommand, {});
+    if (gitlabVerifyCommand) project.gitlabIssueVerifyCommand = gitlabVerifyCommand;
 
     // The issue templates ride through the same sync, and this sanitizer is
     // their only gate: dropping them here would erase every project's
@@ -959,6 +975,10 @@ export const useProjectsStore = create<ProjectsStore>()(
       gitlabIssueTimeoutMinutes?: number | null;
       gitlabIssueReviewModel?: string | null;
       gitlabIssueReviewVariant?: string | null;
+      gitlabIssueReviewAgent?: string | null;
+      gitlabIssueSecondReview?: boolean;
+      gitlabIssueAutoCloseNotAnIssue?: boolean;
+      gitlabIssueVerifyCommand?: string | null;
       gitlabIssueTemplates?: Array<{
         id: string;
         name: string;
@@ -1056,6 +1076,20 @@ export const useProjectsStore = create<ProjectsStore>()(
           const reviewVariant = parseNonEmptyTrimmedString(meta.gitlabIssueReviewVariant, {});
           if (reviewVariant) updated.gitlabIssueReviewVariant = reviewVariant;
           else delete updated.gitlabIssueReviewVariant;
+        }
+        if (meta.gitlabIssueReviewAgent !== undefined) {
+          const reviewAgent = parseNonEmptyTrimmedString(meta.gitlabIssueReviewAgent, {});
+          if (reviewAgent) updated.gitlabIssueReviewAgent = reviewAgent;
+          else delete updated.gitlabIssueReviewAgent;
+        }
+        if (meta.gitlabIssueSecondReview !== undefined) updated.gitlabIssueSecondReview = meta.gitlabIssueSecondReview;
+        if (meta.gitlabIssueAutoCloseNotAnIssue !== undefined) {
+          updated.gitlabIssueAutoCloseNotAnIssue = meta.gitlabIssueAutoCloseNotAnIssue;
+        }
+        if (meta.gitlabIssueVerifyCommand !== undefined) {
+          const verifyCommand = parseNonEmptyTrimmedString(meta.gitlabIssueVerifyCommand, {});
+          if (verifyCommand) updated.gitlabIssueVerifyCommand = verifyCommand;
+          else delete updated.gitlabIssueVerifyCommand;
         }
         // Templates are stored whole: the caller sends the list it wants kept,
         // and an empty list removes the field so the built-ins show again.

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { runEventSchema, sessionTrailOf, type Run } from './runModel';
+import { runEventSchema, projectLabelOf, sessionTrailOf, worktreeFreedBy, type Run } from './runModel';
 
 // A full run record, in the shape the schema infers, so the overrides stay
 // checked and no test relies on a blind cast.
@@ -17,6 +17,7 @@ const run = (overrides: Partial<Run> = {}): Run => ({
   lastError: null,
   branch: null,
   targetBranch: null,
+  worktreePath: null,
   mrIid: null,
   issueUrl: null,
   mrUrl: null,
@@ -33,6 +34,11 @@ const run = (overrides: Partial<Run> = {}): Run => ({
   sessions: [],
   events: [],
   issueState: null,
+  triage: null,
+  plan: null,
+  evidence: null,
+  reviewFindings: [],
+  reviewImpact: null,
   ...overrides,
 });
 
@@ -55,6 +61,63 @@ describe('gitlab run events', () => {
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
     expect(parsed.data.at).toBe('2026-11-15T09:20:35.390Z');
+  });
+});
+
+describe('project label', () => {
+  // A run row names its project the way the sidebar does: the project's label,
+  // never the directory path it happens to live at.
+  test('prefers the label the sidebar shows', () => {
+    expect(projectLabelOf({ label: '  openchamber  ', path: '/home/me/code/openchamber' })).toBe('openchamber');
+  });
+
+  test('falls back to the folder name, not the whole path', () => {
+    expect(projectLabelOf({ label: '', path: '/home/me/code/openchamber' })).toBe('openchamber');
+    expect(projectLabelOf({ path: 'D:\\code\\openchamber' })).toBe('openchamber');
+  });
+
+  test('answers empty for a run whose project is unknown', () => {
+    expect(projectLabelOf(null)).toBe('');
+    expect(projectLabelOf({ path: '' })).toBe('');
+  });
+});
+
+describe('worktree cleanup', () => {
+  const worktreePath = '/worktrees/issue-5';
+  const stages = [
+    { sessionId: 'implement', stage: 'implementing', at: '2026-11-15T09:41:00.000Z' },
+    { sessionId: 'review', stage: 'reviewing', at: '2026-11-15T10:15:00.000Z' },
+  ];
+
+  // Every stage of a run works in the same folder; deleting one session must not
+  // pull the folder out from under the stage that is still there.
+  test('keeps the worktree while another stage of the same run needs it', () => {
+    const target = run({ worktreePath, sessions: stages });
+
+    expect(worktreeFreedBy(target, [target], new Set(['implement']))).toBe(false);
+  });
+
+  test('frees the worktree once its last session is gone', () => {
+    const target = run({ worktreePath, sessions: stages });
+
+    expect(worktreeFreedBy(target, [target], new Set(['implement', 'review']))).toBe(true);
+  });
+
+  test('keeps a worktree another run still points at', () => {
+    const target = run({ worktreePath, sessions: stages });
+    const other = run({
+      key: 'run-2',
+      worktreePath,
+      sessions: [{ sessionId: 'other', stage: 'implementing', at: null }],
+    });
+
+    expect(worktreeFreedBy(target, [target, other], new Set(['implement', 'review']))).toBe(false);
+  });
+
+  test('answers false for a run that never had a worktree', () => {
+    const target = run({ sessions: stages });
+
+    expect(worktreeFreedBy(target, [target], new Set(['implement', 'review']))).toBe(false);
   });
 });
 

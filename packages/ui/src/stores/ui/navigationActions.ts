@@ -23,6 +23,7 @@ export const createNavigationActions: UIStoreSlice<
   | 'setSessionCreateDialogOpen'
   | 'setScheduledTasksDialogOpen'
   | 'setArchivePageOpen'
+  | 'setAutomationSessionsPageOpen'
   | 'setIntegrationsCatalogOpen'
   | 'setUsageStatsPageOpen'
   | 'setSourceBoardOpen'
@@ -153,56 +154,62 @@ export const createNavigationActions: UIStoreSlice<
 
   setScheduledTasksDialogOpen: (open) => {
     set(open
-      ? { isScheduledTasksDialogOpen: true, isArchivePageOpen: false, isIntegrationsCatalogOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
+      ? { isScheduledTasksDialogOpen: true, isArchivePageOpen: false, isAutomationSessionsPageOpen: false, isIntegrationsCatalogOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
       : { isScheduledTasksDialogOpen: false });
   },
 
   setArchivePageOpen: (open) => {
     set(open
-      ? { isArchivePageOpen: true, archivePageOpenCount: get().archivePageOpenCount + 1, isUsageStatsPageOpen: false, isIntegrationsCatalogOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, isScheduledTasksDialogOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
+      ? { isArchivePageOpen: true, archivePageOpenCount: get().archivePageOpenCount + 1, isAutomationSessionsPageOpen: false, isUsageStatsPageOpen: false, isIntegrationsCatalogOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, isScheduledTasksDialogOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
       : { isArchivePageOpen: false });
+  },
+
+  setAutomationSessionsPageOpen: (open) => {
+    set(open
+      ? { isAutomationSessionsPageOpen: true, automationSessionsPageOpenCount: get().automationSessionsPageOpenCount + 1, isArchivePageOpen: false, isUsageStatsPageOpen: false, isIntegrationsCatalogOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, isScheduledTasksDialogOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
+      : { isAutomationSessionsPageOpen: false });
   },
 
   setIntegrationsCatalogOpen: (open) => {
     set(open
-      ? { isIntegrationsCatalogOpen: true, isArchivePageOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, isScheduledTasksDialogOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
+      ? { isIntegrationsCatalogOpen: true, isArchivePageOpen: false, isAutomationSessionsPageOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, isScheduledTasksDialogOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
       : { isIntegrationsCatalogOpen: false });
   },
 
   setUsageStatsPageOpen: (open) => {
     set(open
-      ? { isUsageStatsPageOpen: true, isSourceBoardOpen: false, isOverviewOpen: false, isArchivePageOpen: false, isIntegrationsCatalogOpen: false, isScheduledTasksDialogOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
+      ? { isUsageStatsPageOpen: true, isSourceBoardOpen: false, isOverviewOpen: false, isArchivePageOpen: false, isAutomationSessionsPageOpen: false, isIntegrationsCatalogOpen: false, isScheduledTasksDialogOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
       : { isUsageStatsPageOpen: false });
   },
 
   setSourceBoardOpen: (open) => {
     set(open
-      ? { isSourceBoardOpen: true, isOverviewOpen: false, isUsageStatsPageOpen: false, isArchivePageOpen: false, isIntegrationsCatalogOpen: false, isScheduledTasksDialogOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
+      ? { isSourceBoardOpen: true, isOverviewOpen: false, isUsageStatsPageOpen: false, isArchivePageOpen: false, isAutomationSessionsPageOpen: false, isIntegrationsCatalogOpen: false, isScheduledTasksDialogOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
       : { isSourceBoardOpen: false });
   },
 
   setOverviewOpen: (open) => {
     if (open && !get().overviewFeatureAvailable) return;
     set(open
-      ? { isOverviewOpen: true, isSourceBoardOpen: false, isUsageStatsPageOpen: false, isArchivePageOpen: false, isIntegrationsCatalogOpen: false, isScheduledTasksDialogOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
+      ? { isOverviewOpen: true, isSourceBoardOpen: false, isUsageStatsPageOpen: false, isArchivePageOpen: false, isAutomationSessionsPageOpen: false, isIntegrationsCatalogOpen: false, isScheduledTasksDialogOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null, openGuestPageId: null }
       : { isOverviewOpen: false });
   },
 
   setWorktreesPageProjectId: (projectId) => {
     set(projectId
-      ? { worktreesPageProjectId: projectId, spacesPageProjectId: null, gitlabRunsPageProjectId: null, isScheduledTasksDialogOpen: false, isArchivePageOpen: false, isIntegrationsCatalogOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, runOverviewKey: null, openGuestPageId: null }
+      ? { worktreesPageProjectId: projectId, spacesPageProjectId: null, gitlabRunsPageProjectId: null, isScheduledTasksDialogOpen: false, isArchivePageOpen: false, isAutomationSessionsPageOpen: false, isIntegrationsCatalogOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, runOverviewKey: null, openGuestPageId: null }
       : { worktreesPageProjectId: null });
   },
 
   setSpacesPageProjectId: (projectId) => {
     set(projectId
-      ? { spacesPageProjectId: projectId, worktreesPageProjectId: null, gitlabRunsPageProjectId: null, isScheduledTasksDialogOpen: false, isArchivePageOpen: false, isIntegrationsCatalogOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, runOverviewKey: null, openGuestPageId: null }
+      ? { spacesPageProjectId: projectId, worktreesPageProjectId: null, gitlabRunsPageProjectId: null, isScheduledTasksDialogOpen: false, isArchivePageOpen: false, isAutomationSessionsPageOpen: false, isIntegrationsCatalogOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, runOverviewKey: null, openGuestPageId: null }
       : { spacesPageProjectId: null });
   },
 
   setGitlabRunsPageProjectId: (projectId) => {
     set(projectId
-      ? { gitlabRunsPageProjectId: projectId, spacesPageProjectId: null, worktreesPageProjectId: null, isScheduledTasksDialogOpen: false, isArchivePageOpen: false, isIntegrationsCatalogOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, runOverviewKey: null, openGuestPageId: null }
+      ? { gitlabRunsPageProjectId: projectId, spacesPageProjectId: null, worktreesPageProjectId: null, isScheduledTasksDialogOpen: false, isArchivePageOpen: false, isAutomationSessionsPageOpen: false, isIntegrationsCatalogOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, runOverviewKey: null, openGuestPageId: null }
       : { gitlabRunsPageProjectId: null });
   },
 
@@ -211,18 +218,19 @@ export const createNavigationActions: UIStoreSlice<
   },
 
   setOpenGuestPage: (id) => {
-    set(id ? { openGuestPageId: id, isScheduledTasksDialogOpen: false, isArchivePageOpen: false, isIntegrationsCatalogOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null }
+    set(id ? { openGuestPageId: id, isScheduledTasksDialogOpen: false, isArchivePageOpen: false, isAutomationSessionsPageOpen: false, isIntegrationsCatalogOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, runOverviewKey: null }
       : { openGuestPageId: null });
   },
 
   closeMainSurfaces: () => {
     const state = get();
-    if (!state.isScheduledTasksDialogOpen && !state.isArchivePageOpen && !state.isIntegrationsCatalogOpen && !state.isUsageStatsPageOpen && !state.isSourceBoardOpen && !state.isOverviewOpen && !state.worktreesPageProjectId && !state.spacesPageProjectId && !state.gitlabRunsPageProjectId && !state.runOverviewKey && !state.openGuestPageId) {
+    if (!state.isScheduledTasksDialogOpen && !state.isArchivePageOpen && !state.isAutomationSessionsPageOpen && !state.isIntegrationsCatalogOpen && !state.isUsageStatsPageOpen && !state.isSourceBoardOpen && !state.isOverviewOpen && !state.worktreesPageProjectId && !state.spacesPageProjectId && !state.gitlabRunsPageProjectId && !state.runOverviewKey && !state.openGuestPageId) {
       return;
     }
     set({
       isScheduledTasksDialogOpen: false,
       isArchivePageOpen: false,
+      isAutomationSessionsPageOpen: false,
       isIntegrationsCatalogOpen: false,
       isUsageStatsPageOpen: false,
       isSourceBoardOpen: false,
@@ -310,7 +318,7 @@ export const createNavigationActions: UIStoreSlice<
 
   setRunOverviewKey: (runKey) => {
     set(runKey
-      ? { runOverviewKey: runKey, isSessionSwitcherOpen: false, isScheduledTasksDialogOpen: false, isArchivePageOpen: false, isIntegrationsCatalogOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, openGuestPageId: null }
+      ? { runOverviewKey: runKey, isSessionSwitcherOpen: false, isScheduledTasksDialogOpen: false, isArchivePageOpen: false, isAutomationSessionsPageOpen: false, isIntegrationsCatalogOpen: false, isUsageStatsPageOpen: false, isSourceBoardOpen: false, isOverviewOpen: false, worktreesPageProjectId: null, spacesPageProjectId: null, gitlabRunsPageProjectId: null, openGuestPageId: null }
       : { runOverviewKey: null });
   },
 

@@ -386,6 +386,28 @@ const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =
   const timeoutInvalid = storedTimeout !== undefined
     && !(Number.isInteger(storedTimeout) && storedTimeout >= 1 && storedTimeout <= 1440);
 
+  const storedReviewAgent = project.gitlabIssueReviewAgent ?? '';
+  const [reviewAgentDraft, setReviewAgentDraft] = React.useState(storedReviewAgent);
+  React.useEffect(() => {
+    setReviewAgentDraft(project.gitlabIssueReviewAgent ?? '');
+  }, [project.id, project.gitlabIssueReviewAgent]);
+  const commitReviewAgent = () => {
+    const trimmed = reviewAgentDraft.trim();
+    if (trimmed === storedReviewAgent) return;
+    updateProjectMeta(project.id, { gitlabIssueReviewAgent: trimmed });
+  };
+
+  const storedVerifyCommand = project.gitlabIssueVerifyCommand ?? '';
+  const [verifyCommandDraft, setVerifyCommandDraft] = React.useState(storedVerifyCommand);
+  React.useEffect(() => {
+    setVerifyCommandDraft(project.gitlabIssueVerifyCommand ?? '');
+  }, [project.id, project.gitlabIssueVerifyCommand]);
+  const commitVerifyCommand = () => {
+    const trimmed = verifyCommandDraft.trim();
+    if (trimmed === storedVerifyCommand) return;
+    updateProjectMeta(project.id, { gitlabIssueVerifyCommand: trimmed });
+  };
+
   const commitPrefix = () => {
     const trimmed = prefixDraft.trim();
     if (!isValidBranchPrefix(trimmed)) {
@@ -501,6 +523,54 @@ const GitlabIssuesSection: React.FC<{ project: ProjectEntry }> = ({ project }) =
               </Select>
             </SettingsFieldRow>
           ) : null}
+          <SettingsFieldRow
+            settingsItem="projects.gitlab-review-agent"
+            label={t('settings.projects.page.field.gitlabReviewAgent')}
+            info={t('settings.projects.page.field.gitlabReviewAgentInfo')}
+          >
+            <Input
+              value={reviewAgentDraft}
+              onChange={(event) => setReviewAgentDraft(event.target.value)}
+              onBlur={commitReviewAgent}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+              }}
+              placeholder={t('settings.projects.page.field.gitlabReviewAgentUseProject')}
+              aria-label={t('settings.projects.page.field.gitlabReviewAgent')}
+              className="h-8 rounded-md px-3 font-mono text-xs"
+            />
+          </SettingsFieldRow>
+          <SettingsCheckboxRow
+            settingsItem="projects.gitlab-second-review"
+            checked={project.gitlabIssueSecondReview !== false}
+            onChange={(checked) => updateProjectMeta(project.id, { gitlabIssueSecondReview: checked })}
+            label={t('settings.projects.page.field.gitlabSecondReview')}
+            info={t('settings.projects.page.field.gitlabSecondReviewInfo')}
+          />
+          <SettingsCheckboxRow
+            settingsItem="projects.gitlab-auto-close-not-an-issue"
+            checked={project.gitlabIssueAutoCloseNotAnIssue !== false}
+            onChange={(checked) => updateProjectMeta(project.id, { gitlabIssueAutoCloseNotAnIssue: checked })}
+            label={t('settings.projects.page.field.gitlabAutoCloseNotAnIssue')}
+            info={t('settings.projects.page.field.gitlabAutoCloseNotAnIssueInfo')}
+          />
+          <SettingsFieldRow
+            settingsItem="projects.gitlab-verify-command"
+            label={t('settings.projects.page.field.gitlabVerifyCommand')}
+            info={t('settings.projects.page.field.gitlabVerifyCommandInfo')}
+          >
+            <Input
+              value={verifyCommandDraft}
+              onChange={(event) => setVerifyCommandDraft(event.target.value)}
+              onBlur={commitVerifyCommand}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+              }}
+              placeholder="bun run check:changed"
+              aria-label={t('settings.projects.page.field.gitlabVerifyCommand')}
+              className="h-8 rounded-md px-3 font-mono text-xs"
+            />
+          </SettingsFieldRow>
           <SettingsFieldRow
             settingsItem="projects.gitlab-bot-account"
             label={t('settings.projects.page.field.gitlabBotAccount')}

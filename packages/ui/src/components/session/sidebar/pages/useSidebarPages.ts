@@ -8,7 +8,7 @@ import type { ShortcutActionId } from '@/lib/shortcuts';
 import { useEnterpriseMode } from '@/stores/useEnterprisePolicyStore';
 import { useUIStore } from '@/stores/useUIStore';
 
-type BuiltinPageId = 'overview' | 'source-board' | 'scheduled' | 'archive' | 'stats' | 'integrations';
+type BuiltinPageId = 'overview' | 'source-board' | 'scheduled' | 'archive' | 'automation-sessions' | 'stats' | 'integrations';
 
 function builtinPageIcon(id: BuiltinPageId): IconName {
   switch (id) {
@@ -16,6 +16,7 @@ function builtinPageIcon(id: BuiltinPageId): IconName {
     case 'source-board': return 'git-pull-request';
     case 'scheduled': return 'calendar-schedule';
     case 'archive': return 'archive';
+    case 'automation-sessions': return 'robot';
     case 'stats': return 'bar-chart';
     case 'integrations': return 'apps-2-add';
   }
@@ -38,6 +39,7 @@ export const useSidebarPages = (enabled: boolean): readonly SidebarPage[] => {
   const isSourceBoardOpen = useUIStore((state) => state.isSourceBoardOpen);
   const isScheduledOpen = useUIStore((state) => state.isScheduledTasksDialogOpen);
   const isArchiveOpen = useUIStore((state) => state.isArchivePageOpen);
+  const isAutomationSessionsOpen = useUIStore((state) => state.isAutomationSessionsPageOpen);
   const isUsageOpen = useUIStore((state) => state.isUsageStatsPageOpen);
   const isIntegrationsCatalogOpen = useUIStore((state) => state.isIntegrationsCatalogOpen);
   const openGuestPageId = useUIStore((state) => state.openGuestPageId);
@@ -58,6 +60,7 @@ export const useSidebarPages = (enabled: boolean): readonly SidebarPage[] => {
       builtin('source-board', t('sourceBoard.title'), isSourceBoardOpen, (open) => ui().setSourceBoardOpen(open), 'toggle_source_board'),
       builtin('scheduled', t('sessions.sidebar.header.actions.scheduledTasks'), isScheduledOpen, (open) => ui().setScheduledTasksDialogOpen(open)),
       builtin('archive', t('sessions.sidebar.nav.archive'), isArchiveOpen, (open) => ui().setArchivePageOpen(open), 'open_archive'),
+      builtin('automation-sessions', t('gitlabRuns.archive.title'), isAutomationSessionsOpen, (open) => ui().setAutomationSessionsPageOpen(open)),
       builtin('stats', t('usageStats.openAction'), isUsageOpen, (open) => ui().setUsageStatsPageOpen(open)),
     );
     if (!enterpriseMode) {
@@ -76,5 +79,5 @@ export const useSidebarPages = (enabled: boolean): readonly SidebarPage[] => {
       });
     }
     return pages;
-  }, [enabled, enterpriseMode, guestPages, isArchiveOpen, isIntegrationsCatalogOpen, isOverviewOpen, isScheduledOpen, isSourceBoardOpen, isUsageOpen, openGuestPageId, overviewAvailable, t]);
+  }, [enabled, enterpriseMode, guestPages, isArchiveOpen, isAutomationSessionsOpen, isIntegrationsCatalogOpen, isOverviewOpen, isScheduledOpen, isSourceBoardOpen, isUsageOpen, openGuestPageId, overviewAvailable, t]);
 };

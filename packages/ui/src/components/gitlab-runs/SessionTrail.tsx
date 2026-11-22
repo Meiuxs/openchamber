@@ -27,7 +27,9 @@ export const SessionTrail = ({
   const trail = sessionTrailOf(run);
   if (trail.length === 0) return null;
   const open = onOpenSession ?? ((sessionId: string) => {
-    useSessionUIStore.getState().setCurrentSession(sessionId, run.origin);
+    // Automation sessions are hidden from the session index; the worktree is
+    // the directory hint that lets them open by ID.
+    useSessionUIStore.getState().setCurrentSession(sessionId, run.worktreePath ?? undefined);
   });
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 typography-meta text-muted-foreground">

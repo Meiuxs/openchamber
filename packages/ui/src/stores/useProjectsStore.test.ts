@@ -51,6 +51,37 @@ describe("useProjectsStore settings synchronization", () => {
     }
   })
 
+  test("settings sync keeps the review agent, the default-on gates and the verify command through the sanitizer", () => {
+    const previous = useProjectsStore.getState()
+    try {
+      const settings = { projects: [
+        {
+          id: "repo", path: "/repo", label: "Repo",
+          gitlabIssueReviewAgent: " reviewer ", gitlabIssueSecondReview: false,
+          gitlabIssueAutoCloseNotAnIssue: true, gitlabIssueVerifyCommand: " bun run check:changed ",
+        },
+        {
+          id: "junk", path: "/junk", label: "Junk",
+          gitlabIssueReviewAgent: " ", gitlabIssueSecondReview: "yes",
+          gitlabIssueAutoCloseNotAnIssue: "off", gitlabIssueVerifyCommand: "  ",
+        },
+      ] } as DesktopSettings
+      useProjectsStore.getState().synchronizeFromSettings(settings)
+      const repo = useProjectsStore.getState().projects.find((entry) => entry.path === "/repo")
+      expect(repo?.gitlabIssueReviewAgent).toBe("reviewer")
+      expect(repo?.gitlabIssueSecondReview).toBe(false)
+      expect(repo?.gitlabIssueAutoCloseNotAnIssue).toBe(true)
+      expect(repo?.gitlabIssueVerifyCommand).toBe("bun run check:changed")
+      const junk = useProjectsStore.getState().projects.find((entry) => entry.path === "/junk")
+      expect(junk).not.toHaveProperty("gitlabIssueReviewAgent")
+      expect(junk).not.toHaveProperty("gitlabIssueSecondReview")
+      expect(junk).not.toHaveProperty("gitlabIssueAutoCloseNotAnIssue")
+      expect(junk).not.toHaveProperty("gitlabIssueVerifyCommand")
+    } finally {
+      useProjectsStore.setState(previous, true)
+    }
+  })
+
   test("directory navigation preserves roots and does not create history duplicates for Windows spelling variants", () => {
     const previous = useDirectoryStore.getState()
     const sdkDirectory = opencodeClient.getDirectory()

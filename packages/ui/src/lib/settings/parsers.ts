@@ -429,6 +429,12 @@ const projectEntrySchema = z.object({
   gitlabIssueTimeoutMinutes: z.number().finite().optional().catch(undefined),
   gitlabIssueReviewModel: nonEmptyTrimmed.optional().catch(undefined),
   gitlabIssueReviewVariant: nonEmptyTrimmed.optional().catch(undefined),
+  gitlabIssueReviewAgent: nonEmptyTrimmed.optional().catch(undefined),
+  // Both booleans default to on when absent, so an explicit `false` must
+  // survive the round trip instead of being dropped.
+  gitlabIssueSecondReview: z.boolean().optional().catch(undefined),
+  gitlabIssueAutoCloseNotAnIssue: z.boolean().optional().catch(undefined),
+  gitlabIssueVerifyCommand: nonEmptyTrimmed.optional().catch(undefined),
   // The issue description templates this project offers. A built-in template is
   // overridden by an entry that reuses its id; custom templates carry their own.
   gitlabIssueTemplates: z.array(z.object({
@@ -476,6 +482,12 @@ export const parseProjects = fromSchema(
       }
       if (parsed.data.gitlabIssueReviewModel) project.gitlabIssueReviewModel = parsed.data.gitlabIssueReviewModel;
       if (parsed.data.gitlabIssueReviewVariant) project.gitlabIssueReviewVariant = parsed.data.gitlabIssueReviewVariant;
+      if (parsed.data.gitlabIssueReviewAgent) project.gitlabIssueReviewAgent = parsed.data.gitlabIssueReviewAgent;
+      if (parsed.data.gitlabIssueSecondReview !== undefined) project.gitlabIssueSecondReview = parsed.data.gitlabIssueSecondReview;
+      if (parsed.data.gitlabIssueAutoCloseNotAnIssue !== undefined) {
+        project.gitlabIssueAutoCloseNotAnIssue = parsed.data.gitlabIssueAutoCloseNotAnIssue;
+      }
+      if (parsed.data.gitlabIssueVerifyCommand) project.gitlabIssueVerifyCommand = parsed.data.gitlabIssueVerifyCommand;
       if (parsed.data.gitlabIssueTemplates?.length) {
         project.gitlabIssueTemplates = parsed.data.gitlabIssueTemplates.map((template) => ({
           id: template.id,

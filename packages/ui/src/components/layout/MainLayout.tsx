@@ -56,6 +56,7 @@ const loadOpenCodeStatusDialog = () => import('../ui/OpenCodeStatusDialog').then
 const loadRunOverview = () => import('@/components/multirun/RunOverview').then((m) => m.RunOverview);
 const loadScheduledTasksDialog = () => import('@/components/session/ScheduledTasksDialog').then((m) => m.ScheduledTasksDialog);
 const loadArchiveView = () => import('@/components/views/ArchiveView').then((m) => m.ArchiveView);
+const loadAutomationSessionsView = () => import('@/components/gitlab-runs/AutomationSessionsView').then((m) => m.AutomationSessionsViewPage);
 const loadIntegrationsCatalogView = () => import('@/components/views/IntegrationsCatalogView').then((m) => m.IntegrationsCatalogView);
 const loadUsageStatsView = () => import('@/components/views/usage/UsageStatsView').then((m) => m.UsageStatsView);
 const loadSourceBoardView = () => import('@/components/sourceBoard/SourceBoardView').then((m) => m.SourceBoardView);
@@ -127,6 +128,7 @@ export const MainLayout: React.FC = () => {
     const isRunOverviewOpen = useUIStore((state) => state.runOverviewKey !== null);
     const isScheduledTasksPageOpen = useUIStore((state) => state.isScheduledTasksDialogOpen);
     const isArchivePageOpen = useUIStore((state) => state.isArchivePageOpen);
+    const isAutomationSessionsPageOpen = useUIStore((state) => state.isAutomationSessionsPageOpen);
     const isIntegrationsCatalogOpen = useUIStore((state) => state.isIntegrationsCatalogOpen);
     const isUsageStatsPageOpen = useUIStore((state) => state.isUsageStatsPageOpen);
     const isSourceBoardOpen = useUIStore((state) => state.isSourceBoardOpen);
@@ -153,7 +155,7 @@ export const MainLayout: React.FC = () => {
     // Any full-page surface replacing the chat area. While open, the chat is
     // fully hidden (not just covered) so none of its floating chrome bleeds
     // through, and selecting a session or draft anywhere closes the surface.
-    const isSurfacePageOpen = isScheduledTasksPageOpen || isArchivePageOpen || isIntegrationsCatalogOpen || isUsageStatsPageOpen || isSourceBoardOpen || isOverviewOpen || Boolean(worktreesPageProjectId) || Boolean(gitlabRunsPageProjectId) || isSpacesPageOpen || isRunOverviewOpen || Boolean(guestPage);
+    const isSurfacePageOpen = isScheduledTasksPageOpen || isArchivePageOpen || isAutomationSessionsPageOpen || isIntegrationsCatalogOpen || isUsageStatsPageOpen || isSourceBoardOpen || isOverviewOpen || Boolean(worktreesPageProjectId) || Boolean(gitlabRunsPageProjectId) || isSpacesPageOpen || isRunOverviewOpen || Boolean(guestPage);
     const mainRef = React.useRef<HTMLElement | null>(null);
     // Cmd/Ctrl+W in the desktop app closes the page covering the chat before
     // it closes the window. The page is the place the user last worked in, so
@@ -246,6 +248,7 @@ export const MainLayout: React.FC = () => {
                                             <ErrorBoundary><OnDemand needed={isRunOverviewOpen} load={loadRunOverview} onFailure={closeMainSurfaces} /></ErrorBoundary>
                                             <ErrorBoundary><OnDemand needed={isScheduledTasksPageOpen} load={loadScheduledTasksDialog} onFailure={closeMainSurfaces} /></ErrorBoundary>
                                             <ErrorBoundary><OnDemand needed={isArchivePageOpen} load={loadArchiveView} onFailure={closeMainSurfaces} /></ErrorBoundary>
+                                            <ErrorBoundary><OnDemand needed={isAutomationSessionsPageOpen} load={loadAutomationSessionsView} onFailure={closeMainSurfaces} /></ErrorBoundary>
                                             <ErrorBoundary><OnDemand needed={isIntegrationsCatalogOpen} load={loadIntegrationsCatalogView} onFailure={closeMainSurfaces} /></ErrorBoundary>
                                             {isUsageStatsPageOpen && (
                                                 <div className="absolute inset-0 z-10 bg-background">

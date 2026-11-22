@@ -1,11 +1,15 @@
 /**
  * The GitLab automation runs page.
  *
- * One row per run, in work-state order: what waits on the person, what is
- * blocked, what is running, and the finished history. The page reads the
- * server's run ledger and acts through the same GitLab labels and comment
- * commands a person would type, always as the acting bound account; it never
- * writes the ledger and never acts as the bot.
+ * Two levels rather than a split: the list gets the whole width to scan, and a
+ * run opens into its own full-width report. A split view squeezed the report
+ * into a narrow column, which is the opposite of what the page is for.
+ *
+ * The page reads the server's run ledger and acts through the same GitLab
+ * labels and comment commands a person would type, always as the acting bound
+ * account; it never writes the ledger. That account may be the project's bot
+ * account too — the dispatcher tags its own notes with a hidden marker rather
+ * than relying on author identity, so one GitLab account can serve both roles.
  */
 import * as React from 'react';
 
@@ -21,24 +25,20 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from '@/components/ui';
 import { useI18n, type I18nKey } from '@/lib/i18n';
-import { openExternalUrl } from '@/lib/url';
 import { cn } from '@/lib/utils';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
-import { SessionDot } from './RunRail';
-import { RunSteps } from './RunSteps';
-import { SessionTrail } from './SessionTrail';
+import { RunDetail } from './RunDetail';
 import {
   formatAge,
-  guideKey,
   phaseLabelKey,
+  projectLabelOf,
   runActionCommand,
   runActionKind,
   type Phase,
   type Run,
   type RunAction as Action,
-  type RunIssueState,
 } from './runModel';
 import { requestRunAction } from './runAction';
 import { useGitlabRuns } from './useGitlabRuns';
@@ -53,261 +53,73 @@ type PendingAction = {
   kind: 'comment' | 'labels';
 };
 
+type StatusFilter = 'all' | 'waiting' | 'blocked' | 'active' | 'done';
+
+const STATUS_OF: Record<string, StatusFilter> = {
+  'waiting-approval': 'waiting',
+  blocked: 'blocked',
+  done: 'done',
+};
+
+const statusOf = (phase: string): StatusFilter => STATUS_OF[phase] ?? 'active';
+
 /** What each label-moving action does to the issue, so the confirmation can say it. */
 const labelChangeOf = (action: Action): { add: string[]; remove: string[] } | null => {
-  if (action === 'reset') {
-    return { add: ['ai-ready'], remove: ['ai-blocked'] };
-  }
-  if (action === 'cancel') {
-    return { add: ['ai-blocked'], remove: ['ai-working'] };
-  }
+  if (action === 'reset') return { add: ['ai-ready'], remove: ['ai-blocked'] };
+  if (action === 'cancel') return { add: ['ai-blocked'], remove: ['ai-working'] };
   return null;
 };
 
-// The automation's own inputs, as dots: `ai-blocked` is left out because a
-// blocked run already says so in words and a second mark only repeats it.
-const ISSUE_LABEL_DOTS = {
-  'ai-ready': 'var(--status-success)',
-  'ai-working': 'var(--status-info)',
-  'ai-done': 'var(--border)',
-} satisfies Record<string, string>;
-
-type IssueLabelWithDot = keyof typeof ISSUE_LABEL_DOTS;
-
-const isIssueLabelWithDot = (label: string): label is IssueLabelWithDot => (
-  label in ISSUE_LABEL_DOTS
-);
-
-const IssueStateBadge = ({ state }: { state: RunIssueState | null }) => {
-  const { t } = useI18n();
-  if (!state?.state) return null;
-  const closed = state.state === 'closed';
-  return (
-    <span className="flex shrink-0 items-center gap-1.5">
-      {state.labels
-        .filter(isIssueLabelWithDot)
-        .map((label) => (
-          <span
-            key={label}
-            title={label}
-            className="size-1.5 rounded-full"
-            style={{ backgroundColor: ISSUE_LABEL_DOTS[label] }}
-          />
-        ))}
-      <span className={cn(
-        'rounded border px-1.5 text-[11px] leading-4',
-        closed
-          ? 'border-[var(--border)] text-muted-foreground'
-          : 'border-[var(--status-success)] text-[var(--status-success)]',
-      )}
-      >
-        {t(closed ? 'gitlabRuns.issue.closed' : 'gitlabRuns.issue.opened')}
-      </span>
-    </span>
-  );
-};
-
-/**
- * One run, closed until asked: the title, the phase it is in and the issue's own
- * state are enough to scan a list, and the steps, the branch and the actions are
- * one click away.
- */
-const RunCard: React.FC<{
+const RunRow: React.FC<{
   run: Run;
-  /** `@root` of the account the actions would act as; null when none is bound. */
-  account: string | null;
-  /** More than one candidate account for this origin: the attribution is
-      ambiguous, so the actions wait for the person to pick one in settings. */
-  multiAccounts: boolean;
-  onOpenSession: (run: Run, sessionId: string) => void;
-  onOpenUrl: (url: string) => void;
-  onAction: (run: Run, action: Action) => void;
-  onOpenSettings: (projectEntryId: string | null) => void;
-}> = ({ run, account, multiAccounts, onOpenSession, onOpenUrl, onAction, onOpenSettings }) => {
+  projectLabel: string;
+  onSelect: () => void;
+}> = ({ run, projectLabel, onSelect }) => {
   const { t } = useI18n();
-  const [open, setOpen] = React.useState(false);
-  // SAFETY: the ledger only fills `phase` with a phase name (or `blocked`).
   const phase = run.phase as Phase;
-  // SAFETY: `kind` is the schema's `bug`/`feature` enum, and both have a
-  // `gitlabRuns.kind.*` entry in the i18n dictionaries.
-  const kindKey = run.kind ? `gitlabRuns.kind.${run.kind}` as I18nKey : null;
-  const age = formatAge(run.since ?? run.updatedAt);
-  const unbound = !account;
   const waiting = phase === 'waiting-approval';
   const blocked = phase === 'blocked';
-
+  const age = formatAge(run.since ?? run.updatedAt);
   return (
-    <article className="rounded-lg bg-[var(--surface-subtle)] px-4 py-3">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 text-start"
-          aria-expanded={open}
-          aria-label={t('gitlabRuns.action.details')}
-          onClick={() => setOpen((value) => !value)}
-        >
-          <Icon name={open ? 'arrow-down' : 'arrow-right'} className="size-3 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 truncate typography-ui-label font-medium">{run.title ?? run.key}</span>
-          {kindKey ? (
-            <span className="shrink-0 typography-meta text-muted-foreground">
-              {t(kindKey)}
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-start hover:bg-[var(--surface-subtle)]"
+    >
+      <span className={cn(
+        'size-2 shrink-0 rounded-full',
+        blocked ? 'bg-[var(--status-error-text)]' : waiting ? 'bg-[var(--status-warning-text)]' : 'bg-[var(--status-info)]',
+      )}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate typography-ui-label font-medium">{run.title ?? run.key}</span>
+          <span className="shrink-0 typography-meta text-muted-foreground">#{run.iid}</span>
+          {projectLabel ? (
+            <span className="shrink-0 rounded-full bg-[var(--surface-subtle)] px-2 py-0.5 typography-meta text-muted-foreground">
+              {projectLabel}
             </span>
           ) : null}
-        </button>
-        <IssueStateBadge state={run.issueState ?? null} />
-      </div>
-
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 ps-5 typography-meta text-muted-foreground">
-        <span
-          className="inline-flex items-center gap-1 font-medium"
-          style={{ color: blocked ? 'var(--status-error-text)' : waiting ? 'var(--status-warning-text)' : undefined }}
-        >
-          {blocked ? <Icon name="error-warning" className="size-3" /> : null}
-          {t(phaseLabelKey(phase))}
-          {/* A working session moves; saying so at rest keeps the list readable
-              without opening every card. */}
-          {run.sessionStatus === 'busy' ? <SessionDot status="busy" /> : null}
-        </span>
-        {/* A finished run says "Done" whether it merged or was closed without a
-            change; the outcome is the only thing that tells them apart. */}
-        {run.outcome === 'not-an-issue' ? (
-          <span>{t('gitlabRuns.outcome.not-an-issue')}</span>
-        ) : null}
-        {age ? <span>{age}</span> : null}
-        {run.reviewRounds > 0 ? (
-          <span>{t('gitlabRuns.review.round', { round: run.reviewRounds, max: 3 })}</span>
-        ) : null}
-        {run.feedbackRounds > 0 ? (
-          <span>{t('gitlabRuns.feedback.round', { round: run.feedbackRounds })}</span>
-        ) : null}
-        {/* The last review verdict: a folded card that says "needs changes" is
-            why a person opens it. */}
-        {run.reviewVerdict ? (
-          <span>
-            {t(run.reviewVerdict === 'approve'
-              ? 'gitlabRuns.review.verdict.approve'
-              : 'gitlabRuns.review.verdict.changes')}
-          </span>
-        ) : null}
-      </div>
-
-      {/* Folded, the card still answers "which sessions did this run open":
-          the expanded step view already carries the full trail. */}
-      {!open ? (
-        <div className="mt-1 ps-5">
-          <SessionTrail run={run} onOpenSession={(sessionId) => onOpenSession(run, sessionId)} />
         </div>
-      ) : null}
-
-      {waiting ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2 ps-5">
-          <Button size="sm" disabled={unbound} onClick={() => onAction(run, 'approve')}>
-            {t('gitlabRuns.action.approve')}
-          </Button>
-          <Button size="sm" variant="outline" disabled={unbound} onClick={() => onAction(run, 'reject')}>
-            {t('gitlabRuns.action.reject')}
-          </Button>
-          {run.issueUrl && run.kind === 'feature' ? (
-            // SAFETY: the guard above just checked `run.issueUrl` against null.
-            <Button size="sm" variant="ghost" onClick={() => onOpenUrl(run.issueUrl as string)}>
-              {t('gitlabRuns.action.plan')}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Blocked means a person has to act: the reason and its buttons stay on
-          the folded card, not one expansion away. */}
-      {blocked ? (
-        <div className="mt-2 rounded-md bg-[var(--status-error-background)] px-3 py-2">
-          <p className="typography-meta text-[var(--status-error-text)]">
-            {t(guideKey(run.blockedReason))}
-          </p>
-          {/* What actually failed, when the server said more than the reason
-              code: "the target branch does not exist", the session's own
-              timeout sentence, the git error behind a failed push. */}
-          {run.lastError ? (
-            <p className="mt-1 break-words typography-meta text-foreground">{run.lastError}</p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {blocked || (!waiting && phase !== 'done') ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2 ps-5">
-          {blocked ? (
-            <>
-              {run.blockedReason === 'missing-credential' ? (
-                <Button size="sm" disabled={unbound} onClick={() => onAction(run, 'take')}>
-                  {t('gitlabRuns.action.takeOver')}
-                </Button>
-              ) : null}
-              <Button size="sm" variant="outline" disabled={unbound || multiAccounts} onClick={() => onAction(run, 'reset')}>
-                {t('gitlabRuns.action.reset')}
-              </Button>
-            </>
-          ) : (
-            <Button size="sm" variant="ghost" disabled={unbound || multiAccounts} onClick={() => onAction(run, 'cancel')}>
-              {t('gitlabRuns.action.cancelRun')}
-            </Button>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 typography-meta text-muted-foreground">
+          <span className={cn(
+            'font-medium',
+            blocked && 'text-[var(--status-error-text)]',
+            waiting && 'text-[var(--status-warning-text)]',
           )}
-          {unbound || multiAccounts ? (
-            <Button size="sm" variant="ghost" onClick={() => onOpenSettings(run.projectEntryId ?? null)}>
-              {t('gitlabRuns.action.settings')}
-            </Button>
-          ) : null}
-          {account ? (
-            <span className="typography-meta text-muted-foreground">
-              {t('gitlabRuns.attribution', { account })}
-            </span>
-          ) : null}
+          >
+            {t(phaseLabelKey(phase))}
+          </span>
+          {run.feedbackRounds > 0 ? <span>{t('gitlabRuns.feedback.round', { round: run.feedbackRounds })}</span> : null}
+          {run.mrUrl ? <span>MR !{run.mrIid}</span> : null}
+          {age ? <span>{age}</span> : null}
         </div>
-      ) : null}
-
-      {open ? (
-        <div className="ps-5">
-          <RunSteps run={run} onOpenSession={(sessionId) => onOpenSession(run, sessionId)} />
-
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 typography-meta text-muted-foreground">
-            {run.branch ? <code className="truncate text-[11px]">{run.branch}</code> : null}
-            {/* Real anchors: the page these open lives outside the app, and a
-                link that only underlines on hover reads as plain text. */}
-            {run.mrUrl ? (
-              <a
-                href={run.mrUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[var(--primary-text)] hover:underline"
-              >
-                MR !{run.mrIid}
-                <Icon name="external-link" className="size-3" />
-              </a>
-            ) : null}
-            {run.issueUrl ? (
-              <a
-                href={run.issueUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[var(--primary-text)] hover:underline"
-              >
-                {t('gitlabRuns.action.issue', { iid: run.iid })}
-                <Icon name="external-link" className="size-3" />
-              </a>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-    </article>
+      </div>
+      <Icon name="arrow-right" className="size-3.5 shrink-0 text-muted-foreground" />
+    </button>
   );
 };
 
-/**
- * The runs page, or the same list inside the board's own tab.
- *
- * Embedded, the board already names what is listed (its kind switch) and which
- * project it is (its scope picker), so the page header, the project/global
- * switch and the close button stay out, and the list reads the directory the
- * board passes instead of the page's own project.
- */
 export const GitlabRunsPanel: React.FC<{
   embedded?: boolean;
   directory?: string | null;
@@ -316,11 +128,9 @@ export const GitlabRunsPanel: React.FC<{
   const { t } = useI18n();
   const pageProjectId = useUIStore((state) => state.gitlabRunsPageProjectId);
   const projectId = embedded ? (embeddedProjectId ?? null) : pageProjectId;
-  const project = useProjectsStore((state) => (
-    state.projects.find((entry) => entry.id === projectId) ?? null
-  ));
+  const projects = useProjectsStore((state) => state.projects);
+  const project = projects.find((entry) => entry.id === projectId) ?? null;
   const scopeGlobal = !embedded && projectId === '__all__';
-  // Remembered while the global view is open, so the switch can come back.
   const lastProjectId = React.useRef<string | null>(null);
   React.useEffect(() => {
     if (project) lastProjectId.current = project.id;
@@ -329,6 +139,9 @@ export const GitlabRunsPanel: React.FC<{
   const { runs, bot, error, loading, notBound, refresh } = useGitlabRuns(directory);
   const [pending, setPending] = React.useState<PendingAction | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [selectedKey, setSelectedKey] = React.useState<string | null>(null);
+  const [filter, setFilter] = React.useState<StatusFilter>('all');
+  const [query, setQuery] = React.useState('');
 
   const accountsFor = useRunAccounts();
 
@@ -337,7 +150,6 @@ export const GitlabRunsPanel: React.FC<{
   }, []);
 
   const openProjectSettings = React.useCallback((forProjectId?: string | null) => {
-    // The global view has no single project; the row that asked knows which.
     const target = forProjectId ?? project?.id ?? null;
     if (!target) return;
     const ui = useUIStore.getState();
@@ -348,15 +160,15 @@ export const GitlabRunsPanel: React.FC<{
   }, [project]);
 
   const openSession = React.useCallback((run: Run, sessionId: string) => {
-    useSessionUIStore.getState().setCurrentSession(sessionId, run.origin);
-  }, []);
+    // Leave the runs page first: ChatView is hidden while a surface page is
+    // open, so a session opened behind it would look like nothing happened.
+    useSessionUIStore.getState().setCurrentSession(sessionId, run.worktreePath ?? undefined);
+    if (!embedded) useUIStore.getState().setGitlabRunsPageProjectId(null);
+  }, [embedded]);
 
   const submit = React.useCallback(async () => {
     if (!pending) return;
-    // In the global view the run names its own settings entry, which is where
-    // the directory for the action comes from.
-    const target = project ?? useProjectsStore.getState().projects
-      .find((entry) => entry.id === pending.run.projectEntryId) ?? null;
+    const target = project ?? projects.find((entry) => entry.id === pending.run.projectEntryId) ?? null;
     if (!target) {
       toast.error(t('gitlabRuns.page.error.detail'));
       return;
@@ -378,7 +190,7 @@ export const GitlabRunsPanel: React.FC<{
     } finally {
       setSubmitting(false);
     }
-  }, [pending, project, refresh, t]);
+  }, [pending, project, projects, refresh, t]);
 
   const requestAction = React.useCallback((run: Run, action: Action) => {
     const options = accountsFor(run.origin);
@@ -395,12 +207,25 @@ export const GitlabRunsPanel: React.FC<{
     });
   }, [accountsFor, t]);
 
-  const waiting = (runs ?? []).filter((run) => run.phase === 'waiting-approval');
-  const blocked = (runs ?? []).filter((run) => run.phase === 'blocked');
-  const active = (runs ?? []).filter((run) => (
-    run.phase !== 'waiting-approval' && run.phase !== 'blocked' && run.phase !== 'done'
-  ));
-  const history = (runs ?? []).filter((run) => run.phase === 'done');
+  const allRuns = React.useMemo(() => runs ?? [], [runs]);
+  const filtered = React.useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return allRuns.filter((run) => {
+      if (filter !== 'all' && statusOf(run.phase) !== filter) return false;
+      if (!needle) return true;
+      return `${run.title ?? ''} #${run.iid}`.toLowerCase().includes(needle);
+    });
+  }, [allRuns, filter, query]);
+  const counts = React.useMemo(() => ({
+    all: allRuns.length,
+    waiting: allRuns.filter((run) => statusOf(run.phase) === 'waiting').length,
+    blocked: allRuns.filter((run) => statusOf(run.phase) === 'blocked').length,
+    active: allRuns.filter((run) => statusOf(run.phase) === 'active').length,
+    done: allRuns.filter((run) => statusOf(run.phase) === 'done').length,
+  }), [allRuns]);
+  const projectLabelFor = (run: Run) => projectLabelOf(projects.find((entry) => entry.id === run.projectEntryId));
+  const selected = allRuns.find((run) => run.key === selectedKey) ?? null;
+  const selectedAccount = selected ? accountsFor(selected.origin) : [];
 
   const actionLabel = (action: Action): I18nKey => ({
     cancel: 'gitlabRuns.action.cancelRun',
@@ -410,8 +235,6 @@ export const GitlabRunsPanel: React.FC<{
     take: 'gitlabRuns.action.takeOver',
   } satisfies Record<Action, I18nKey>)[action];
 
-  // What the confirmation promises, spelled out: the action's label changes are
-  // read here, so a person sees the move instead of trusting the verb.
   const labelChangeLine = (action: Action) => {
     const change = labelChangeOf(action);
     if (!change) return null;
@@ -425,27 +248,36 @@ export const GitlabRunsPanel: React.FC<{
     );
   };
 
-  const renderTile = (run: Run) => {
-    const options = accountsFor(run.origin);
+  if (selected) {
     return (
-      <RunCard
-        key={run.key}
-        run={run}
-        account={options.length > 0 ? `@${options[0].username}` : null}
-        multiAccounts={options.length > 1}
-        onOpenSession={openSession}
-        onOpenUrl={(url) => { void openExternalUrl(url); }}
-        onAction={requestAction}
-        onOpenSettings={openProjectSettings}
-      />
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+        <RunDetail
+          run={selected}
+          account={selectedAccount.length > 0 ? `@${selectedAccount[0].username}` : null}
+          multiAccounts={selectedAccount.length > 1}
+          onBack={() => setSelectedKey(null)}
+          onOpenSession={(sessionId) => openSession(selected, sessionId)}
+          onAction={requestAction}
+          onOpenSettings={openProjectSettings}
+        />
+      </div>
     );
-  };
+  }
 
-  const caption = (key: I18nKey, count: number) => (
-    <div className="mb-2 mt-6 flex items-baseline gap-2">
-      <span className="typography-meta text-muted-foreground">{t(key)}</span>
-      <span className="typography-meta tabular-nums text-muted-foreground/60">{count}</span>
-    </div>
+  const filterChip = (value: StatusFilter, label: string, count: number) => (
+    <button
+      key={value}
+      type="button"
+      onClick={() => setFilter(value)}
+      className={cn(
+        'rounded-full px-2.5 py-1 typography-meta',
+        filter === value
+          ? 'bg-[var(--selected-bg)] font-medium text-[var(--primary-text)]'
+          : 'text-muted-foreground hover:bg-[var(--surface-subtle)]',
+      )}
+    >
+      {label} <span className="tabular-nums opacity-70">{count}</span>
+    </button>
   );
 
   return (
@@ -454,12 +286,9 @@ export const GitlabRunsPanel: React.FC<{
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pb-2 pt-4">
           <span className="typography-ui-label font-medium">{t('gitlabRuns.page.title')}</span>
           <span className="min-w-0 truncate typography-meta text-muted-foreground">
-            {scopeGlobal ? t('gitlabRuns.page.scope.global') : (project?.path ?? '')}
+            {scopeGlobal ? t('gitlabRuns.page.scope.global') : projectLabelOf(project)}
           </span>
           <div className="ms-auto flex items-center gap-2">
-            <span className="typography-meta tabular-nums text-muted-foreground/70">
-              {error ? t('gitlabRuns.page.poll.failed') : null}
-            </span>
             <div className="flex items-center gap-1 rounded-md bg-[var(--surface-subtle)] p-0.5">
               <Button
                 size="sm"
@@ -487,15 +316,13 @@ export const GitlabRunsPanel: React.FC<{
         </header>
       )}
 
-      <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 pb-10', embedded && 'pt-4')}>
+      <div className={cn('min-h-0 flex-1 overflow-y-auto', embedded && 'pt-4')}>
         {bot === 'invalid' || bot === 'missing' ? (
-          <div className="mb-4 mt-2 rounded-lg bg-[var(--status-error-background)] px-4 py-3">
+          <div className="mx-4 mb-3 rounded-lg bg-[var(--status-error-background)] px-4 py-3">
             <p className="typography-ui-label font-medium text-[var(--status-error-text)]">
               {t('gitlabRuns.page.botInvalid.title')}
             </p>
-            <p className="mt-1 typography-meta text-muted-foreground">
-              {t('gitlabRuns.page.botInvalid.detail')}
-            </p>
+            <p className="mt-1 typography-meta text-muted-foreground">{t('gitlabRuns.page.botInvalid.detail')}</p>
             <Button size="sm" variant="outline" className="mt-2" onClick={() => openProjectSettings()}>
               {t('gitlabRuns.page.botInvalid.openSettings')}
             </Button>
@@ -503,76 +330,65 @@ export const GitlabRunsPanel: React.FC<{
         ) : null}
 
         {error ? (
-          <div className="mb-4 mt-2 flex items-center justify-between rounded-lg bg-[var(--status-error-background)] px-4 py-3">
+          <div className="mx-4 mb-3 flex items-center justify-between rounded-lg bg-[var(--status-error-background)] px-4 py-3">
             <span className="typography-meta text-[var(--status-error-text)]">
               {t('gitlabRuns.page.error.title')} · {t('gitlabRuns.page.error.detail')}
             </span>
-            <Button size="sm" variant="outline" onClick={refresh}>
-              {t('gitlabRuns.page.error.retry')}
-            </Button>
+            <Button size="sm" variant="outline" onClick={refresh}>{t('gitlabRuns.page.error.retry')}</Button>
           </div>
         ) : null}
 
         {loading && runs === null ? (
-          <p className="mt-8 typography-meta text-muted-foreground">{t('gitlabRuns.page.loading')}</p>
+          <p className="mx-4 mt-8 typography-meta text-muted-foreground">{t('gitlabRuns.page.loading')}</p>
         ) : null}
 
-        {notBound ? (
-          <div className="mt-8 rounded-lg px-4 py-6">
-            <p className="typography-ui-label font-medium">{t('gitlabIssue.error.notGitlab')}</p>
-            <p className="mt-1 typography-meta text-muted-foreground">
-              {t('gitlabRuns.page.empty.description')}
+        {notBound || (!loading && runs !== null && allRuns.length === 0) ? (
+          <div className="mx-4 mt-8 rounded-lg px-4 py-6">
+            <p className="typography-ui-label font-medium">
+              {t(notBound ? 'gitlabIssue.error.notGitlab' : 'gitlabRuns.page.empty.title')}
             </p>
+            <p className="mt-1 typography-meta text-muted-foreground">{t('gitlabRuns.page.empty.description')}</p>
           </div>
         ) : null}
 
-        {!notBound && runs !== null && runs.length === 0 ? (
-          <div className="mt-8 rounded-lg px-4 py-6">
-            <p className="typography-ui-label font-medium">{t('gitlabRuns.page.empty.title')}</p>
-            <p className="mt-1 typography-meta text-muted-foreground">
-              {t('gitlabRuns.page.empty.description')}
-            </p>
+        {allRuns.length > 0 ? (
+          <div className="px-3 pb-8">
+            <div className="flex flex-wrap items-center gap-1 px-1 py-2">
+              {filterChip('all', t('gitlabRuns.filter.all'), counts.all)}
+              {filterChip('waiting', t('gitlabRuns.caption.waiting'), counts.waiting)}
+              {filterChip('blocked', t('gitlabRuns.caption.blocked'), counts.blocked)}
+              {filterChip('active', t('gitlabRuns.caption.active'), counts.active)}
+              {filterChip('done', t('gitlabRuns.caption.historySummary'), counts.done)}
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t('gitlabRuns.filter.search')}
+                className="ms-auto w-44 rounded-md bg-[var(--surface-subtle)] px-2.5 py-1 typography-meta text-foreground placeholder:text-muted-foreground"
+                aria-label={t('gitlabRuns.filter.search')}
+              />
+            </div>
+            <div className="space-y-0.5">
+              {filtered.length === 0 ? (
+                <p className="px-3 py-6 typography-meta text-muted-foreground">{t('gitlabRuns.filter.empty')}</p>
+              ) : (
+                filtered.map((run) => (
+                  <RunRow
+                    key={run.key}
+                    run={run}
+                    projectLabel={projectLabelFor(run)}
+                    onSelect={() => setSelectedKey(run.key)}
+                  />
+                ))
+              )}
+            </div>
           </div>
-        ) : null}
-
-        {waiting.length ? (
-          <>
-            {caption('gitlabRuns.caption.waiting', waiting.length)}
-            <div className="space-y-2">{waiting.map(renderTile)}</div>
-          </>
-        ) : null}
-
-        {blocked.length ? (
-          <>
-            {caption('gitlabRuns.caption.blocked', blocked.length)}
-            <div className="space-y-2">{blocked.map(renderTile)}</div>
-          </>
-        ) : null}
-
-        {active.length ? (
-          <>
-            {caption('gitlabRuns.caption.active', active.length)}
-            <div className="space-y-2">{active.map(renderTile)}</div>
-          </>
-        ) : null}
-
-        {history.length ? (
-          <details className="mt-6">
-            <summary className="cursor-pointer typography-meta text-muted-foreground">
-              {t('gitlabRuns.caption.historySummary')}
-              <span className="ms-2 tabular-nums text-muted-foreground/60">{history.length}</span>
-            </summary>
-            <div className="mt-2 space-y-2">{history.map(renderTile)}</div>
-          </details>
         ) : null}
       </div>
 
       <Dialog open={pending !== null} onOpenChange={(open) => { if (!open && !submitting) setPending(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              {pending ? t(actionLabel(pending.action)) : ''}
-            </DialogTitle>
+            <DialogTitle>{pending ? t(actionLabel(pending.action)) : ''}</DialogTitle>
             <DialogDescription>
               {pending
                 ? t(
@@ -580,8 +396,6 @@ export const GitlabRunsPanel: React.FC<{
                   { iid: pending.run.iid, account: pending.accountName },
                 )
                 : ''}
-              {/* A comment action posts words to a page other people read: the
-                  confirmation shows those words, not just the verb. */}
               {pending && pending.kind === 'comment' ? (
                 <code className="mt-2 block rounded bg-[var(--surface-subtle)] px-2 py-1 font-mono text-xs">
                   {runActionCommand(pending.action)}

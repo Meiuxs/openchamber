@@ -11,10 +11,23 @@ import type { I18nKey } from '@/lib/i18n';
 
 export const POLL_INTERVAL_MS = 10_000;
 
+/**
+ * How the sidebar names a project: its label, else its folder name. Run rows
+ * and the page header show the same name so one project reads the same in both
+ * places; the full directory path stays out of the UI.
+ */
+export const projectLabelOf = (project: { label?: string | null; path: string } | null | undefined): string => {
+  if (!project) return '';
+  const label = project.label?.trim();
+  if (label) return label;
+  const segments = project.path.split(/[\\/]/).filter((segment) => segment.trim().length > 0);
+  return segments[segments.length - 1] ?? '';
+};
+
 // The order is the ledger's phase order; `blocked` stands outside it.
 const PHASES = [
   'claimed', 'triaging', 'planning', 'waiting-approval', 'preparing',
-  'implementing', 'reviewing', 'verifying', 'mr-open', 'addressing', 'done',
+  'implementing', 'reviewing', 'rechecking', 'verifying', 'mr-open', 'addressing', 'done',
 ] as const;
 
 export type Phase = typeof PHASES[number] | 'blocked';
@@ -122,6 +135,60 @@ export type RunEvent = z.infer<typeof runEventSchema>;
 export type RunIssueState = z.infer<typeof issueStateSchema>;
 
 /**
+ * What the run concluded at each stage. Every shape is optional on the wire
+ * because a ledger written before the field existed has no entry for it, and a
+ * run still in an early phase has produced only the earlier answers.
+ */
+const triageSchema = z.object({
+  verdict: z.enum(['valid', 'not-an-issue', 'insufficient-info']),
+  summary: z.string(),
+  evidence: z.string().nullish().transform((value) => value ?? null),
+  missing: z.string().nullish().transform((value) => value ?? null),
+});
+
+const planSchema = z.object({
+  files: z.array(z.string()),
+  dataFlow: z.string(),
+  verification: z.string(),
+  risks: z.string(),
+  outOfScope: z.string(),
+});
+
+const verificationEntrySchema = z.object({
+  command: z.string(),
+  result: z.string(),
+});
+
+const evidenceSchema = z.object({
+  rootCause: z.string(),
+  changes: z.string(),
+  verification: z.array(verificationEntrySchema),
+  risks: z.string(),
+});
+
+const findingSchema = z.object({
+  file: z.string(),
+  line: z.number().nullish().transform((value) => value ?? null),
+  severity: z.enum(['blocker', 'minor']),
+  note: z.string(),
+});
+
+/** The merge-time impact report, written by an approving review. */
+const reviewImpactSchema = z.object({
+  modules: z.string(),
+  business: z.string(),
+  compatibility: z.string(),
+  rollback: z.string(),
+  testScope: z.string(),
+});
+
+export type RunTriage = z.infer<typeof triageSchema>;
+export type RunPlan = z.infer<typeof planSchema>;
+export type RunEvidence = z.infer<typeof evidenceSchema>;
+export type RunFinding = z.infer<typeof findingSchema>;
+export type RunReviewImpact = z.infer<typeof reviewImpactSchema>;
+
+/**
  * One session a run opened, with the stop it served: `stage` is the phase it
  * worked in (`implementing` for the fix, `reviewing` for a review round) and
  * `at` is when it started. The id is what a click opens.
@@ -150,6 +217,9 @@ const runSchema = z.object({
   lastError: z.string().nullable(),
   branch: z.string().nullable(),
   targetBranch: z.string().nullable(),
+  // The worktree the sessions ran in. Optional so a server older than the
+  // field still lists, and needed to open a hidden automation session by ID.
+  worktreePath: z.string().nullish().transform((value) => value ?? null),
   mrIid: z.number().nullable(),
   issueUrl: z.string().nullable(),
   mrUrl: z.string().nullable(),
@@ -174,6 +244,13 @@ const runSchema = z.object({
   // Optional so a server older than these fields still lists.
   events: z.array(runEventSchema).nullish().transform((value) => value ?? []),
   issueState: issueStateSchema.nullish(),
+  // The stage answers, shown as the run's deliverable report. Optional for the
+  // same reason as above.
+  triage: triageSchema.nullish().transform((value) => value ?? null),
+  plan: planSchema.nullish().transform((value) => value ?? null),
+  evidence: evidenceSchema.nullish().transform((value) => value ?? null),
+  reviewFindings: z.array(findingSchema).nullish().transform((value) => value ?? []),
+  reviewImpact: reviewImpactSchema.nullish().transform((value) => value ?? null),
 });
 
 export const runsResponseSchema = z.object({
@@ -188,8 +265,8 @@ export type Run = z.infer<typeof runSchema>;
 
 /** The stops a run passes through, per issue kind. */
 export const railOf = (run: Run): Phase[] => (run.kind === 'feature'
-  ? ['claimed', 'preparing', 'triaging', 'planning', 'waiting-approval', 'implementing', 'reviewing', 'verifying', 'mr-open']
-  : ['claimed', 'preparing', 'triaging', 'implementing', 'reviewing', 'verifying', 'mr-open']);
+  ? ['claimed', 'preparing', 'triaging', 'planning', 'waiting-approval', 'implementing', 'reviewing', 'rechecking', 'verifying', 'mr-open']
+  : ['claimed', 'preparing', 'triaging', 'implementing', 'reviewing', 'rechecking', 'verifying', 'mr-open']);
 
 export const formatAge = (iso: string | null): string | null => {
   if (!iso) return null;
@@ -203,8 +280,52 @@ export const formatAge = (iso: string | null): string | null => {
   return new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' }).format(-Math.round(hours / 24), 'day');
 };
 
+/**
+ * One session in the automation archive, derived from the ledger rather than
+ * from the session list: automation sessions are hidden from that list, so the
+ * ledger is the only place that names them. The run carries the project and
+ * the worktree needed to open a hidden session by ID.
+ */
+export type RunArchiveRow = {
+  key: string;
+  sessionId: string;
+  run: Run;
+  stage: string | null;
+  at: string | null;
+};
+
+export const archiveRowsOf = (runs: Run[]): RunArchiveRow[] => (
+  runs.flatMap((run) => sessionTrailOf(run).map((session) => ({
+    key: `${run.key}:${session.sessionId}`,
+    sessionId: session.sessionId,
+    run,
+    stage: session.stage,
+    at: session.at,
+  })))
+);
+
 /** A run that has not reached its end: the only kind the board's status shows. */
 export const isActiveRun = (run: Run): boolean => run.phase !== 'done';
+
+/**
+ * Whether removing the given sessions leaves the run's worktree unused. Every
+ * stage of a run works in one worktree, so it is removable only after the last
+ * session that still needs it is gone, and only when no other run points at the
+ * same directory.
+ */
+export const worktreeFreedBy = (
+  run: Run,
+  runs: readonly Run[],
+  removedSessionIds: ReadonlySet<string>,
+): boolean => {
+  if (!run.worktreePath) return false;
+  const stillNeeded = (candidate: Run) => sessionTrailOf(candidate)
+    .some((session) => !removedSessionIds.has(session.sessionId));
+  if (stillNeeded(run)) return false;
+  return !runs.some((other) => (
+    other.key !== run.key && other.worktreePath === run.worktreePath && stillNeeded(other)
+  ));
+};
 
 /** What a person may do to a run; the server answers what each one means. */
 export type RunAction = 'cancel' | 'reset' | 'approve' | 'reject' | 'take';
