@@ -2,7 +2,7 @@
 
 ## 用途
 
-这个目录在开发机上起一个 GitLab CE 12.7.9 容器，用于联调 source-control 的 GitLab provider 和 issue 自动化。
+这个目录在开发机上起一个 GitLab CE 12.7.6 容器，用于联调 source-control 的 GitLab provider 和 issue 自动化。
 
 12.7 是 `docs/gitlab-issue-spec/gitlab-issue-automation-spec.md` 声明的版本下限。新版 GitLab 用 `GET /merge_requests/:iid/diffs` 读改动文件，15.7 以下没有这个接口，`packages/web/server/lib/gitlab/resources.js` 会 404 回退到 `/changes`。只有在 12.7 上跑，这条回退分支才会真正执行。
 
@@ -10,7 +10,7 @@
 
 | 文件 | 作用 |
 |---|---|
-| `docker-compose.yml` | GitLab 12.7.9 服务定义，端口 8929 与 2224，命名卷 |
+| `docker-compose.yml` | GitLab 12.7.6 服务定义，端口 8929 与 2224，命名卷 |
 | `bootstrap-wsl.sh` | 装 Docker 与 compose 插件，可选配置 daemon 代理 |
 | `init-env.sh` | 生成 `.env`，写入随机 root 口令 |
 | `create-token.rb` | 在容器内用 rails runner 创建 root 的 API token |
@@ -140,7 +140,7 @@ wsl -d Ubuntu -u root -- bash -c "cd /mnt/d/Code/openchamber/docs/local-gitlab &
 --- project
 "path_with_namespace":"root/hello-demo"
 --- version
-{"version":"12.7.9","revision":"3284b2b060d"}
+{"version":"12.7.6","revision":"61654d25b20"}
 ```
 
 ## 资源占用与磁盘位置
@@ -167,10 +167,11 @@ wsl -d Ubuntu -u root -- bash -c "cd /mnt/d/Code/openchamber/docs/local-gitlab &
 | WSL 重启后容器不见了 | Docker 服务随 systemd 启动，需要重新 `docker compose up -d` |
 | 实例过一阵子变成 `unreachable` | WSL 空闲断电，见“让 WSL 保持运行” |
 | 添加实例报 `GitLab token is invalid` | 12.7 不认 `Bearer` 传的 PAT。`verify.js` 会回退到 `PRIVATE-TOKEN`，服务端是旧代码时重启一次即可 |
+| 拉镜像慢，想加国内镜像源 | 别加。实测 12.7.6 这层经 `docker.1ms.run` 只有 21 KB/s，daocloud 超时，xuanyuan 403。镜像站没缓存这个老 tag，回源比直连更绕。保持 `proxy.conf` 走 Clash，并发拉层能到 6.7 MB/s |
 
 ## 已知限制
 
-- Docker Hub 上 12.7 系列最后一个是 `12.7.9-ce.0`，12.7.10 及以上没有镜像。内网若跑更高补丁，本地测不到那部分差异。
+- 实例固定为 12.7.6（2020-02-13 发布）。Docker Hub 上 12.7 系列最后一个是 `12.7.9-ce.0`，12.7.10 及以上没有镜像。内网跑其他补丁版本时，本地测不到那部分差异。
 - 镜像基于 Debian stretch，早已 EOL。这个实例只用于联调，不放进任何生产链路。
 - 端口 8929 与 2224 写死。改端口要同时改 `GITLAB_OMNIBUS_CONFIG` 里的 `external_url`，否则 GitLab 生成的链接会指回旧端口。
 - `root@gitlab.local` 是占位邮箱，实例没有外发邮件通道，所有通知邮件都发不出去。

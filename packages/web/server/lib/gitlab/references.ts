@@ -31,13 +31,15 @@ const objectOf = (value: Entry): JsonObject | null => (isPlainObject(value) ? va
 export const projectPath = (owner: string, name: string): string => `${owner}/${name}`;
 
 export function systemReferences(notes: Entry, webUrl: string, ownPath: string): GitLabReferenceLink[] {
+  if (!isString(ownPath) || !ownPath) return [];
   let base: string;
   try {
-    base = new URL(webUrl).origin;
+    const url = new URL(webUrl);
+    const prefix = url.pathname.indexOf(`/${ownPath}`);
+    base = prefix > 0 ? `${url.origin}${url.pathname.slice(0, prefix)}` : url.origin;
   } catch {
     return [];
   }
-  if (!isString(ownPath) || !ownPath) return [];
   const references: GitLabReferenceLink[] = [];
   for (const raw of asArray(notes)) {
     const note = objectOf(raw);
@@ -57,7 +59,7 @@ export function systemReferences(notes: Entry, webUrl: string, ownPath: string):
       references.push({
         kind: mergeRequest ? 'pull' : 'issue',
         number,
-        url: `${base}/${repo}/-/${mergeRequest ? 'merge_requests' : 'issues'}/${number}`,
+        url: `${base}/${repo}/${mergeRequest ? 'merge_requests' : 'issues'}/${number}`,
         repo,
         createdAt,
         author,

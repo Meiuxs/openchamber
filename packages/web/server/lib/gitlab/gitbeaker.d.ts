@@ -54,8 +54,10 @@ declare module '@gitbeaker/rest' {
       all(projectId: ProjectId, number: number, options?: Options): Reply;
       show(projectId: ProjectId, number: number, threadId: string): Reply;
       addNote(projectId: ProjectId, number: number, threadId: string, body: string): Reply;
+      editNote(projectId: ProjectId, number: number, threadId: string, noteId: number, options: Options): Reply;
+      removeNote(projectId: ProjectId, number: number, threadId: string, noteId: number, options?: Options): Reply;
       resolve(projectId: ProjectId, number: number, threadId: string, resolved: boolean): Reply;
-      create(projectId: ProjectId, number: number, body: string): Reply;
+      create(projectId: ProjectId, number: number, body: string, options?: Options): Reply;
     };
     readonly MergeRequestDraftNotes: {
       all(projectId: ProjectId, number: number): Reply;

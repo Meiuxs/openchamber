@@ -277,8 +277,8 @@ describe('GitLab resource service', () => {
 
     const result = await service.changeRequestContext('/repo', 5, { includeTimeline: true });
     expect(result.issueComments.map((note) => [note.body, note.thread ?? null])).toEqual([
-      ['Rename this', { id: 'abc', resolved: true, resolvable: true, first: true }],
-      ['Done', { id: 'abc', resolved: true, resolvable: true, first: false }],
+      ['Rename this', { id: 'abc', resolved: true, resolvable: true, canResolve: true, canReply: true, first: true }],
+      ['Done', { id: 'abc', resolved: true, resolvable: true, canResolve: true, canReply: true, first: false }],
       ['Plain comment', null],
     ]);
   });
@@ -332,14 +332,14 @@ describe('GitLab resource service', () => {
 
     const author = { login: 'sam', avatarUrl: `${origin}/uploads/sam.png` };
     expect(result.references).toEqual([
-      { kind: 'issue', number: 21, url: `${origin}/team/repo/-/issues/21`, repo: 'team/repo', createdAt: '2026-10-02T10:00:00Z', author },
+      { kind: 'issue', number: 21, url: `${origin}/team/repo/issues/21`, repo: 'team/repo', createdAt: '2026-10-02T10:00:00Z', author },
       // The note names the project a cross-project reference lives in.
-      { kind: 'issue', number: 3, url: `${origin}/lib/sub/-/issues/3`, repo: 'lib/sub', createdAt: '2026-10-02T11:00:00Z', author },
-      { kind: 'pull', number: 45, url: `${origin}/team/repo/-/merge_requests/45`, repo: 'team/repo', createdAt: '2026-10-02T12:00:00Z', author },
-      { kind: 'issue', number: 7, url: `${origin}/team/repo/-/issues/7`, repo: 'team/repo', createdAt: '2026-10-02T13:00:00Z', author },
-      { kind: 'issue', number: 8, url: `${origin}/team/repo/-/issues/8`, repo: 'team/repo', createdAt: '2026-10-02T13:00:00Z', author },
-      { kind: 'pull', number: 23, url: `${origin}/team/tools/-/merge_requests/23`, repo: 'team/tools', createdAt: '2026-10-02T13:30:00Z', author },
-      { kind: 'issue', number: 24, url: `${origin}/team/tools/-/issues/24`, repo: 'team/tools', createdAt: '2026-10-02T13:40:00Z', author },
+      { kind: 'issue', number: 3, url: `${origin}/lib/sub/issues/3`, repo: 'lib/sub', createdAt: '2026-10-02T11:00:00Z', author },
+      { kind: 'pull', number: 45, url: `${origin}/team/repo/merge_requests/45`, repo: 'team/repo', createdAt: '2026-10-02T12:00:00Z', author },
+      { kind: 'issue', number: 7, url: `${origin}/team/repo/issues/7`, repo: 'team/repo', createdAt: '2026-10-02T13:00:00Z', author },
+      { kind: 'issue', number: 8, url: `${origin}/team/repo/issues/8`, repo: 'team/repo', createdAt: '2026-10-02T13:00:00Z', author },
+      { kind: 'pull', number: 23, url: `${origin}/team/tools/merge_requests/23`, repo: 'team/tools', createdAt: '2026-10-02T13:30:00Z', author },
+      { kind: 'issue', number: 24, url: `${origin}/team/tools/issues/24`, repo: 'team/tools', createdAt: '2026-10-02T13:40:00Z', author },
     ]);
     // A system note carries no title.
     expect(result.references.some((reference) => 'title' in reference)).toBe(false);
@@ -362,6 +362,7 @@ describe('GitLab resource service', () => {
   it.each([
     ['gitlab.com', 'https://gitlab.com'],
     ['a self-hosted host', 'https://gitlab.example.com:8443'],
+    ['a sub-path deployment', 'https://gitlab.example.com/gitlab'],
   ])("reads an issue's cross-references and builds their URLs on %s", async (_label, host) => {
     const project = { id: 11, path_with_namespace: 'me/repo', web_url: `${host}/me/repo`, http_url_to_repo: `${host}/me/repo.git` };
     const issue = { iid: 3, title: 'Bug', web_url: `${host}/me/repo/-/issues/3`, state: 'opened' };
@@ -383,8 +384,8 @@ describe('GitLab resource service', () => {
 
     // Oldest first, whichever order the notes arrived in.
     expect(result.references).toEqual([
-      { kind: 'pull', number: 4, url: `${host}/other/lib/-/merge_requests/4`, repo: 'other/lib', createdAt: '2026-01-01T00:00:00Z', author: null },
-      { kind: 'issue', number: 9, url: `${host}/me/repo/-/issues/9`, repo: 'me/repo', createdAt: '2026-01-02T00:00:00Z', author: { login: 'sam' } },
+      { kind: 'pull', number: 4, url: `${host}/other/lib/merge_requests/4`, repo: 'other/lib', createdAt: '2026-01-01T00:00:00Z', author: null },
+      { kind: 'issue', number: 9, url: `${host}/me/repo/issues/9`, repo: 'me/repo', createdAt: '2026-01-02T00:00:00Z', author: { login: 'sam' } },
     ]);
     expect(client.IssueNotes.all).toHaveBeenCalledWith('11', 3, { sort: 'desc', orderBy: 'created_at', perPage: 100, maxPages: 1 });
   });
@@ -1071,34 +1072,105 @@ describe('GitLab comments and reviews', () => {
       expect(draftNotes.all).not.toHaveBeenCalled();
     });
 
-    it('publishes a review file comment immediately as a positioned note', async () => {
+    it('publishes a review file comment immediately through a positioned discussion', async () => {
+      const discussionCreate = vi.fn(async () => ({ id: 'discussion-one', notes: [{ id: 12, body: 'Here' }] }));
       const noteCreate = vi.fn(async () => ({ id: 12 }));
       const draftNotes = { all: vi.fn(async () => { throw notFound(); }), create: vi.fn(async () => { throw notFound(); }) };
       const { service } = setup({
         MergeRequests: mergeRequests(),
         MergeRequestDraftNotes: draftNotes,
         MergeRequestNotes: { all: list([]), create: noteCreate },
+        MergeRequestDiscussions: { create: discussionCreate },
       });
       await expect(service.addReviewComment({ providerTarget, position: { path: 'a.ts', side: 'new', line: 10 }, body: 'Here' }))
         .resolves.toEqual({});
       expect(draftNotes.create).not.toHaveBeenCalled();
-      expect(noteCreate).toHaveBeenCalledWith('2', 5, 'Here', expect.objectContaining({
-        position: expect.objectContaining({ positionType: 'text', newLine: 10 }),
-      }));
+      expect(noteCreate).not.toHaveBeenCalled();
+      expect(discussionCreate).toHaveBeenCalledWith('2', 5, 'Here', {
+        position: {
+          baseSha: 'b', startSha: 's', headSha: 'h', oldPath: 'a.ts', newPath: 'a.ts',
+          positionType: 'text', oldLine: 10, newLine: 10,
+        },
+      });
     });
 
-    it('falls back to a positioned note when draft notes answer 404 on an instance of unknown version', async () => {
-      const noteCreate = vi.fn(async () => ({ id: 12 }));
-      const draftNotes = { all: vi.fn(async () => { throw notFound(); }), create: vi.fn(async () => { throw notFound(); }) };
-      const { service } = setup({
-        MergeRequests: mergeRequests({}, null),
-        MergeRequestDraftNotes: draftNotes,
-        MergeRequestNotes: { all: list([]), create: noteCreate },
+    it('drops the line range a 12.7 discussion cannot carry', async () => {
+      const discussionCreate = vi.fn(async () => ({ id: 'discussion-one', notes: [{ id: 12 }] }));
+      const { service } = setup({ MergeRequests: mergeRequests(), MergeRequestDiscussions: { create: discussionCreate } });
+      await service.addReviewComment({ providerTarget, position: { path: 'a.ts', side: 'new', startLine: 11, line: 12 }, body: 'Both' });
+      const { position } = discussionCreate.mock.calls[0][3];
+      expect(position).toMatchObject({ positionType: 'text', newLine: 12 });
+      expect(position).not.toHaveProperty('lineRange');
+      expect(position.oldLine).toBeUndefined();
+    });
+
+    it('refuses a whole-file review comment there instead of posting it unanchored', async () => {
+      const discussionCreate = vi.fn(async () => ({ id: 'discussion-one', notes: [{ id: 12 }] }));
+      const { service } = setup({ MergeRequests: mergeRequests(), MergeRequestDiscussions: { create: discussionCreate } });
+      await expect(service.addReviewComment({ providerTarget, position: { path: 'a.ts' }, body: 'File' }))
+        .rejects.toMatchObject({ status: 422, message: 'This GitLab version cannot anchor a comment to a whole file' });
+      expect(discussionCreate).not.toHaveBeenCalled();
+    });
+
+    it('edits and deletes a published review comment through its discussion', async () => {
+      const discussions = {
+        all: list([{ id: 'thread-one', notes: [{ id: 12, type: 'DiffNote' }] }]),
+        editNote: vi.fn(async () => ({ id: 12, body: 'Edited' })),
+        removeNote: vi.fn(async () => ({})),
+      };
+      const { service } = setup({ MergeRequests: mergeRequests(), MergeRequestDiscussions: discussions });
+      await expect(service.updateReviewComment({ providerTarget, commentId: '12', body: 'Edited' })).resolves.toEqual({});
+      expect(discussions.editNote).toHaveBeenCalledWith('2', 5, 'thread-one', 12, { body: 'Edited' });
+      await expect(service.deleteReviewComment({ providerTarget, commentId: '12' })).resolves.toEqual({});
+      expect(discussions.removeNote).toHaveBeenCalledWith('2', 5, 'thread-one', 12);
+    });
+
+    it('keeps thread actions available when the permission query is rejected', async () => {
+      const post = vi.fn(async () => ({ body: { errors: [{ message: 'Field "discussions" doesn\'t exist on type "MergeRequest"' }] } }));
+      // An instance that will not answer `/version` is probed, then remembered.
+      const get = vi.fn(async () => undefined);
+      const discussions = { all: list([
+        { id: 'thread-one', notes: [
+          { id: 9, type: 'DiffNote', system: false, body: 'Question', author: { id: 3, username: 'sam' },
+            resolvable: true, resolved: false,
+            position: { position_type: 'text', new_path: 'a.ts', old_path: 'a.ts', head_sha: 'h', new_line: 10, old_line: 10 } },
+        ] },
+      ]) };
+      const knowing = setup({
+        MergeRequests: mergeRequests({ requester: { get, post } }),
+        MergeRequestDraftNotes: { all: vi.fn(async () => []) },
+        MergeRequestDiscussions: discussions,
+        Users: { showCurrentUser: vi.fn(async () => ({ id: 3, username: 'sam' })) },
       });
-      await expect(service.addReviewComment({ providerTarget, position: { path: 'a.ts', side: 'new', line: 10 }, body: 'Here' }))
-        .resolves.toEqual({});
-      expect(draftNotes.create).toHaveBeenCalledOnce();
-      expect(noteCreate).toHaveBeenCalledOnce();
+      const state = await knowing.service.reviewState('/repo', 5);
+      expect(state.threads[0]).toMatchObject({ path: 'a.ts', line: 10, canReply: true, canResolve: true });
+      expect(post).toHaveBeenCalledOnce();
+      await knowing.service.reviewState('/repo', 5);
+      expect(post).toHaveBeenCalledOnce();
+    });
+
+    it('keeps a diff thread whose position is from an older head', async () => {
+      const { service } = setup({
+        MergeRequests: mergeRequests(),
+        MergeRequestDiscussions: { all: list([
+          { id: 'thread-one', notes: [
+            { id: 9, type: 'DiffNote', system: false, body: 'Old', author: { id: 3, username: 'sam' },
+              position: { position_type: 'text', new_path: 'a.ts', old_path: 'a.ts', head_sha: 'old', new_line: 10, old_line: 10 } },
+          ] },
+        ]) },
+        Users: { showCurrentUser: vi.fn(async () => ({ id: 3, username: 'sam' })) },
+      });
+      const state = await service.reviewState('/repo', 5);
+      expect(state.threads).toHaveLength(1);
+      expect(state.threads[0]).toMatchObject({ id: 'thread-one', canReply: true, canResolve: false });
+    });
+
+    it('turns a missing approvals route into a clear refusal', async () => {
+      const approve = vi.fn(async () => { throw notFound(); });
+      const { service } = setup({ MergeRequests: mergeRequests(), MergeRequestApprovals: { approve } });
+      await expect(service.reviewChangeRequest(review())).rejects.toMatchObject({
+        message: 'This GitLab instance does not offer merge request approvals', status: 422,
+      });
     });
 
     it('discards nothing when there are no drafts to discard', async () => {

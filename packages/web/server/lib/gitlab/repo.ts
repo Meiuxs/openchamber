@@ -51,7 +51,11 @@ export function parseGitLabRemoteUrl(raw: string | null | undefined, instance: s
   const originUrl = new URL(origin);
   const expectedHost = originUrl.host.toLowerCase();
   const expectedHostname = originUrl.hostname.toLowerCase();
+  const instancePath = originUrl.pathname.replace(/\/+$/u, '');
   const value = raw.trim();
+  const projectPathOf = (pathname: string) => (instancePath
+    ? (pathname.startsWith(`${instancePath}/`) ? normalizeProjectPath(pathname.slice(instancePath.length)) : null)
+    : normalizeProjectPath(pathname));
 
   const scpMatch = matchScpRemote(value);
   if (scpMatch) {
@@ -74,7 +78,7 @@ export function parseGitLabRemoteUrl(raw: string | null | undefined, instance: s
     : url.hostname.toLowerCase() === expectedHostname;
   if (!hostMatches || (isWebRemote && (url.username || url.password))) return null;
   if (url.search || url.hash) return null;
-  const projectPath = normalizeProjectPath(url.pathname);
+  const projectPath = isWebRemote ? projectPathOf(url.pathname) : normalizeProjectPath(url.pathname);
   return projectPath ? { projectPath, url: `${origin}/${projectPath}` } : null;
 }
 

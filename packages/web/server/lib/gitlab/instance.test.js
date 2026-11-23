@@ -8,10 +8,15 @@ describe('normalizeGitLabInstance', () => {
     expect(normalizeGitLabInstance('http://127.0.0.1:8080')).toBe('http://127.0.0.1:8080');
   });
 
+  it('keeps a sub-path an intranet instance is served under', () => {
+    expect(normalizeGitLabInstance('https://gitlab.example.com/gitlab/')).toBe('https://gitlab.example.com/gitlab');
+    expect(normalizeGitLabInstance('http://127.0.0.1:8080/gitlab')).toBe('http://127.0.0.1:8080/gitlab');
+  });
+
   it('rejects insecure remote hosts and non-origin URLs', () => {
     expect(() => normalizeGitLabInstance('http://gitlab.example.com')).toThrow('must use HTTPS');
-    expect(() => normalizeGitLabInstance('https://gitlab.example.com/group')).toThrow('must be an origin');
-    expect(() => normalizeGitLabInstance('https://user:pass@gitlab.example.com')).toThrow('must be an origin');
+    expect(() => normalizeGitLabInstance('https://gitlab.example.com/group?ref=main')).toThrow('must be an origin or a plain path');
+    expect(() => normalizeGitLabInstance('https://user:pass@gitlab.example.com')).toThrow('must be an origin or a plain path');
   });
 
   it('accepts a plain-HTTP origin the resolved allowlist names', () => {

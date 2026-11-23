@@ -19,6 +19,17 @@ describe('GitLab repository resolution', () => {
     expect(parseGitLabRemoteUrl('https://gitlab.example.com/repo.git', instance)).toBeNull();
   });
 
+  it('strips the instance prefix a sub-path deployment repeats in web remotes', () => {
+    const instance = 'https://gitlab.example.com/gitlab';
+    expect(parseGitLabRemoteUrl('https://gitlab.example.com/gitlab/group/repo.git', instance)).toEqual({
+      projectPath: 'group/repo', url: 'https://gitlab.example.com/gitlab/group/repo',
+    });
+    expect(parseGitLabRemoteUrl('git@gitlab.example.com:group/repo.git', instance)).toEqual({
+      projectPath: 'group/repo', url: 'https://gitlab.example.com/gitlab/group/repo',
+    });
+    expect(parseGitLabRemoteUrl('https://gitlab.example.com/group/repo.git', instance)).toBeNull();
+  });
+
   it('rejects non-primitive remote URLs without normalizing the instance', () => {
     for (const value of [undefined, null, 42, {}, Object('https://gitlab.com/team/repo.git')]) {
       expect(parseGitLabRemoteUrl(value, '')).toBeNull();

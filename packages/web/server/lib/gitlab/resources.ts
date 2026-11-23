@@ -10,6 +10,17 @@ import { resolveGitLabProjectsFromDirectory } from './repo.js';
 import { atLeast, COLLECTION_MAX_PAGES, COLLECTION_PER_PAGE, instanceVersion, readPage, requestStatus } from './read-support.js';
 import { INVALID_DIFF_LIST_MESSAGE, readMergeRequestDiffs } from './diff-reads.js';
 import { gitPatchForDiff } from './diff-patch.js';
+import { labelFilter } from './label-filter.js';
+import {
+  THREAD_PERMISSIONS_QUERY,
+  deleteReviewNoteFallback,
+  discussionIdOfNote,
+  legacyDiscussionPosition,
+  rememberThreadPermissionsUnsupported,
+  supportsThreadPermissions,
+  threadPermissionsFrom,
+  updateReviewNoteFallback,
+} from './legacy-reviews.js';
 import { systemReferences, withIssueReferences, withReferences } from './references.js';
 import { isPlainObject as isPlain, isPresent, isString } from './validation.js';
 import type { SourceControlMutationTarget, SourceControlProjectRef } from '@openchamber/sdk';
@@ -79,6 +90,7 @@ const array = (value: Reply | undefined): value is JsonValue[] => Array.isArray(
 const integer = (value: Field): value is number => Number.isInteger(value);
 const hasIid = (value: Reply | undefined): value is JsonObject & { iid: number } => isPlainObject(value) && integer(value.iid);
 const hasId = (value: Reply): value is JsonObject & { id: number } => isPlainObject(value) && integer(value.id);
+
 const last = (values: Projects): Project => values.at(-1) ?? values[0];
 
 const DRAFT_TITLE_PREFIX = /^\s*(?:\[draft\]|\(draft\)|\[wip\]|\(wip\)|draft:|wip:)\s*/i;
@@ -91,15 +103,6 @@ interface ListValues { [key: string]: string | undefined }
 const LIST_STATES: ListValues = { open: 'opened', closed: 'closed', merged: 'merged', all: 'all' };
 const LIST_SCOPES: ListValues = { any: 'all', assigned: 'assigned_to_me', created: 'created_by_me' };
 
-const labelFilter = (labels: ListOptions['labels']) => {
-  if (!Array.isArray(labels) || labels.length === 0) return null;
-  if (labels.some((label) => !isString(label) || label.includes(','))) {
-    throw Object.assign(new Error('A GitLab label name cannot contain a comma'), {
-      code: 'INVALID_SOURCE_CONTROL_READ_CONTEXT', status: 400,
-    });
-  }
-  return labels.join(',');
-};
 const TIMELINE_COMMIT_LIMIT = 50;
 
 function requireMapped<T>(value: T | null, message: string): T {
@@ -632,40 +635,23 @@ export function createGitLabResourceService({ origin, client, download, resolveP
         resolvable: resolvable.length > 0,
         resolved: resolvable.length > 0 && resolvable.every((note) => note.resolved === true),
       };
-      const canResolve = permissions?.resolve.get(discussion.id);
-      if (canResolve !== undefined) state.canResolve = canResolve;
-      if (permissions) state.canReply = permissions.reply;
+      const canResolve = permissions?.resolve.get(discussion.id) ?? resolvable.length > 0;
+      state.canResolve = canResolve;
+      state.canReply = permissions?.reply ?? true;
       return discussion.notes.map((note) => (isPlainObject(note) && note.system !== true
         ? { ...note, discussionThread: { ...state, first: note === opener } }
         : note));
     });
   };
-  const THREAD_PERMISSIONS_QUERY = `query($path: ID!, $iid: String!) {
-  project(fullPath: $path) {
-    mergeRequest(iid: $iid) {
-      discussionLocked
-      userPermissions { createNote }
-      discussions(first: 100) { nodes { id notes(first: 1) { nodes { userPermissions { resolveNote } } } } }
-    }
-  }
-}`;
   const readThreadPermissions = async (project: SourceControlProjectRef, number: number): Promise<Permissions | null> => {
+    if (!(await supportsThreadPermissions(client))) return null;
     try {
       const response = await client.MergeRequests.requester.post('../graphql', {
         body: { query: THREAD_PERMISSIONS_QUERY, variables: { path: `${project.owner}/${project.name}`, iid: String(number) } },
       });
-      const request = obj(obj(obj(response?.body)?.data)?.project)?.mergeRequest;
-      const nodes = obj(obj(request)?.discussions)?.nodes;
-      if (!isPlainObject(request) || !array(nodes)) return null;
-      const resolve = new Map<Field, boolean>();
-      for (const value of nodes) {
-        const node = obj(value);
-        const id = isString(node?.id) ? node.id.split('/').at(-1) : '';
-        const first = obj(obj(node?.notes)?.nodes)?.[0];
-        const allowed = obj(obj(first)?.userPermissions)?.resolveNote;
-        if (id && (allowed === true || allowed === false)) resolve.set(id, allowed);
-      }
-      return { reply: request.discussionLocked !== true && obj(request.userPermissions)?.createNote !== false, resolve };
+      const result = threadPermissionsFrom(obj(response?.body));
+      if (result.unsupported) rememberThreadPermissionsUnsupported(client);
+      return result.permissions;
     } catch {
       return null;
     }
@@ -732,7 +718,6 @@ export function createGitLabResourceService({ origin, client, download, resolveP
       lineRange: range(),
     };
   };
-
   const discussionResolved = (raw: Reply) => {
     if (!isPlainObject(raw) || !array(raw.notes)) return null;
     const resolvable = raw.notes.filter((note): note is JsonObject => isPlainObject(note) && note.resolvable === true);
@@ -904,13 +889,14 @@ export function createGitLabResourceService({ origin, client, download, resolveP
           const discussion = obj(value);
           const notes = asArray(discussion?.notes).filter((note): note is JsonObject => isPlainObject(note) && note.system !== true);
           const [first] = notes;
-          if (first?.type !== 'DiffNote' || !isPlainObject(first.position) || first.position.head_sha !== headSha) return [];
+          if (first?.type !== 'DiffNote' || !isPlainObject(first.position)) return [];
+          const resolvable = notes.some((note) => note.resolvable === true);
           return [{
             ...positionOfNote(first.position),
             id: discussion?.id,
             resolved: discussionResolved(value) === true,
-            canReply: permissions?.reply ?? false,
-            canResolve: permissions?.resolve.get(discussion?.id) ?? false,
+            canReply: permissions?.reply ?? true,
+            canResolve: permissions?.resolve.get(discussion?.id) ?? resolvable,
             comments: notes.map((note) => ({
               id: String(note.id),
               body: note.body,
@@ -944,26 +930,38 @@ export function createGitLabResourceService({ origin, client, download, resolveP
           if (requestStatus(error) !== 404) throw error;
         }
       }
-      // SAFETY: the merge request was read above and the deployed GitLab accepts a `position` option on a plain note, returning a note with an integer `id`; GitBeaker's declaration omits that option and only `id` is read here.
-      // oxlint-disable-next-line anti-slop/no-chained-type-assertions
-      const createNote = client.MergeRequestNotes.create as unknown as (
-        projectId: string | number, number: number, body: string,
-        options: { position: ReturnType<typeof draftPosition> },
-      ) => Reply;
-      const created = await createNote(projectId, number, body, { position: notePosition });
-      if (!isPlainObject(created) || !Number.isInteger(created.id)) throw new Error('GitLab returned an invalid positioned note');
+      const created = await client.MergeRequestDiscussions.create(projectId, number, body, {
+        position: legacyDiscussionPosition(position, draftPosition(position, diff, refs)),
+      });
+      if (!isPlainObject(created) || !array(created.notes)) throw new Error('GitLab returned an invalid positioned discussion');
       return {};
     },
 
     async updateReviewComment({ providerTarget, commentId, body }: WithTarget & WithComment & WithBody) {
       const { projectId, number } = providerTarget;
-      const updated = await client.MergeRequestDraftNotes.edit(projectId, number, Number(commentId), { note: body });
-      if (!isPlainObject(updated) || !Number.isInteger(updated.id)) throw new Error('GitLab returned an invalid draft note');
+      const id = Number(commentId);
+      const findDiscussionId = async () => {
+        const discussions = await readCollection(
+          (page) => client.MergeRequestDiscussions.all(projectId, number, page),
+          'GitLab merge request has more threads than OpenChamber reads',
+        );
+        return discussionIdOfNote(discussions, id);
+      };
+      await updateReviewNoteFallback(client, projectId, number, id, body, await supportsDraftReview(), findDiscussionId);
       return {};
     },
 
     async deleteReviewComment({ providerTarget, commentId }: WithTarget & WithComment) {
-      await client.MergeRequestDraftNotes.remove(providerTarget.projectId, providerTarget.number, Number(commentId));
+      const { projectId, number } = providerTarget;
+      const id = Number(commentId);
+      const findDiscussionId = async () => {
+        const discussions = await readCollection(
+          (page) => client.MergeRequestDiscussions.all(projectId, number, page),
+          'GitLab merge request has more threads than OpenChamber reads',
+        );
+        return discussionIdOfNote(discussions, id);
+      };
+      await deleteReviewNoteFallback(client, projectId, number, id, await supportsDraftReview(), findDiscussionId);
       return {};
     },
 
@@ -1107,6 +1105,7 @@ export function createGitLabResourceService({ origin, client, download, resolveP
             });
           }
           if (status === 401) throw Object.assign(new Error('GitLab did not allow this approval'), { status: 403 });
+          if (status === 404) throw Object.assign(new Error('This GitLab instance does not offer merge request approvals'), { status: 422 });
           throw error;
         }
       } else if (payload.verdict === 'request-changes') {

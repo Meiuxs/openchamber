@@ -44,7 +44,7 @@ export async function readMergeRequestDiffs(client: Client, origin: string, proj
       if (await supportsDiffList(client)) throw new Error(INVALID_DIFF_LIST_MESSAGE);
     } catch (error) {
       const status = requestStatus(error);
-      if (status !== 404 && !(status === 500 && !(await supportsDiffList(client)))) throw error;
+      if (status !== 404 && status !== 500) throw error;
     }
   }
   const response = await client.MergeRequests.requester.get(

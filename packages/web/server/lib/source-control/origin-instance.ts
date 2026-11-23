@@ -7,7 +7,7 @@ const isLoopbackHost = (hostname: string) => LOOPBACK_HOSTS.has(String(hostname)
 
 export function normalizeOriginInstance(
   value: string | undefined,
-  { label, insecureOrigins = null }: { label: string; insecureOrigins?: Set<string> | null },
+  { label, insecureOrigins = null, allowPath = false }: { label: string; insecureOrigins?: Set<string> | null; allowPath?: boolean },
 ) {
   const raw = isString(value) ? value.trim() : '';
   if (!raw) throw new Error(`${label} instance is required`);
@@ -19,15 +19,21 @@ export function normalizeOriginInstance(
     throw new Error(`Invalid ${label} instance URL`);
   }
 
-  if (url.username || url.password || url.search || url.hash || (url.pathname && url.pathname !== '/')) {
-    throw new Error(`${label} instance must be an origin`);
+  const pathname = url.pathname.replace(/\/+$/u, '');
+  // A sealed instance is an origin; GitLab also lives under a plain prefix such as
+  // `/gitlab` on an intranet host, so it may keep one when `allowPath` is set.
+  const pathValid = allowPath
+    ? pathname === '' || /^(?:\/[A-Za-z0-9._~!$&'()*+,;=:@%-]+)+$/u.test(pathname)
+    : pathname === '';
+  if (url.username || url.password || url.search || url.hash || !pathValid) {
+    throw new Error(allowPath ? `${label} instance must be an origin or a plain path` : `${label} instance must be an origin`);
   }
   if (url.protocol !== 'https:'
     && !(url.protocol === 'http:' && (isLoopbackHost(url.hostname)
       || (insecureOrigins ?? allowedInsecureGitOrigins()).has(url.origin)))) {
     throw new Error(`${label} instances must use HTTPS`);
   }
-  return url.origin;
+  return `${url.origin}${pathname}`;
 }
 
 const webPort = (url: URL) => Number(url.port || (url.protocol === 'http:' ? 80 : 443));
