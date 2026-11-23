@@ -42,6 +42,8 @@ import { saveFile } from './parts/saveFile';
 import { MermaidLoadFailure, getMermaidDataUrlSourcePromise, isCurrentMermaidLoadRequest, isMermaidLoadFailure, nextMermaidLoadRequestId } from './toolOutputDialogMermaid';
 import { PIERRE_DIFF_TINT_CSS, PIERRE_SEPARATOR_CSS } from '@/lib/shiki/pierreDiffTint';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
+import { ToolOutputCopyButton } from './parts/ToolOutputCopyButton';
+import { getSvgAspectRatio } from './toolOutputDialogSvg';
 
 interface ToolOutputDialogProps {
     popup: ToolPopupContent;
@@ -131,60 +133,6 @@ const getPreviewViewportBounds = (viewport: { width: number; height: number }, i
         maxWidth: Math.max(160, Math.min(paddedWidth, viewport.width * limits.widthRatio)),
         maxHeight: Math.max(160, Math.min(paddedHeight, viewport.height * limits.heightRatio)),
     };
-};
-
-const getSvgAspectRatio = (svg: SVGElement): number | null => {
-    try {
-        const groups = Array.from(svg.querySelectorAll('g'));
-        let bestArea = 0;
-        let bestRatio: number | null = null;
-
-        for (const group of groups) {
-            if (!(group instanceof SVGGraphicsElement)) {
-                continue;
-            }
-            const box = group.getBBox();
-            if (!(box.width > 0 && box.height > 0)) {
-                continue;
-            }
-            const area = box.width * box.height;
-            if (area > bestArea) {
-                bestArea = area;
-                bestRatio = box.width / box.height;
-            }
-        }
-
-        if (bestRatio && Number.isFinite(bestRatio) && bestRatio > 0) {
-            return bestRatio;
-        }
-    } catch {
-        // Ignore getBBox failures and fall back to SVG attrs/viewBox.
-    }
-
-    const viewBox = svg.getAttribute('data-oc-mermaid-original-viewbox') ?? svg.getAttribute('viewBox');
-    if (viewBox) {
-        const parts = viewBox.trim().split(/\s+/).map(Number);
-        if (parts.length === 4) {
-            const width = parts[2];
-            const height = parts[3];
-            if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
-                return width / height;
-            }
-        }
-    }
-
-    const attrWidth = Number(svg.getAttribute('width'));
-    const attrHeight = Number(svg.getAttribute('height'));
-    if (Number.isFinite(attrWidth) && Number.isFinite(attrHeight) && attrWidth > 0 && attrHeight > 0) {
-        return attrWidth / attrHeight;
-    }
-
-    const rect = svg.getBoundingClientRect();
-    if (rect.width > 0 && rect.height > 0) {
-        return rect.width / rect.height;
-    }
-
-    return null;
 };
 
 const usePreviewOverlayState = (open: boolean) => {
@@ -1044,6 +992,8 @@ const ToolOutputDialog: React.FC<ToolOutputDialogProps> = ({ popup, onOpenChange
         setDiffViewMode(defaultDiffViewMode);
     }, [defaultDiffViewMode, popup.open, popup.title]);
 
+    const hasCopyableContent = popup.content.trim().length > 0 && !popup.isDiff && popup.metadata?.tool === undefined;
+
     if (popup.image) {
         return <ImagePreviewDialog popup={popup} onOpenChange={onOpenChange} isMobile={isMobile} />;
     }
@@ -1073,6 +1023,7 @@ const ToolOutputDialog: React.FC<ToolOutputDialogProps> = ({ popup, onOpenChange
                             <Icon name="tools" className="h-3.5 w-3.5 text-foreground flex-shrink-0" />
                         )}
                         <span className="break-words flex-1 leading-tight">{popup.title}</span>
+                        {hasCopyableContent && <ToolOutputCopyButton key={popup.content} content={popup.content} />}
                         {popup.isDiff && (
                             <DiffViewToggle
                                 mode={diffViewMode}

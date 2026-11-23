@@ -28,6 +28,7 @@ import { normalizeUserDisplayParts } from './message/normalizeUserDisplayParts';
 import { useSourceControlDescriptorOf } from '@/lib/source-control/providers/registry';
 import { isHiddenUserMessage } from './message/hiddenUserMessage';
 import { flattenAssistantTextParts, flattenUserTextParts } from '@/lib/messages/messageText';
+import { expandAttachmentCitations } from '@/lib/messages/attachmentText';
 import { assistantErrorNotice } from '@/lib/messages/assistantError';
 import { getProviderModelDisplayName } from '@/lib/modelDisplay';
 import { lazyWithChunkRecovery } from '@/lib/chunkLoadRecovery';
@@ -455,7 +456,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
 
     const messageTextContent = React.useMemo(() => {
         if (isUser) {
-            return flattenUserTextParts(visibleParts);
+            return expandAttachmentCitations(flattenUserTextParts(visibleParts), visibleParts);
         }
 
         if (assistantErrorText && assistantErrorText.trim().length > 0) {
