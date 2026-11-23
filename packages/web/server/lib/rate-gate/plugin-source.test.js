@@ -34,6 +34,15 @@ describe('rate gate plugin source', () => {
     expect(source).toContain('gateOffUntil');
   });
 
+  it('reports the request URL so the server can ignore an ungated provider', () => {
+    expect(buildRateGatePluginSource()).toContain('url: event.baseURL');
+  });
+
+  it('stops waiting after a bounded time so a cancelled turn stops asking', () => {
+    // The loop is not tied to the turn's lifetime, so it has to end on its own.
+    expect(buildRateGatePluginSource()).toContain('MAX_WAIT_MS');
+  });
+
   it('forwards the raw rate limit headers so one parser owns the units', () => {
     // The server already understands epoch, duration and suffixed header names;
     // converting in the plugin created a second, weaker parser.

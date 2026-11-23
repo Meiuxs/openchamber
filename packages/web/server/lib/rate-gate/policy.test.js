@@ -93,6 +93,7 @@ describe('rate limit headers', () => {
     expect(parseDurationMs('soon')).toBeNull();
     expect(parseResetValue('2m', now)).toBe(now + 120_000);
     expect(parseRateLimitRecord({ 'Retry-After': '2' }, now).retryAfterMs).toBe(2_000);
+    expect(parseRateLimitRecord({ 'Retry-After': '1m30s' }, now).retryAfterMs).toBe(90_000);
     expect(parseRateLimitRecord({ 'retry-after-ms': '750' }, now).retryAfterMs).toBe(750);
   });
 

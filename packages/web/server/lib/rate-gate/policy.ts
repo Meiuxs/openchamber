@@ -83,7 +83,8 @@ export const normalizeGatewayList = (value: ParsedRateGateNumbers['gateways']): 
 
 export const parseGatewayText = (value: string | string[]): string[] => normalizeGatewayList(value);
 
-export const matchesGateway = (url: string | null | undefined, gateways: readonly string[]) => {  if (!url || gateways.length === 0) return false;
+export const matchesGateway = (url: string | null | undefined, gateways: readonly string[]) => {
+  if (!url || gateways.length === 0) return false;
   let target: URL;
   try {
     target = new URL(url);
@@ -169,6 +170,8 @@ const parseRetryAfterMs = (record: Record<string, string>, now: number): number 
   if (raw === null) return null;
   const seconds = Number(raw);
   if (Number.isFinite(seconds)) return Math.max(0, Math.round(seconds * 1_000));
+  const duration = parseDurationMs(raw);
+  if (duration !== null) return Math.max(0, duration);
   const date = Date.parse(raw);
   return Number.isNaN(date) ? null : Math.max(0, date - now);
 };

@@ -106,6 +106,47 @@ describe('rate gate window', () => {
     expect((await runtime.status()).accounts).toEqual([]);
   });
 
+  it('ignores a report from a URL outside the gateways', async () => {
+    // The response of an ungated provider is not this gate's business, so it
+    // must not create an account row or tighten a budget.
+    const { runtime } = await setup();
+    await runtime.report({
+      providerID: 'openai',
+      sessionID: 's1',
+      url: 'https://api.openai.com/v1/chat/completions',
+      status: 200,
+      headers: { 'x-ratelimit-remaining': '5', 'x-ratelimit-reset': '60' },
+    });
+    expect((await runtime.status()).accounts).toEqual([]);
+  });
+
+  it('ignores a report it cannot attribute to a URL', async () => {
+    const { runtime } = await setup(DEFAULT_CONFIG, { resolveProviderBaseUrl: () => null });
+    await runtime.report({ providerID: 'intranet', sessionID: 's1', status: 200, remaining: 5, resetAt: '600s' });
+    expect((await runtime.status()).accounts).toEqual([]);
+  });
+
+  it('stops applying reports to a gateway the configuration no longer lists', async () => {
+    // Removing a gateway mid-session must also stop the responses a plugin
+    // still holds an account key for from spending that account's budget.
+    let config = DEFAULT_CONFIG;
+    const { runtime } = await setup(DEFAULT_CONFIG, { readPolicy: () => config });
+    await runtime.acquire(acquireBody());
+    config = { ...DEFAULT_CONFIG, gateways: ['http://other.corp'] };
+    await runtime.report({
+      providerID: 'intranet',
+      sessionID: 's1',
+      accountKey: 'credential:a',
+      url: 'http://gw.corp/v1/chat',
+      status: 200,
+      remaining: 5,
+      resetAt: '600s',
+    });
+    await expect(runtime.status()).resolves.toMatchObject({
+      accounts: [{ key: 'credential:a', authoritative: false, remaining: 2 }],
+    });
+  });
+
   it('keeps working when account resolution throws', async () => {
     const { runtime } = await setup(DEFAULT_CONFIG, {
       resolveAccount: async () => { throw new Error('credential store offline'); },
@@ -122,6 +163,12 @@ describe('rate gate window', () => {
       windowMinutes: 10,
       caps: { requests: 100, windowMinutes: 10 },
     });
+  });
+
+  it('reports disabled when the host cannot load the plugin', async () => {
+    // Nothing throttles in this runtime, so the panel must not claim it does.
+    const { runtime } = await setup(DEFAULT_CONFIG, { isPluginSupported: async () => false });
+    await expect(runtime.status()).resolves.toMatchObject({ enabled: false });
   });
 });
 
@@ -212,6 +259,24 @@ describe('gateway reported quota is spent by grants', () => {
     await runtime.report({ providerID: 'intranet', sessionID: 's1', status: 200, remaining: 0, resetAt: resetSeconds });
     await expect(runtime.status()).resolves.toMatchObject({ accounts: [{ authoritative: true, remaining: 0 }] });
   });
+
+  it('attributes a report from a forgotten account key to the current account', async () => {
+    // A credential switch leaves the plugin holding the previous key. Creating
+    // an account for it shows a row that never receives a grant again.
+    const { runtime } = await setup({ requests: 100, windowMinutes: 10, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    await runtime.report({
+      providerID: 'intranet',
+      sessionID: 's1',
+      accountKey: 'credential:old',
+      status: 200,
+      remaining: 5,
+      resetAt: '600s',
+    });
+    const { accounts } = await runtime.status();
+    expect(accounts.map((account) => account.key)).toEqual(['credential:a']);
+    expect(accounts[0]).toMatchObject({ authoritative: true, remaining: 5 });
+  });
 });
 
 describe('gateway recovery time on 429', () => {
@@ -242,6 +307,18 @@ describe('gateway recovery time on 429', () => {
     await runtime.acquire(acquireBody());
     await runtime.report({ providerID: 'intranet', sessionID: 's1', accountKey: 'credential:a', status: 429 });
     expect(await runtime.acquire(acquireBody())).toMatchObject({ action: 'wait', retryAt: 1_600_000 });
+  });
+
+  it('lets the gateway retry time reopen an account an earlier report had closed', async () => {
+    // A "0 left" report used to outvote the gateway's own retry time, so a two
+    // second 429 still froze the account until the reset header.
+    const { runtime, advance } = await setup({ requests: 2, windowMinutes: 10, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    await runtime.report({ providerID: 'intranet', sessionID: 's1', status: 200, remaining: 0, resetAt: '600s' });
+    expect((await runtime.acquire(acquireBody({ sessionID: 's2' }))).action).toBe('wait');
+    await runtime.report({ providerID: 'intranet', sessionID: 's1', status: 429, retryAfterMs: 2_000 });
+    advance(3_000);
+    expect((await runtime.acquire(acquireBody({ sessionID: 's3' }))).action).toBe('pass');
   });
 
   it('still cools for a moment when a 429 arrives with nothing spent in the window', async () => {
@@ -283,8 +360,7 @@ describe('rate gate broadcast', () => {
   // The announcement is computed after the answer is returned, so a test has to
   // let that microtask run before it reads what was sent.
   const settle = async () => {
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   };
 
   it('announces a granted request and a waiting one', async () => {

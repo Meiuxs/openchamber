@@ -15,6 +15,7 @@ export const WAITING_TTL_MS = 90_000;
 export const WAIT_STAGGER_MS = 250;
 const FALLBACK_COOLDOWN_MS = 1_000;
 const MAX_STAGGER_POSITIONS = 8;
+const SUPPORT_TTL_MS = 30_000;
 export type RateGateLogDetails = Record<string, string | number | boolean | null | undefined>;
 
 export type RateGateAcquireInput = {
@@ -103,6 +104,7 @@ const reportSchema = z.object({
   providerID: z.string().min(1),
   sessionID: z.string().min(1),
   accountKey: z.string().min(1).optional(),
+  url: z.string().optional(),
   status: z.number().int(),
   retryAfterMs: z.number().finite().nonnegative().optional(),
   remaining: z.union([z.number().finite(), z.string()]).optional(),
@@ -118,6 +120,7 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
   const pluginDirectory = deps.path.join(deps.instanceDir, 'openchamber-rate-gate');
   let lastBroadcastAt = 0;
   let broadcastTimer: ReturnType<typeof setTimeout> | null = null;
+  let supportCache: { at: number; supported: boolean } | null = null;
 
   const log = (details: RateGateLogDetails) => {
     try {
@@ -136,6 +139,14 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
       policy = null;
     }
     return resolveRateGateConfig(settings, policy);
+  };
+
+  const pluginSupported = async (): Promise<boolean> => {
+    const at = now();
+    if (supportCache && at - supportCache.at < SUPPORT_TTL_MS) return supportCache.supported;
+    const supported = await deps.isPluginSupported().catch(() => false);
+    supportCache = { at, supported };
+    return supported;
   };
 
   const getOrCreate = (account: AccountResolution, providerID: string): AccountState => {
@@ -211,6 +222,7 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
     const reportedReset = limits.resetAt !== null && limits.resetAt > at ? limits.resetAt : 0;
     if (input.status === 429) {
       prune(state, at, windowMs);
+      state.authoritative = null;
       const localNext = state.grants[0] ? state.grants[0] + windowMs : at + FALLBACK_COOLDOWN_MS;
       const gatewayNext = Math.max(at + (limits.retryAfterMs ?? 0), reportedReset);
       state.limitedUntil = gatewayNext > at ? gatewayNext : localNext;
@@ -223,7 +235,7 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
 
   const computeStatus = async (): Promise<RateGateStatus> => {
     const { config, caps } = await resolveConfigAsync();
-    const enabled = isRateGateConfigured(config);
+    const enabled = isRateGateConfigured(config) && await pluginSupported();
     const at = now();
     const windowMs = config.windowMinutes * 60_000;
     const accounts = [...states.entries()].map(([key, state]) => {
@@ -348,37 +360,49 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
     return { action: 'wait', gated: true, accountKey: account.key, retryAt };
   };
 
+  const reportTargets = async (input: RateGateReportInput): Promise<{ key: string | null; states: AccountState[] }> => {
+    const remembered = input.accountKey ? states.get(input.accountKey) : undefined;
+    if (remembered) return { key: input.accountKey ?? null, states: [remembered] };
+
+    let resolvedKey: string | null = null;
+    try {
+      resolvedKey = (await deps.resolveAccount(input.providerID)).key;
+    } catch {
+      resolvedKey = null;
+    }
+    const key = resolvedKey ?? input.accountKey ?? null;
+    if (key) return { key, states: [getOrCreate({ key, label: null }, input.providerID)] };
+    return {
+      key: null,
+      states: [...states.values()].filter((state) => state.providerIds.has(input.providerID)),
+    };
+  };
+
   const report = async (input: RateGateReportInput): Promise<void> => {
     const { config } = await resolveConfigAsync();
     if (!isRateGateConfigured(config)) return;
 
+    const alreadyGated = Boolean(input.accountKey && states.has(input.accountKey));
+    const reportUrl = input.url ?? (alreadyGated ? null : deps.resolveProviderBaseUrl(input.providerID) ?? null);
+    const attributedByKey = alreadyGated && input.url === undefined;
+    if (!attributedByKey && !matchesGateway(reportUrl, config.gateways)) return;
+
     const at = now();
     const windowMs = config.windowMinutes * 60_000;
-    let accountKey = input.accountKey ?? null;
-    if (!accountKey) {
-      try {
-        accountKey = (await deps.resolveAccount(input.providerID)).key;
-      } catch {
-        accountKey = null;
-      }
-    }
-
-    const targets = accountKey
-      ? [getOrCreate({ key: accountKey, label: null }, input.providerID)]
-      : [...states.values()].filter((state) => state.providerIds.has(input.providerID));
-    for (const state of targets) applyReport(state, input, at, windowMs);
+    const targets = await reportTargets(input);
+    for (const state of targets.states) applyReport(state, input, at, windowMs);
 
     const limits = reportLimits(input, at);
     log({
       event: 'report',
-      accountKey,
+      accountKey: targets.key,
       providerID: input.providerID,
       sessionID: input.sessionID,
       status: input.status,
       remaining: limits.remaining,
       resetAt: limits.resetAt,
       retryAfterMs: limits.retryAfterMs,
-      limitedUntil: targets[0]?.limitedUntil ?? null,
+      limitedUntil: targets.states[0]?.limitedUntil ?? null,
       headers: input.headers ? Object.keys(input.headers).join(',') : null,
     });
     scheduleBroadcast();

@@ -26,6 +26,14 @@ restart once a gateway is saved.
 - A request is counted only when its URL matches a configured gateway. An empty
   gateway list, or a request the plugin reported without a URL, is passed
   through: the gate never blocks a request it cannot attribute to a gateway.
+- A report is filtered the same way: a response from a URL outside the
+  gateways changes no account state and creates no account row. The plugin
+  sends the request URL with each report, and a URL that arrives is always
+  checked, so removing a gateway takes effect on the next response. Only a
+  report with no URL whose account key already has a state is attributed
+  without the check, because that key exists only after acquire matched. A
+  report with no URL and no known key uses the provider's configured address,
+  and is dropped when there is none.
 - The window is counted backwards from now, so a grant ages out of the budget
   exactly `windowMinutes` after it was made.
 - An account is identified the way limit failover identifies one: a stored
@@ -43,12 +51,15 @@ restart once a gateway is saved.
   headers). Token counters are ignored: a token remainder is not a request slot.
 - `x-ratelimit-reset` arrives in epoch milliseconds, epoch seconds, seconds from
   now, a Go-style duration (`1s`, `1m30s`) or an HTTP date. `retry-after` and
-  `retry-after-ms` are read as the gateway's own recovery delay. An older plugin
-  that forwards numbers instead of headers still lands correctly.
+  `retry-after-ms` are read as the gateway's own recovery delay, in seconds, as
+  the same duration forms, or as an HTTP date. An older plugin that forwards
+  numbers instead of headers still lands correctly.
 - A 429 marks the account exhausted until the gateway's own recovery time: the
   later of `retryAfterMs` and the reported reset. The end of the local window is
   used only when the gateway named no time at all, because that end is a guess
-  about a quota the server does not see.
+  about a quota the server does not see. A 429 also drops the reported
+  remainder, so an earlier "0 left" report cannot keep the account closed past
+  the recovery time the gateway just named.
 - Waiting sessions wake in queue order: each `wait` answer pushes the wake-up
   back by its position in the waiting list, so the first waiter gets the freed
   slot instead of losing a race against every other session.
@@ -67,6 +78,21 @@ restart once a gateway is saved.
 - The status is announced as `openchamber:rate-gate` with the same snapshot the
   route answers, throttled to one a second. A surface reads the route on mount
   and follows the event after, so a state change is visible without a poll.
+- `enabled` is true only when a gateway is configured and this runtime can load
+  the plugin. A surface never shows throttling the app cannot perform. The
+  status holds the support answer for 30 s because the probe may spawn the
+  OpenCode CLI. The managed config asks it directly, because a cached failure
+  would leave the plugin out of the child's configuration.
+- A report whose account key the server does not know is attributed to the
+  account resolved now. Creating an account for the forgotten key left a row
+  that never received a grant again after a credential switch.
+- The plugin's waiting loop ends after ten minutes with the request passed.
+  The loop is not tied to the turn that started it, and a cancelled turn
+  otherwise keeps a queue slot and can spend a grant for a request nobody
+  sends. While the circuit breaker is open, the plugin sends no reports
+  either: the whole gate is off for those 30 s.
+- The plugin remembers the account key of the most recent 256 session and
+  provider pairs. It is a per-process map read by the next response only.
 
 ## Decisions
 
@@ -157,3 +183,41 @@ positions, to the wake-up time. The first waiter wakes first, takes the slot, an
 the rest re-queue one place closer. The queue is still advisory: a request that
 never waited can take a free slot, because holding the slot for a session that
 may have been interrupted would waste it.
+
+### Why a report is filtered like an acquire
+
+The plugin reports every model response, including providers outside the
+gateway list. Applying those reports created an account row for a provider the
+gate never throttles, and a 429 from a provider sharing the same credential
+could cool it. The plugin now sends the request URL with the report, and the
+server applies the same match as acquire. A report that arrives without a URL
+and carries a known account key skips the check and the provider address read,
+because that key exists only after acquire matched. A URL the plugin does send
+is still checked, so an administrator removing a gateway stops new reports
+immediately.
+
+### Why the status reports disabled when the plugin cannot load
+
+`enabled` used to mean "a gateway is configured". Where the plugin never loads,
+such as VS Code or an external OpenCode, the panel and the waiting row promised
+throttling that could not happen. The status now asks the same support probe the
+managed config uses, cached for 30 s because the probe may spawn the CLI and the
+status is recomputed on every announcement.
+
+### Why a 429 drops the reported remainder
+
+A successful response can report "0 left" with a reset ten minutes away, and a
+later 429 can name a recovery two seconds away. Keeping the reported remainder
+meant the older figure outvoted the gateway's own recovery time, and the
+account stayed closed until the reset. The 429 path clears the reported
+remainder so the recovery time it names decides when the account reopens; the
+next report restores it.
+
+### Why the waiting loop has a deadline
+
+The loop lives inside the hook handler, not inside the turn. When the turn is
+cancelled the promise is discarded but the loop keeps sleeping and asking, and
+when a slot frees it can spend a grant for a request nobody sends. Ten minutes
+is longer than the default window, so a real wait is not cut short, and past it
+the request passes. The gate already prefers availability over the limit when
+it cannot do its job.
