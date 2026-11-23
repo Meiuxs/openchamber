@@ -1,5 +1,6 @@
 import type {
   GitRemote,
+  SourceControlAuthAccount,
   SourceControlBindingRead,
   SourceControlIdentity,
   SourceControlProviderBinding,
@@ -61,7 +62,7 @@ export const primaryRemoteOf = (read: SourceControlBindingRead): string => (
   read.binding?.providers[0]?.primaryRemote ?? read.repository.remotes[0]?.name ?? 'origin'
 );
 
-type BindingTarget = { identity: SourceControlIdentity; primaryRemote: string };
+export type BindingTarget = { identity: SourceControlIdentity; primaryRemote: string };
 
 export const bindingTargetForRead = (
   read: SourceControlBindingRead,
@@ -111,6 +112,39 @@ export const resetIntent = (
   expectedConfigRevision: read.repository.configRevision,
   confirmed: true,
 });
+
+export type RebindAllPlanEntry = {
+  row: RepositoryBindingRow;
+  target: BindingTarget;
+  account: SourceControlAuthAccount;
+};
+
+export const rebindAllPlanFor = (
+  rows: readonly RepositoryBindingRow[],
+  identities: readonly SourceControlIdentity[],
+  accounts: ReadonlyArray<{ identity: SourceControlIdentity; account: SourceControlAuthAccount }>,
+): RebindAllPlanEntry[] => {
+  const plan: RebindAllPlanEntry[] = [];
+  for (const row of rows) {
+    const read = row.read;
+    if (!read) continue;
+    const existing = read.binding?.providers[0];
+    const target = existing
+      ? { identity: { provider: existing.provider, instance: existing.instance }, primaryRemote: existing.primaryRemote }
+      : bindingTargetForRead(read, identities);
+    if (!target || target.identity.provider !== 'gitlab') continue;
+    const existingAccountId = existing?.accountId;
+    const candidates = accounts.filter((option) => (
+      option.identity.provider === 'gitlab'
+      && normalizeInstance(option.identity.instance) === normalizeInstance(target.identity.instance)
+    ));
+    const option = candidates.find((item) => item.account.current)
+      ?? candidates.find((item) => item.account.id === existingAccountId)
+      ?? candidates[0];
+    if (option) plan.push({ row, target, account: option.account });
+  }
+  return plan;
+};
 
 export const restoreMutation = (
   directory: string,

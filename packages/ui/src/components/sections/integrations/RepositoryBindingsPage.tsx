@@ -10,6 +10,7 @@ import { SettingsSection, SettingsStackedField } from '@/components/sections/sha
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { checkIsGitRepository } from '@/lib/gitApiHttp';
 import { useI18n } from '@/lib/i18n';
+import { formatDirectoryName } from '@/lib/utils';
 import { getSourceControlAuthKey, useSourceControlAuthStore } from '@/stores/useSourceControlAuthStore';
 import { repositoryBindingOwner, useRepositoryBindings } from '@/lib/source-control/repository-binding';
 import { applyIdentityToRepository } from '@/lib/source-control/applyIdentity';
@@ -23,6 +24,7 @@ import {
   normalizeInstance,
   primaryRemoteOf,
   providerMutationOf,
+  rebindAllPlanFor,
   resetIntent,
   restoreMutation,
   type RepositoryBindingRow,
@@ -36,6 +38,7 @@ type DialogState =
   | { kind: 'bind'; directory: string }
   | { kind: 'reset'; directory: string }
   | { kind: 'rebind'; directory: string }
+  | { kind: 'rebindAll' }
   | { kind: 'duplicate'; key: string }
   | null;
 
@@ -51,6 +54,10 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
   const identities = useSourceControlAuthStore((state) => state.identities);
   const directories = React.useMemo(
     () => [...new Set(projects.map((project) => project.path).filter((path) => path.length > 0))],
+    [projects],
+  );
+  const projectByPath = React.useMemo(
+    () => new Map(projects.map((project) => [project.path, project])),
     [projects],
   );
   const [gitDirectories, setGitDirectories] = React.useState<string[]>([]);
@@ -140,6 +147,13 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
     return options.sort((left, right) => Number(right.account.current) - Number(left.account.current));
   }, [authEntries, identities]);
 
+  const hasGitlabAccount = bindOptions.some((option) => option.identity.provider === 'gitlab');
+
+  const rebindAllPlan = React.useMemo(
+    () => rebindAllPlanFor(gitRows, identities, bindOptions),
+    [bindOptions, gitRows, identities],
+  );
+
   const openBindDialog = React.useCallback((row: RepositoryBindingRow) => {
     const target = row.read ? bindingTargetForRead(row.read, identities) : null;
     const matched = target
@@ -171,12 +185,13 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
     setUndoEntries((entries) => [...entries, { directory, provider, profileId: profile?.id ?? null }]);
   }, []);
 
-  const resetRow = React.useCallback(async (row: RepositoryBindingRow) => {
-    if (!row.read) return;
+  const resetRow = React.useCallback(async (row: RepositoryBindingRow): Promise<SourceControlBindingRead | null> => {
+    if (!row.read) return null;
     const previous = row.read.binding?.providers[0];
     const next = await api.sourceControl.resetRepositoryBinding(resetIntent(row.directory, row.read));
     await refresh(row.directory, row.read, next);
     if (previous) captureUndo(row.directory, previous);
+    return next;
   }, [api.sourceControl, captureUndo, refresh]);
 
   const rebindRow = React.useCallback(async (row: RepositoryBindingRow, accountId: string) => {
@@ -270,6 +285,26 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
         const row = rows.find((entry) => entry.directory === dialog.directory);
         if (row && selectedAccount) await rebindRow(row, selectedAccount);
         setResult(t('repoBindings.result.done'));
+      } else if (dialog.kind === 'rebindAll') {
+        const plan = rebindAllPlan;
+        let failed = 0;
+        for (const entry of plan) {
+          try {
+            let current = entry.row.read;
+            if (current?.binding) {
+              const next = await resetRow(entry.row);
+              if (!next) continue;
+              current = next;
+            }
+            if (!current) continue;
+            await bindRow({ ...entry.row, read: current }, entry.target.identity, entry.account, entry.target.primaryRemote);
+          } catch {
+            failed += 1;
+          }
+        }
+        setResult(failed > 0
+          ? t('repoBindings.result.rebindAllPartial', { failed, total: plan.length })
+          : t('repoBindings.result.done'));
       } else {
         const members = groups.get(dialog.key)?.members ?? [];
         const kept = members.find((entry) => entry.directory === keepDirectory) ?? members[0];
@@ -292,7 +327,7 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
     } finally {
       setBusy(false);
     }
-  }, [bindRemote, bindRow, dialog, groups, keepDirectory, rebindRow, resetRow, rows, selectedAccount, selectedBindOption, t]);
+  }, [bindRemote, bindRow, dialog, groups, keepDirectory, rebindAllPlan, rebindRow, resetRow, rows, selectedAccount, selectedBindOption, t]);
 
   const undo = React.useCallback(async (entry: UndoEntry) => {
     setBusy(true);
@@ -321,7 +356,7 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
     }
   }, [api.git, api.sourceControl, refresh]);
 
-  const activeDialogRow = dialog && dialog.kind !== 'duplicate'
+  const activeDialogRow = dialog && 'directory' in dialog
     ? rows.find((row) => row.directory === dialog.directory) ?? null
     : null;
   const activeDialogProvider = activeDialogRow?.read?.binding?.providers[0];
@@ -348,12 +383,20 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
           }}>
             {t('repoBindings.refresh')}
           </Button>
+          {hasGitlabAccount ? (
+            <Button type="button" variant="outline" size="sm" disabled={busy || scanning || rebindAllPlan.length === 0} onClick={() => {
+              setResult(null);
+              setDialog({ kind: 'rebindAll' });
+            }}>
+              {t('repoBindings.action.rebindAll')}
+            </Button>
+          ) : null}
         </div>
         {result ? <p className="text-sm text-muted-foreground">{result}</p> : null}
         {undoEntries.length > 0 ? (
           <div className="space-y-1">
-            {undoEntries.map((entry) => (
-              <div key={entry.directory} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
+            {undoEntries.map((entry, index) => (
+              <div key={`${entry.directory}-${index}`} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
                 <span className="truncate">{entry.directory} → {projectOf(entry.provider)}</span>
                 <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => void undo(entry)}>
                   {t('repoBindings.action.undo')}
@@ -363,7 +406,7 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
           </div>
         ) : null}
         {duplicateMembers.length > 0 ? null : [...groups.entries()].map(([key, group]) => (
-          <div key={key} className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
+          <div key={key} className="rounded-md border border-[var(--status-warning-border)] bg-[var(--status-warning-background)]/60 px-3 py-2 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span>{projectOf(group.provider)} · {group.members.length} {t('repoBindings.status.duplicate')}</span>
               <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => {
@@ -380,6 +423,7 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
         <div className="divide-y rounded-md border">
           {visibleRows.map((row) => {
             const provider = row.read?.binding?.providers[0];
+            const projectLabel = projectByPath.get(row.directory)?.label?.trim() || formatDirectoryName(row.directory);
             const canBind = Boolean(row.read && !row.read.binding);
             const duplicate = [...groups.values()].some((group) => group.members.some((member) => member.directory === row.directory));
             const statusKey = row.error ? 'repoBindings.status.error'
@@ -390,9 +434,9 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
             return (
               <div key={row.directory} className="px-3 py-2 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{row.directory}</div>
-                    <div className="text-muted-foreground">{projectOf(provider)}{duplicate ? ` · ${t('repoBindings.status.duplicate')}` : ''}</div>
+                  <div className="min-w-0" title={row.directory}>
+                    <div className="truncate font-medium">{projectLabel}</div>
+                    <div className="truncate text-muted-foreground">{projectOf(provider)}{duplicate ? ` · ${t('repoBindings.status.duplicate')}` : ''}</div>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-xs text-muted-foreground">{t(statusKey)}</span>
@@ -441,13 +485,15 @@ export const RepositoryBindingsPage: React.FC<{ checkGit?: (directory: string) =
               {dialog?.kind === 'bind' ? t('repoBindings.dialog.bind')
                 : dialog?.kind === 'reset' ? t('repoBindings.dialog.reset')
                   : dialog?.kind === 'rebind' ? t('repoBindings.dialog.rebind')
-                    : t('repoBindings.dialog.duplicate')}
+                    : dialog?.kind === 'rebindAll' ? t('repoBindings.dialog.rebindAll')
+                      : t('repoBindings.dialog.duplicate')}
             </DialogTitle>
             <DialogDescription>
               {dialog?.kind === 'bind' ? t('repoBindings.dialog.bind.description')
                 : dialog?.kind === 'reset' ? t('repoBindings.dialog.reset.description')
                   : dialog?.kind === 'rebind' ? t('repoBindings.dialog.rebind.description')
-                    : t('repoBindings.dialog.duplicate.description')}
+                    : dialog?.kind === 'rebindAll' ? t('repoBindings.dialog.rebindAll.description')
+                      : t('repoBindings.dialog.duplicate.description')}
             </DialogDescription>
           </DialogHeader>
           {dialog?.kind === 'bind' ? (

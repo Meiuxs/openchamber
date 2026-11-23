@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { SourceControlBindingRead, SourceControlProviderBinding } from '@/lib/api/types';
-import { bindMutation, bindingTargetForRead, duplicateGroups, providerMutationOf, resetIntent, restoreMutation } from './repositoryBindings';
+import type { SourceControlAuthAccount, SourceControlBindingRead, SourceControlProviderBinding } from '@/lib/api/types';
+import { bindMutation, bindingTargetForRead, duplicateGroups, providerMutationOf, rebindAllPlanFor, resetIntent, restoreMutation } from './repositoryBindings';
 
 const base = (directory: string) => ({
   revision: 7,
@@ -32,6 +32,30 @@ const read = (directory: string, provider?: SourceControlProviderBinding): Sourc
 const gitlab = (owner: string, name: string, accountId = 'acct#1'): SourceControlProviderBinding => ({
   provider: 'gitlab', instance: 'https://gitlab.example.com', accountId, primaryRemote: 'origin',
   repository: { owner, name },
+});
+
+const gitlabIdentity = { provider: 'gitlab' as const, instance: 'https://gitlab.example.com' };
+
+const account = (id: string, current = false): SourceControlAuthAccount => ({
+  id,
+  credentialId: `cred:${id}`,
+  credentialRevision: 1,
+  providerUserId: `user:${id}`,
+  providerUserStatus: 'available',
+  user: { ...gitlabIdentity, id: `user:${id}`, username: id },
+  current,
+  source: 'pat',
+  status: 'valid',
+});
+
+const unboundGitlabRow = (directory: string) => ({
+  ...base(directory),
+  status: 'missing' as const,
+  binding: null,
+  repository: {
+    ...base(directory).repository,
+    remotes: [{ name: 'origin', fetch: { displayUrl: 'https://gitlab.example.com/root/app.git', fingerprint: 'fp' }, push: { displayUrl: 'https://gitlab.example.com/root/app.git', fingerprint: 'fp' } }],
+  },
 });
 
 describe('repository binding helpers', () => {
@@ -108,5 +132,40 @@ describe('repository binding helpers', () => {
       operation: 'add',
       provider,
     });
+  });
+
+  test('plans a rebind of every gitlab row with the current account', () => {
+    const rows = [
+      { directory: '/code/a', read: read('/code/a', gitlab('root', 'app')), error: null, loading: false },
+      { directory: '/code/b', read: unboundGitlabRow('/code/b'), error: null, loading: false },
+      { directory: '/code/c', read: null, error: null, loading: true },
+      { directory: '/code/d', read: read('/code/d'), error: null, loading: false },
+    ];
+    const plan = rebindAllPlanFor(rows, [gitlabIdentity], [
+      { identity: gitlabIdentity, account: account('acct#2', true) },
+    ]);
+    expect(plan).toHaveLength(2);
+    expect(plan.map((entry) => entry.row.directory)).toEqual(['/code/a', '/code/b']);
+    expect(plan.map((entry) => entry.account.id)).toEqual(['acct#2', 'acct#2']);
+  });
+
+  test('keeps the bound account when no account is marked current', () => {
+    const rows = [{ directory: '/code/a', read: read('/code/a', gitlab('root', 'app', 'acct#1')), error: null, loading: false }];
+    const plan = rebindAllPlanFor(rows, [gitlabIdentity], [
+      { identity: gitlabIdentity, account: account('acct#1') },
+      { identity: { ...gitlabIdentity, instance: 'https://gitlab.other' }, account: account('acct#9', true) },
+    ]);
+    expect(plan.map((entry) => entry.account.id)).toEqual(['acct#1']);
+  });
+
+  test('drops rows without a matching gitlab account', () => {
+    const rows = [
+      { directory: '/code/a', read: read('/code/a', gitlab('root', 'app')), error: null, loading: false },
+      { directory: '/code/b', read: unboundGitlabRow('/code/b'), error: null, loading: false },
+    ];
+    const plan = rebindAllPlanFor(rows, [gitlabIdentity], [
+      { identity: { ...gitlabIdentity, instance: 'https://gitlab.other' }, account: account('acct#9', true) },
+    ]);
+    expect(plan).toHaveLength(0);
   });
 });
