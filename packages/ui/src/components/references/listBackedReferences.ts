@@ -267,6 +267,7 @@ export const fetchListBackedReferenceDetail = async (
         commentTotal: changeRequestContext.issueComments.length,
         pull: pullDetail(changeRequestContext),
     };
+    if (changeRequestContext.diffUnavailable) detail.diffUnavailable = true;
     if (crossReferences && changeRequestContext.references && changeRequestContext.references.length > 0) detail.references = changeRequestContext.references;
     return detail;
 };

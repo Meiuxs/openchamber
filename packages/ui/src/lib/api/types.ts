@@ -1608,7 +1608,7 @@ export type RepositoryReferenceThread = {
 export type RepositoryReferenceDetail = {
   number: number;
   body?: string;
-  viewerCanUpdate?: boolean;
+  viewerCanUpdate?: boolean; diffUnavailable?: boolean;
   comments: RepositoryReferenceComment[];
   commentTotal: number;
   pull: {

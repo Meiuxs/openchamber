@@ -516,6 +516,7 @@ export interface ChangeRequestContext {
   reviewComments: ChangeRequestReviewComment[];
   files: ChangeRequestFile[];
   diff?: string;
+  diffUnavailable?: boolean;
   ci?: CI | null;
   commits?: ChangeRequestCommit[];
   commitsComplete?: boolean;

@@ -498,8 +498,6 @@ describe('GitLab resource service', () => {
     ['note item', [{ id: 4 }], []],
     ['note author', [{ id: 4, body: 'Comment', author: { id: 3 } }], []],
     ['note position', [{ id: 4, body: 'Comment', position: {} }], []],
-    ['top-level diff list', [], { diffs: [] }],
-    ['diff item', [], [{ diff: '@@' }]],
   ])('rejects malformed canonical merge-request context %s', async (_label, notes, diffs) => {
     const { service } = setup({
       MergeRequestNotes: { all: list(notes) },
@@ -507,6 +505,28 @@ describe('GitLab resource service', () => {
     }, { canonicalReads: true });
     await expect(service.changeRequestContext('/repo', 5, { includeDiff: true }))
       .rejects.toThrow(/invalid merge request (note|diff)/);
+  });
+
+  it.each([
+    ['top-level diff list', { diffs: [] }],
+    ['diff item', [{ diff: '@@' }]],
+  ])('keeps the timeline when a canonical merge-request diff is unreadable: %s', async (_label, diffs) => {
+    const note = { id: 4, body: 'Looks good', author: { id: 3, username: 'sam' } };
+    const { service } = setup({
+      MergeRequestNotes: { all: list([note]) },
+      MergeRequestDiscussions: { all: list([{ id: 'd4', individual_note: true, notes: [note] }]) },
+      MergeRequests: { ...setup().client.MergeRequests, allDiffs: list(diffs), allCommits: list([]) },
+    }, { canonicalReads: true });
+    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true, includeTimeline: true }))
+      .resolves.toMatchObject({ files: [], diff: '', diffUnavailable: true, issueComments: [expect.objectContaining({ body: 'Looks good' })] });
+  });
+
+  it('keeps a diff-list credential refusal a failed context read', async () => {
+    const failure = Object.assign(new Error('401 Unauthorized'), { cause: { response: { status: 401 } } });
+    const { service } = setup({
+      MergeRequests: { ...setup().client.MergeRequests, allDiffs: vi.fn(async () => { throw failure; }) },
+    });
+    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true })).rejects.toBe(failure);
   });
 
   it('keeps malformed legacy merge-request collections best-effort', async () => {
@@ -908,11 +928,12 @@ describe('GitLab resource service', () => {
     expect(issues.client.Issues.all).toHaveBeenCalledWith(expect.objectContaining({ perPage: 20, page: 2 }));
   });
 
-  it('fails instead of returning a capped collection as complete', async () => {
+  it('marks a capped diff collection instead of returning it as complete', async () => {
     const { service } = setup({
       MergeRequests: { ...setup().client.MergeRequests, allDiffs: list([{ old_path: 'a.ts', new_path: 'a.ts', diff: '@@' }], 21) },
     });
-    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true })).rejects.toThrow('more changed files');
+    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true }))
+      .resolves.toMatchObject({ files: [], diffUnavailable: true });
     const branches = setup({ Branches: { all: list([{ name: 'main' }], 21) } });
     await expect(branches.service.projectBranches('/repo', { owner: 'team', name: 'repo' })).rejects.toThrow('more branches');
   });
@@ -1483,7 +1504,7 @@ describe('GitLab merge request comparison reads', () => {
     expect(laterGet).toHaveBeenCalledWith('projects/2/merge_requests/5/changes');
   });
 
-  it('fails a legacy changes read that answers with more files than it sends', async () => {
+  it('marks a legacy changes read that answers with more files than it sends', async () => {
     const instance = 'https://overflow.example.com';
     const get = vi.fn(async () => changesBody([{ old_path: 'a.ts', new_path: 'a.ts', diff: '@@' }], true));
     const { service } = setup({
@@ -1491,10 +1512,84 @@ describe('GitLab merge request comparison reads', () => {
       MergeRequests: { ...setup().client.MergeRequests, allDiffs: vi.fn(async () => { throw notFound(); }), requester: { get } },
     }, { origin: instance });
 
-    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true })).rejects.toThrow('more changed files');
+    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true }))
+      .resolves.toMatchObject({ files: [], diffUnavailable: true });
+    await expect(service.changeRequestPatch('/repo', 5, patchOptions)).rejects.toThrow('more changed files');
   });
 
-  it('keeps a diff-list failure that is not a missing endpoint', async () => {
+  it('reads /changes on GitLab 12.7.6 when the diff list route answers with a page', async () => {
+    const instance = 'https://gitlab-12-7.example.com';
+    const allDiffs = vi.fn(async () => ({ data: '<html>sign in</html>', status: 200, headers: {} }));
+    const get = vi.fn(async (endpoint) => {
+      if (endpoint === 'version') return { body: { version: '12.7.6' } };
+      if (String(endpoint).endsWith('/changes')) {
+        return changesBody([{ old_path: 'a.ts', new_path: 'a.ts', a_mode: '100644', b_mode: '100644', diff: '@@ -1 +1 @@\n-old\n+new\n' }]);
+      }
+      throw new Error(`unexpected GitLab request: ${endpoint}`);
+    });
+    const { service } = setup({
+      ...onInstance(instance),
+      MergeRequests: { ...setup().client.MergeRequests, allDiffs, requester: { get } },
+    }, { origin: instance });
+
+    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true })).resolves.toMatchObject({ files: [{ path: 'a.ts' }] });
+    expect(allDiffs).toHaveBeenCalledOnce();
+    expect(get).toHaveBeenCalledWith('version');
+    expect(get).toHaveBeenCalledWith(expect.stringMatching(/merge_requests\/5\/changes$/));
+  });
+
+  it('reads /changes on GitLab 12.7.6 when the diff list route answers 404', async () => {
+    const instance = 'https://gitlab-12-7-404.example.com';
+    const allDiffs = vi.fn(async () => { throw notFound(); });
+    const get = vi.fn(async (endpoint) => {
+      if (endpoint === 'version') return { body: { version: '12.7.6' } };
+      if (String(endpoint).endsWith('/changes')) return changesBody([{ old_path: 'a.ts', new_path: 'a.ts', diff: '@@' }]);
+      throw new Error(`unexpected GitLab request: ${endpoint}`);
+    });
+    const { service } = setup({
+      ...onInstance(instance),
+      MergeRequests: { ...setup().client.MergeRequests, allDiffs, requester: { get } },
+    }, { origin: instance });
+
+    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true })).resolves.toMatchObject({ files: [{ path: 'a.ts' }] });
+    expect(get).toHaveBeenCalledWith(expect.stringMatching(/merge_requests\/5\/changes$/));
+  });
+
+  it('reads /changes on GitLab 12.7.6 when the diff list route answers 500', async () => {
+    const instance = 'https://gitlab-12-7-500.example.com';
+    const allDiffs = vi.fn(async () => { throw Object.assign(new Error('Server Error'), { cause: { response: { status: 500 } } }); });
+    const get = vi.fn(async (endpoint) => {
+      if (endpoint === 'version') return { body: { version: '12.7.6' } };
+      if (String(endpoint).endsWith('/changes')) return changesBody([{ old_path: 'a.ts', new_path: 'a.ts', diff: '@@' }]);
+      throw new Error(`unexpected GitLab request: ${endpoint}`);
+    });
+    const { service } = setup({
+      ...onInstance(instance),
+      MergeRequests: { ...setup().client.MergeRequests, allDiffs, requester: { get } },
+    }, { origin: instance });
+
+    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true })).resolves.toMatchObject({ files: [{ path: 'a.ts' }] });
+    expect(get).toHaveBeenCalledWith(expect.stringMatching(/merge_requests\/5\/changes$/));
+  });
+
+  it('keeps a diff list that is not a page as an unreadable diff on an instance that has the endpoint', async () => {
+    const instance = 'https://proxy-html-modern.example.com';
+    const allDiffs = vi.fn(async () => ({ data: '<html>sign in</html>', status: 200, headers: {} }));
+    const get = vi.fn(async (endpoint) => {
+      if (endpoint === 'version') return { body: { version: '17.4.0' } };
+      throw new Error(`unexpected GitLab request: ${endpoint}`);
+    });
+    const { service } = setup({
+      ...onInstance(instance),
+      MergeRequests: { ...setup().client.MergeRequests, allDiffs, requester: { get } },
+    }, { origin: instance });
+
+    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true }))
+      .resolves.toMatchObject({ files: [], diffUnavailable: true });
+    expect(get).not.toHaveBeenCalledWith(expect.stringMatching(/\/changes$/));
+  });
+
+  it('marks a diff-list failure that is not a missing endpoint without reading /changes', async () => {
     const instance = 'https://broken.example.com';
     const failure = Object.assign(new Error('GitLab unavailable'), { cause: { response: { status: 502 } } });
     const get = vi.fn();
@@ -1503,7 +1598,8 @@ describe('GitLab merge request comparison reads', () => {
       MergeRequests: { ...setup().client.MergeRequests, allDiffs: vi.fn(async () => { throw failure; }), requester: { get } },
     }, { origin: instance });
 
-    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true })).rejects.toBe(failure);
+    await expect(service.changeRequestContext('/repo', 5, { includeDiff: true }))
+      .resolves.toMatchObject({ files: [], diffUnavailable: true });
     expect(get).not.toHaveBeenCalled();
   });
 

@@ -23,6 +23,7 @@ import { commentTrackerItem } from '@/lib/trackers/mutations';
 import { Textarea } from '@/components/ui/textarea';
 
 import { ButtonTooltip } from '@/components/ui/action-toolbar';
+import { ChangeSummary } from './ChangeSummary';
 import type { CachedValue } from './referenceCache';
 import { ReferenceMarkdownRewriteContext, useProjectUploadRewrite } from './projectUploads';
 import { ReferenceMarkdownEditor } from './ReferenceMarkdownEditor';
@@ -50,7 +51,6 @@ import {
     TRACKER_PRIORITY_KEYS,
 } from './referencePickerItems';
 import { joinProjectPath } from '@/lib/source-control/projectPath';
-import { DiffCount } from '@/components/ui/diff-count';
 import { forgetReferenceTextDraft, referenceTextDraft, referenceTextDraftKey, rememberReferenceTextDraft } from './referenceTextDrafts';
 
 export type ReferencePreviewPurpose = 'attach' | 'worktree';
@@ -343,13 +343,7 @@ const PullDetailRows: React.FC<{
                 <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     {revisionChoice ? <RevisionPicker choice={revisionChoice} /> : null}
                     {detail.status === 'error' ? <LoadError error={detail.error} /> : pull ? (
-                        <span className="inline-flex items-center gap-2">
-                            <DiffCount added={pull.additions} removed={pull.deletions} />
-                            <span className="inline-flex items-center gap-0.5 text-muted-foreground">
-                                <Icon name="file-list-2" className="size-3.5" />
-                                {pull.changedFiles}
-                            </span>
-                        </span>
+                        <ChangeSummary pull={pull} unavailable={detail.status === 'ready' && detail.value.diffUnavailable === true} />
                     ) : <Pending />}
                     {links}
                 </span>

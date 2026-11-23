@@ -33,7 +33,7 @@ Object.assign(useSourceControlProviderRegistry.getInitialState(), {
 });
 const apis = createWebAPIs();
 
-const renderChange = (reference: RepositoryChangeRequestReference, revisionChoice?: RevisionChoice) => {
+const renderChange = (reference: RepositoryChangeRequestReference, revisionChoice?: RevisionChoice, detailOverrides: Partial<RepositoryReferenceDetail> = {}) => {
     const dom = new Window();
     const container = dom.document.createElement('div');
     container.innerHTML = renderToStaticMarkup(
@@ -41,7 +41,7 @@ const renderChange = (reference: RepositoryChangeRequestReference, revisionChoic
             <I18nProvider>
                 <ReferencePreview
                     item={{ source: 'repository', reference }} directory={null} pinned purpose="attach" now={0}
-                    pullStatus={{ status: 'idle' }} repositoryDetail={{ status: 'ready', value: detail }} trackerDetail={{ status: 'idle' }}
+                    pullStatus={{ status: 'idle' }} repositoryDetail={{ status: 'ready', value: { ...detail, ...detailOverrides } }} trackerDetail={{ status: 'idle' }}
                     includeDiff={false} onIncludeDiffChange={() => undefined} revisionChoice={revisionChoice}
                 />
             </I18nProvider>
@@ -64,6 +64,11 @@ describe('a change in the preview', () => {
     test('a forge never shows the picker, whatever it is handed', () => {
         const pull = { ...change, provider: 'github', workInProgress: undefined, private: undefined, topic: undefined };
         expect(renderChange(pull, choiceOf([revision(1, 'a'.repeat(40)), revision(2, 'b'.repeat(40))])).querySelector('button[aria-label="Patchset"]')).toBeNull();
+    });
+
+    test('says the changes could not be loaded without hiding the rest of the preview', () => {
+        const meta = renderChange(change, undefined, { diffUnavailable: true }).querySelector('dl');
+        expect(meta?.textContent).toContain("Some changes couldn't be loaded");
     });
 
     test('shows private and the topic, and the target branch in place of a head branch', () => {

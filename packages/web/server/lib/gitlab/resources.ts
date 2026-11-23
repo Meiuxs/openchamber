@@ -7,6 +7,8 @@ import { changeRequestNetworkTarget } from '../source-control/repository-network
 import { mapGitLabCI, mapGitLabCommit, mapGitLabDiff, mapGitLabIssue, mapGitLabMergeRequest, mapGitLabNote, mapGitLabProject, mapGitLabUser, mapGitLabVerdictNote } from './mappers.js';
 import { readDiffStats, readReviewerStates } from './context-extras.js';
 import { resolveGitLabProjectsFromDirectory } from './repo.js';
+import { atLeast, COLLECTION_MAX_PAGES, COLLECTION_PER_PAGE, instanceVersion, readPage, requestStatus } from './read-support.js';
+import { INVALID_DIFF_LIST_MESSAGE, readMergeRequestDiffs } from './diff-reads.js';
 import { gitPatchForDiff } from './diff-patch.js';
 import { systemReferences, withIssueReferences, withReferences } from './references.js';
 import { isPlainObject as isPlain, isPresent, isString } from './validation.js';
@@ -84,26 +86,7 @@ const asDraftTitle = (title: string, prefix = 'Draft: ') => (DRAFT_TITLE_PREFIX.
 const asReadyTitle = (title: string) => title.replace(DRAFT_TITLE_PREFIX, '');
 const text = (value: Field) => (isString(value) && value ? value : '');
 
-type InstanceVersion = { major: number; minor: number };
-const instanceVersions = new WeakMap<Client, Promise<InstanceVersion | null>>();
-const instanceVersion = (client: Client): Promise<InstanceVersion | null> => {
-  const requester = client?.MergeRequests?.requester;
-  if (!requester?.get) return Promise.resolve(null);
-  if (!instanceVersions.has(client)) {
-    instanceVersions.set(client, requester.get('version')
-      .then((response) => {
-        const match = /^(\d+)\.(\d+)/.exec(String(obj(response?.body)?.version ?? ''));
-        return match ? { major: Number(match[1]), minor: Number(match[2]) } : null;
-      })
-      .catch(() => null));
-  }
-  return instanceVersions.get(client) ?? Promise.resolve(null);
-};
-const atLeast = (version: InstanceVersion | null, major: number, minor: number): boolean =>
-  version !== null && (version.major > major || (version.major === major && version.minor >= minor));
-
 const PER_PAGE = 20;
-const COLLECTION_PER_PAGE = 100;
 interface ListValues { [key: string]: string | undefined }
 const LIST_STATES: ListValues = { open: 'opened', closed: 'closed', merged: 'merged', all: 'all' };
 const LIST_SCOPES: ListValues = { any: 'all', assigned: 'assigned_to_me', created: 'created_by_me' };
@@ -118,9 +101,6 @@ const labelFilter = (labels: ListOptions['labels']) => {
   return labels.join(',');
 };
 const TIMELINE_COMMIT_LIMIT = 50;
-const COLLECTION_MAX_PAGES = 20;
-// external: https://gitlab.com/gitlab-org/gitlab/-/issues/427168 GitLab before 18.0 answers a merge request's diff list with 500 for any page larger than 30, and self-managed instances still run those versions.
-const DIFF_PER_PAGE = 30;
 
 function requireMapped<T>(value: T | null, message: string): T {
   if (!value) throw new Error(message);
@@ -133,47 +113,12 @@ function asArray(value: Reply | undefined) {
 
 interface Failure { status?: unknown; response?: { status?: unknown }; cause?: { response?: { status?: unknown } } }
 const hasFailure = (value: unknown): value is Failure => value != null;
-function requestStatus(cause: unknown) {
-  const error = hasFailure(cause) ? cause : undefined;
-  return error?.cause?.response?.status ?? error?.response?.status ?? error?.status;
-}
-
-function readPage(payload: Reply) {
-  if (!isPlainObject(payload) || !array(payload.data)) return { items: null, hasMore: false };
-  return { items: payload.data, hasMore: Boolean(obj(payload.paginationInfo)?.next) };
-}
 
 async function readCollection(load: (options: ListPage) => Promise<Reply>, message: string, perPage = COLLECTION_PER_PAGE) {
   const maxPages = Math.ceil((COLLECTION_MAX_PAGES * COLLECTION_PER_PAGE) / perPage);
   const page = readPage(await load({ maxPages, perPage, showExpanded: true }));
   if (page.hasMore) throw new Error(message);
   return page.items;
-}
-
-const DIFF_OVERFLOW_MESSAGE = 'GitLab merge request has more changed files than OpenChamber reads';
-
-const legacyDiffInstances = new Set<string>();
-
-async function readMergeRequestDiffs(client: Client, origin: string, projectId: string | number, number: number) {
-  if (!legacyDiffInstances.has(origin)) {
-    try {
-      return await readCollection(
-        (page) => client.MergeRequests.allDiffs(projectId, number, page),
-        DIFF_OVERFLOW_MESSAGE,
-        DIFF_PER_PAGE,
-      );
-    } catch (error) {
-      if (requestStatus(error) !== 404) throw error;
-    }
-  }
-  const response = await client.MergeRequests.requester.get(
-    `projects/${encodeURIComponent(String(projectId))}/merge_requests/${encodeURIComponent(String(number))}/changes`,
-  );
-  const payload = obj(response?.body);
-  if (!payload || !array(payload.changes)) throw new Error('GitLab returned an invalid merge request diff list');
-  legacyDiffInstances.add(origin);
-  if (payload.overflow === true) throw new Error(DIFF_OVERFLOW_MESSAGE);
-  return payload.changes;
 }
 
 function projectPath(owner: string, name: string) {
@@ -1382,13 +1327,20 @@ export function createGitLabResourceService({ origin, client, download, resolveP
         linked: options.linked,
       });
       const raw = obj(reply);
-      const [noteSource, diffs, ci, headProject, commitPage, diffStats, threadPermissions, reviewerStates, chain] = await Promise.all([
+      const loadDiffFiles = async (): Promise<{ files: JsonValue[]; unavailable: boolean }> => {
+        if (!options.includeDiff) return { files: [], unavailable: false };
+        try {
+          return { files: await readMergeRequestDiffs(client, origin, target.project.id, number), unavailable: false };
+        } catch (error) {
+          if (requestStatus(error) === 401) throw error;
+          return { files: [], unavailable: true };
+        }
+      };
+      const [noteSource, diffSource, ci, headProject, commitPage, diffStats, threadPermissions, reviewerStates, chain] = await Promise.all([
         options.includeTimeline
           ? readCollection((page) => client.MergeRequestDiscussions.all(target.project.id, number, page), 'GitLab merge request has more threads than OpenChamber reads')
           : readCollection((page) => client.MergeRequestNotes.all(target.project.id, number, page), 'GitLab merge request has more notes than OpenChamber reads'),
-        options.includeDiff
-          ? readMergeRequestDiffs(client, origin, target.project.id, number)
-          : Promise.resolve([]),
+        loadDiffFiles(),
         loadCI(target.project.id, reply, options.includeCIDetails),
         integer(raw?.source_project_id) && raw.source_project_id !== target.raw?.id
           ? showProject(raw.source_project_id).then((item) => item.project)
@@ -1403,7 +1355,6 @@ export function createGitLabResourceService({ origin, client, download, resolveP
       ]);
       const notes = options.includeTimeline ? notesOfDiscussions(noteSource, threadPermissions) : noteSource;
       if (canonicalReads && !Array.isArray(notes)) throw new Error('GitLab returned an invalid merge request note list');
-      if (canonicalReads && !Array.isArray(diffs)) throw new Error('GitLab returned an invalid merge request diff list');
       const mappedNotes = asArray(notes).flatMap((value) => {
         const note = obj(value);
         const mapped = mapGitLabNote(note, identity, record(raw).web_url);
@@ -1422,14 +1373,15 @@ export function createGitLabResourceService({ origin, client, download, resolveP
         if (canonicalReads) throw new Error('GitLab returned an invalid merge request note');
         return [];
       });
-      const files = asArray(diffs).flatMap((diff) => {
+      let diffUnavailable = diffSource.unavailable;
+      const files = diffSource.files.flatMap((diff) => {
         const mapped = mapGitLabDiff(obj(diff));
         if (mapped) {
           const stats = isString(mapped.path) ? diffStats?.get(mapped.path) : null;
           if (stats) Object.assign(mapped, stats);
           return [mapped];
         }
-        if (canonicalReads) throw new Error('GitLab returned an invalid merge request diff');
+        diffUnavailable = true;
         return [];
       });
       const changeRequest = canonicalReads
@@ -1446,6 +1398,7 @@ export function createGitLabResourceService({ origin, client, download, resolveP
         diff: files.map((file) => file.patch).filter(Boolean).join('\n'),
         ci,
       };
+      if (diffUnavailable) Object.assign(context, { diffUnavailable: true });
       const withStack = chain === undefined ? context : { ...context, stack: chain };
       if (!options.includeTimeline) return withStack;
       const withRefs = options.includeReferences
@@ -1555,7 +1508,7 @@ export function createGitLabResourceService({ origin, client, download, resolveP
         constrainToPrimary: true, remote: options.remote, requireNetwork: true, linked: options.linked,
       });
       const diffs = await readMergeRequestDiffs(client, origin, target.project.id, number);
-      if (!array(diffs)) throw new Error('GitLab returned an invalid merge request diff list');
+      if (!array(diffs)) throw new Error(INVALID_DIFF_LIST_MESSAGE);
       const files = diffs.filter((diff): diff is JsonObject => isPlainObject(diff) && Boolean(text(diff.new_path) || text(diff.old_path)));
       if (files.length !== diffs.length) throw new Error('GitLab returned an invalid merge request diff');
       return {
