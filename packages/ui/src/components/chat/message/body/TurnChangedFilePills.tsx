@@ -18,6 +18,7 @@ import { isFilePathWithinDirectory, toAbsoluteFilePath } from '@/lib/path-utils'
 import { DiffCount } from '@/components/ui/diff-count';
 import { DEFAULT_CONTEXT_DIFF_LINES, FULL_CONTEXT_DIFF_LINES } from '@/components/views/diffView/diffContextLines';
 import { PlainDiffFallback } from '../parts/PlainDiffFallback';
+import { dispatchRowExpand } from '../../lib/scroll/timelineScrollIntent';
 import { diffPathsMatch as pathsMatch } from '../../lib/turns/diffPaths';
 
 const InlineTurnDiff = React.lazy(() =>
@@ -81,6 +82,7 @@ const ChangedFileRow = React.memo(({
                         title={expandLabel}
                         onClick={(event) => {
                             event.stopPropagation();
+                            if (!expanded) dispatchRowExpand(event.currentTarget);
                             toggle();
                         }}
                     >
@@ -301,6 +303,7 @@ export const TurnChangedFilePills = React.memo(({ files, turnId, isLatestTurn }:
                         aria-label={label}
                         onClick={(event) => {
                             event.stopPropagation();
+                            if (!expanded) dispatchRowExpand(event.currentTarget);
                             setExpanded((value) => !value);
                         }}
                     >

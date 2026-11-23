@@ -776,6 +776,47 @@ describe('live Activity with the real message body', () => {
         }
     });
 
+    test('opening a changed file row or the more row releases the end follow', async () => {
+        const patch = '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1 +1 @@\n-old line\n+new line\n';
+        const getDiff = spyOn(opencodeClient, 'getSessionTurnDiff').mockResolvedValue([
+            { file: 'src/a.ts', patch, status: 'modified', additions: 1, deletions: 1 },
+        ]);
+        const opens: EventTarget[] = [];
+        const onExpand = (event: Event) => {
+            if (event.target) opens.push(event.target);
+        };
+        container.addEventListener('openchamber:row-expand', onExpand);
+        const previousSessionId = useSessionUIStore.getState().currentSessionId;
+        try {
+            await act(async () => {
+                useSessionUIStore.setState({ currentSessionId: 'session' });
+                root.render(
+                    <ChatColumnSessionContext.Provider value={{ sessionId: 'session', directory: '/project' }}>
+                        <Harness record={turn([assistant('final', [text('answer', 'Done')], 'stop')])} changedFiles={[
+                            { file: 'src/a.ts', additions: 1, deletions: 1 },
+                            { file: 'src/b.ts', additions: 1, deletions: 1 },
+                            { file: 'src/c.ts', additions: 1, deletions: 1 },
+                            { file: 'src/d-0.ts', additions: 1, deletions: 1 },
+                            { file: 'src/d-1.ts', additions: 1, deletions: 1 },
+                        ]} />
+                    </ChatColumnSessionContext.Provider>,
+                );
+            });
+            const arrow = container.querySelector<HTMLButtonElement>('button[data-changed-file-expand]');
+            await act(async () => arrow?.click());
+            expect(container.querySelector('[data-turn-inline-diff]')?.getAttribute('data-turn-inline-diff')).toBe('ready');
+            expect(opens).toHaveLength(1);
+            await act(async () => arrow?.click());
+            expect(opens).toHaveLength(1);
+            await act(async () => changedFilesToggle()?.click());
+            expect(opens).toHaveLength(2);
+        } finally {
+            container.removeEventListener('openchamber:row-expand', onExpand);
+            getDiff.mockRestore();
+            await act(async () => useSessionUIStore.setState({ currentSessionId: previousSessionId }));
+        }
+    });
+
     test('a file outside the turn diff has no arrow and cannot open a diff', async () => {
         const record = turn([assistant('final', [text('answer', 'Done')], 'stop')]);
         await act(async () => root.render(<Harness record={record} changedFiles={[
