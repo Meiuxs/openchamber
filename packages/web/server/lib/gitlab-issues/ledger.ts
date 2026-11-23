@@ -32,6 +32,55 @@ export interface RunFeedbackItem {
   text?: string | null | undefined;
 }
 
+export interface ChangeSummaryFile {
+  path: string;
+  status: 'added' | 'modified' | 'deleted' | 'renamed';
+  added: number | null;
+  removed: number | null;
+}
+
+export interface ChangeSummaryCommit {
+  sha: string;
+  subject: string;
+}
+
+export interface ChangeSummary {
+  baseRef: string;
+  files: ChangeSummaryFile[];
+  commits: ChangeSummaryCommit[];
+  capturedAt: string;
+}
+
+export interface VerifyResult {
+  command: string;
+  code: number | null;
+  outputTail: string;
+  at: string;
+}
+
+export interface ApprovedBy {
+  login: string;
+  userId: number | null;
+  accountId: string | null;
+  at: string;
+}
+
+export interface ReviewHistoryEntry {
+  seq: number;
+  kind: 'review' | 'recheck';
+  round: number;
+  verdict: 'approve' | 'request-changes';
+  summary: string;
+  findings: Finding[];
+  at: string;
+}
+
+export interface FeedbackHistoryEntry {
+  round: number;
+  items: { author: string; text: string }[];
+  at: string;
+}
+
 export interface RunEntry {
   origin: string;
   projectEntryId?: string | null | undefined;
@@ -83,6 +132,11 @@ export interface RunEntry {
   feedbackItems?: RunFeedbackItem[] | null | undefined;
   noteWatermarks?: NoteWatermarks | null | undefined;
   events?: RunEvent[] | undefined;
+  changeSummary?: ChangeSummary | null | undefined;
+  verifyResult?: VerifyResult | null | undefined;
+  approvedBy?: ApprovedBy | null | undefined;
+  reviewHistory?: ReviewHistoryEntry[] | null | undefined;
+  feedbackHistory?: FeedbackHistoryEntry[] | null | undefined;
 }
 
 interface LedgerState {

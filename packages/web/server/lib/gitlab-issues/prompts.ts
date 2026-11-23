@@ -641,3 +641,10 @@ export const formatBlockedComment = (reason: string, detail: string) => [
   '',
   '修复后移除 `ai-blocked` 并保留 `ai-ready` 可重新开始；凭据问题可由 Developer 以上回复 `/ai-take` 接管。',
 ].join('\n');
+
+export const formatRecordWriteComment = (recordPath: string) => [
+  `交付说明写入失败：\`${recordPath}\``,
+  '',
+  '修复该路径的权限或所在磁盘后，自动化会在下一轮自动重试，不需要人工重置。',
+].join('\n');
+

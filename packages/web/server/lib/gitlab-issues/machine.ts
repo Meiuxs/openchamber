@@ -32,6 +32,7 @@ export const BLOCKED_REASONS = Object.freeze({
   FEEDBACK_LIMIT: 'feedback-limit',
   INSUFFICIENT_INFO: 'insufficient-info',
   NOT_AN_ISSUE: 'not-an-issue',
+  RECORD_WRITE_FAILED: 'record-write-failed',
 });
 
 const TRANSITIONS = Object.freeze({
@@ -50,7 +51,9 @@ const TRANSITIONS = Object.freeze({
   [PHASES.VERIFYING]: [PHASES.MR_OPEN, PHASES.BLOCKED],
   [PHASES.MR_OPEN]: [PHASES.ADDRESSING, PHASES.DONE, PHASES.BLOCKED],
   [PHASES.ADDRESSING]: [PHASES.REVIEWING, PHASES.BLOCKED],
-  [PHASES.BLOCKED]: [PHASES.CLAIMED],
+  // A blocked run may retry verifying in place: the delivery-record gate keeps
+  // the worktree, so a successful write resumes the push without a reclaim.
+  [PHASES.BLOCKED]: [PHASES.CLAIMED, PHASES.VERIFYING],
   [PHASES.DONE]: [],
 });
 

@@ -61,6 +61,12 @@ describe('GitLab issue phase machine', () => {
     expect(() => assertTransition(PHASES.DONE, PHASES.CLAIMED)).toThrow(PhaseError);
   });
 
+  it('allows a record-write failure to retry verifying in place', () => {
+    expect(BLOCKED_REASONS.RECORD_WRITE_FAILED).toBe('record-write-failed');
+    expect(canTransition(PHASES.BLOCKED, PHASES.VERIFYING)).toBe(true);
+    expect(canTransition(PHASES.BLOCKED, PHASES.MR_OPEN)).toBe(false);
+  });
+
   it('treats blocked and done as inactive', () => {
     expect(isActivePhase(PHASES.WAITING_APPROVAL)).toBe(true);
     expect(isActivePhase(PHASES.BLOCKED)).toBe(false);
@@ -71,7 +77,7 @@ describe('GitLab issue phase machine', () => {
     expect(Object.values(BLOCKED_REASONS).sort()).toEqual([
       'branch-missing', 'cancelled', 'feedback-limit', 'insufficient-info', 'invalid-template',
       'label-events-unavailable', 'missing-credential', 'mr-closed', 'not-an-issue', 'notes-limit',
-      'rejected', 'repeated-error', 'review-rejected', 'session-failed', 'timeout',
+      'record-write-failed', 'rejected', 'repeated-error', 'review-rejected', 'session-failed', 'timeout',
       'verification-failed', 'worktree-missing',
     ]);
   });

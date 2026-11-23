@@ -72,4 +72,26 @@ describe('GitLab issue ledger', () => {
     expect(updated).toMatchObject({ phase: 'implementing', updatedAt: '2026-11-12T11:00:00.000Z' });
     expect(await ledger.get(key)).toMatchObject({ phase: 'implementing' });
   });
+
+  it('round-trips the delivery record fields', async () => {
+    const filePath = await tempFile();
+    const ledger = createGitlabIssueLedger({ filePath });
+    const entry = run({
+      changeSummary: {
+        baseRef: 'origin/main',
+        files: [{ path: 'src/a.ts', status: 'modified', added: 3, removed: 1 }],
+        commits: [{ sha: 'abc1234', subject: 'fix: guard the retry' }],
+        capturedAt: '2026-11-24T09:00:00.000Z',
+      },
+      verifyResult: { command: 'bun test', code: 0, outputTail: 'ok', at: '2026-11-24T09:01:00.000Z' },
+      approvedBy: { login: 'mei', userId: 7, accountId: 'acc-7', at: '2026-11-24T08:00:00.000Z' },
+      reviewHistory: [{
+        seq: 1, kind: 'review', round: 0, verdict: 'approve', summary: 'Looks right', findings: [],
+        at: '2026-11-24T09:02:00.000Z',
+      }],
+      feedbackHistory: [{ round: 1, items: [{ author: 'rev', text: 'rename this' }], at: '2026-11-24T09:03:00.000Z' }],
+    });
+    await ledger.put(entry);
+    expect(await ledger.get(ledgerKey(entry.origin, entry.projectId, entry.iid))).toMatchObject(entry);
+  });
 });

@@ -3,8 +3,8 @@ import {
   AgentOutputError, buildFeedbackPrompt, buildImplementPrompt, buildPlanPrompt, buildReviewPrompt,
   buildTriagePrompt,
   formatBareMentionComment, formatFeedbackAckComment, formatFeedbackPushComment,
-  formatOscillationComment, formatRecheckComment, formatReviewComment, formatTriageComment,
-  parseAgentOutput, sessionStageLabel,
+  formatOscillationComment, formatRecheckComment, formatRecordWriteComment, formatReviewComment,
+  formatTriageComment, parseAgentOutput, sessionStageLabel,
 } from './prompts.js';
 
 const issue = {
@@ -274,6 +274,12 @@ describe('GitLab issue prompts', () => {
       .toContain('开始第 1 轮修复');
     expect(formatFeedbackPushComment({ round: 1, sha: 'abc123' })).toContain('abc123');
     expect(formatBareMentionComment('bot')).toContain('@bot 修复');
+  });
+
+  it('names the record path and the automatic retry', () => {
+    const text = formatRecordWriteComment('D:/repo/.openchamber/issue-records/group/repo/issue-17.md');
+    expect(text).toContain('D:/repo/.openchamber/issue-records/group/repo/issue-17.md');
+    expect(text).toContain('自动重试');
   });
 
   it('rejects missing fields and non-json answers', () => {
