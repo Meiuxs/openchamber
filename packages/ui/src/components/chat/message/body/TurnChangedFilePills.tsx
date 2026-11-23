@@ -6,6 +6,7 @@ import { useChatSessionSelection } from '../../chatColumnSession';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useUIStore } from '@/stores/useUIStore';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
+import { getGitDiff } from '@/lib/gitDiffApi';
 import { opencodeClient } from '@/lib/opencode/client';
 import { openTurnFileDiffInEditor } from '../openTurnFileDiffInEditor';
 import { toast } from '@/components/ui';
@@ -40,6 +41,23 @@ type InlineDiffState =
     | { status: 'loading' }
     | { status: 'ready'; patch: string }
     | { status: 'error'; message: string };
+
+// The patch is parsed and syntax-highlighted in the transcript, so a huge file
+// stays an error rather than locking the row.
+const MAX_ADDED_FILE_DIFF_CHARS = 400_000;
+
+const addedFilePatch = (path: string, content: string): string | null => {
+    if (content.length > MAX_ADDED_FILE_DIFF_CHARS || content.includes('\0')) return null;
+    const lines = content.split('\n');
+    if (lines.at(-1) === '') lines.pop();
+    return [
+        '--- /dev/null',
+        `+++ b/${path.replace(/\\/g, '/')}`,
+        `@@ -0,0 +1,${lines.length} @@`,
+        ...lines.map((line) => `+${line}`),
+        '',
+    ].join('\n');
+};
 
 const ChangedFileRow = React.memo(({
     file,
@@ -244,9 +262,27 @@ const InteractiveFileRows = React.memo(({ files, turnId }: { files: TurnChangedF
             throw error;
         }
         const entry = diffs.find((candidate) => pathsMatch(candidate.file, path));
-        if (!entry) throw new Error(t('diffView.state.failedToLoadDiff'));
-        return entry.patch;
-    }, [effectiveDirectory, sessionId, t, turnId]);
+        if (entry) return entry.patch;
+        if (effectiveDirectory) {
+            const workingTree = await getGitDiff(effectiveDirectory, { path, contextLines: DEFAULT_CONTEXT_DIFF_LINES }).catch(() => null);
+            if (workingTree?.diff.trim()) return workingTree.diff;
+        }
+        // A session can sit outside any Git repository (its location is a plain
+        // directory of projects): snapshots record no diff and no working-tree
+        // diff exists. Read the file itself and show what the tool wrote as an
+        // added-file diff, which beats failing the row.
+        try {
+            if (runtime.files?.readFile) {
+                const absolute = effectiveDirectory ? toAbsoluteFilePath(effectiveDirectory, path) : path;
+                const file = await runtime.files.readFile(absolute, { directory: effectiveDirectory ?? undefined });
+                const patch = addedFilePatch(path, file.content);
+                if (patch) return patch;
+            }
+        } catch {
+            // Unreadable or unsupported: the row keeps its error state.
+        }
+        throw new Error(t('diffView.state.failedToLoadDiff'));
+    }, [effectiveDirectory, runtime, sessionId, t, turnId]);
 
     return (
         <>

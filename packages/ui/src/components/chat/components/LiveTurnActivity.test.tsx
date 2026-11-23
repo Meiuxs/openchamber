@@ -10,6 +10,7 @@ import { OpenCode } from '@opencode/client';
 import type { Part, AssistantMessage } from '@/lib/opencode/model';
 import { I18nProvider, useI18nStore } from '@/lib/i18n';
 import { RuntimeAPIContext } from '@/contexts/runtimeAPIContext';
+import { registerRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { ThemeSystemContext, type ThemeContextValue } from '@/contexts/theme-system-context';
 import { getDefaultTheme } from '@/lib/theme/themes';
 import type { RuntimeAPIs } from '@/lib/api/types';
@@ -771,6 +772,76 @@ describe('live Activity with the real message body', () => {
             await act(async () => arrow?.click());
             expect(getDiff.mock.calls).toHaveLength(1);
         } finally {
+            getDiff.mockRestore();
+            await act(async () => useSessionUIStore.setState({ currentSessionId: previousSessionId }));
+        }
+    });
+
+    test('a file the turn snapshot omits falls back to its working-tree diff', async () => {
+        const getDiff = spyOn(opencodeClient, 'getSessionTurnDiff').mockResolvedValue([]);
+        const workingTree = '--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1 @@\n+hello\n';
+        const getGitDiff = async () => ({ diff: workingTree, submodule: null });
+        // SAFETY: Object.create copies the registered API surface used by the harness.
+        const apis = Object.create(runtimeApis) as RuntimeAPIs;
+        Object.defineProperty(apis, 'git', { value: { getGitDiff }, configurable: true });
+        registerRuntimeAPIs(apis);
+        const previousSessionId = useSessionUIStore.getState().currentSessionId;
+        try {
+            await act(async () => {
+                useSessionUIStore.setState({ currentSessionId: 'session' });
+                root.render(
+                    <ChatColumnSessionContext.Provider value={{ sessionId: 'session', directory: '/project' }}>
+                        <Harness record={turn([assistant('final', [text('answer', 'Done')], 'stop')])} changedFiles={[{ file: 'src/new.ts', additions: 1, deletions: 0 }]} />
+                    </ChatColumnSessionContext.Provider>,
+                );
+            });
+            const arrow = container.querySelector<HTMLButtonElement>('button[data-changed-file-expand]');
+            await act(async () => arrow?.click());
+            expect(container.querySelector('[data-turn-inline-diff]')?.getAttribute('data-turn-inline-diff')).toBe('ready');
+            expect(container.textContent).toContain('new.ts');
+        } finally {
+            registerRuntimeAPIs(null);
+            getDiff.mockRestore();
+            await act(async () => useSessionUIStore.setState({ currentSessionId: previousSessionId }));
+        }
+    });
+
+    test('a session outside any Git repository shows a written file as an added-file diff', async () => {
+        const getDiff = spyOn(opencodeClient, 'getSessionTurnDiff').mockResolvedValue([]);
+        const read: string[] = [];
+        // SAFETY: Object.create copies the registered API surface used by the harness.
+        const apis = Object.create(runtimeApis) as RuntimeAPIs;
+        Object.defineProperty(apis, 'git', {
+            value: { getGitDiff: async () => { throw new Error('This directory is not a Git repository.'); } },
+            configurable: true,
+        });
+        Object.defineProperty(apis, 'files', {
+            value: { readFile: async (path: string) => { read.push(path); return { path, content: 'hello\nworld\n' }; } },
+            configurable: true,
+        });
+        registerRuntimeAPIs(apis);
+        const previousSessionId = useSessionUIStore.getState().currentSessionId;
+        try {
+            await act(async () => {
+                useSessionUIStore.setState({ currentSessionId: 'session' });
+                root.render(
+                    <RuntimeAPIContext.Provider value={apis}>
+                        <SyncProvider sdk={sdk} directory="/code">
+                            <I18nProvider>
+                                <ChatColumnSessionContext.Provider value={{ sessionId: 'session', directory: '/code' }}>
+                                    <TurnChangedFilePills files={[{ file: '/code/openchamber/test.html', additions: 2, deletions: 0 }]} isLatestTurn />
+                                </ChatColumnSessionContext.Provider>
+                            </I18nProvider>
+                        </SyncProvider>
+                    </RuntimeAPIContext.Provider>,
+                );
+            });
+            const arrow = container.querySelector<HTMLButtonElement>('button[data-changed-file-expand]');
+            await act(async () => arrow?.click());
+            expect(read).toEqual(['/code/openchamber/test.html']);
+            expect(container.querySelector('[data-turn-inline-diff]')?.getAttribute('data-turn-inline-diff')).toBe('ready');
+        } finally {
+            registerRuntimeAPIs(null);
             getDiff.mockRestore();
             await act(async () => useSessionUIStore.setState({ currentSessionId: previousSessionId }));
         }

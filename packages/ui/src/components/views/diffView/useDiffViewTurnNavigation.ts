@@ -1,9 +1,11 @@
 import React from 'react';
-import { findRepoFile, toAbsoluteFilePath } from '@/lib/path-utils';
+import { findRepoFile, getRelativeFilePath, isFilePathWithinDirectory, toAbsoluteFilePath } from '@/lib/path-utils';
 import { findFileRepository } from '@/lib/nestedRepositories';
+import { isVSCodeRuntime } from '@/lib/desktop';
 import type { FilesAPI, GitAPI } from '@/lib/api/types';
 import type { useUIStore } from '@/stores/useUIStore';
-import type { NestedRepoDiscovery, useGitStore } from '@/stores/useGitStore';
+import { useGitStore, type NestedRepoDiscovery } from '@/stores/useGitStore';
+import { commitSelectionKey, useCommitSelectionStore } from '@/stores/useCommitSelectionStore';
 import {
     beginChangedFileOpen, createLatestRequestGate, isProjectFileOutsideRepositories, openChangedFileWithoutRepository,
 } from '../files/openChangedFileWithoutRepository';
@@ -62,6 +64,30 @@ export function useDiffViewTurnNavigation({
         setScrollRequestNonce((value) => value + 1);
     }, [expandStackedFile]);
 
+    const revealCommittedFile = React.useCallback(async (
+        repository: string, file: string, isCurrent: () => boolean,
+    ): Promise<boolean> => {
+        if (isVSCodeRuntime() || !git.getGitLog || !git.getCommitFiles) return false;
+        const filePath = getRelativeFilePath(file, repository);
+        if (!filePath) return false;
+        try {
+            const log = await git.getGitLog(repository, { file: filePath, maxCount: 1 });
+            const entry = log?.all?.[0];
+            if (!entry?.hash || !isCurrent()) return false;
+            const listing = await git.getCommitFiles(repository, entry.hash);
+            const target = listing.files.find((candidate) => candidate.path === filePath || candidate.previousPath === filePath);
+            if (!target || target.isBinary || !isCurrent()) return false;
+            const branch = useGitStore.getState().directories.get(repository)?.status?.current ?? null;
+            useCommitSelectionStore.getState().select(commitSelectionKey(repository, branch), entry);
+            setActiveDiffScope('commit');
+            onDiffScopeChange?.('commit');
+            revealListedFile(target.path);
+            return true;
+        } catch {
+            return false;
+        }
+    }, [git, onDiffScopeChange, revealListedFile, setActiveDiffScope]);
+
     React.useEffect(() => {
         if (!pendingTurnDiffFile) return;
         editorOpenGate.cancel();
@@ -75,6 +101,13 @@ export function useDiffViewTurnNavigation({
         const file = toAbsoluteFilePath(rootDirectory, pendingTurnDiffFile.file);
         const listed = findRepoFile(file, rootDirectory, lastTurnDiffs.flatMap((diff) => diff.file ?? []));
         if (listed) {
+            const repository = findFileRepository(file, [
+                ...(rootIsGitRepo && rootDirectory ? [rootDirectory] : []),
+                ...(repositoryOptions ?? []),
+            ]);
+            if (rootDirectory && repository && repository !== effectiveDirectory) {
+                selectNestedRepo(rootDirectory, repository);
+            }
             revealListedFile(listed);
             return;
         }
@@ -84,7 +117,7 @@ export function useDiffViewTurnNavigation({
         });
         setActiveDiffScope('working');
         onDiffScopeChange?.('working');
-    }, [activeDiffScope, diffScope, editorOpenGate, lastTurnDiffs, onDiffScopeChange, panelSessionId, pendingTurnDiffFile, revealListedFile, rootDirectory, setPendingTurnDiffFile, turnDiffSettled, visible]);
+    }, [activeDiffScope, diffScope, editorOpenGate, effectiveDirectory, lastTurnDiffs, onDiffScopeChange, panelSessionId, pendingTurnDiffFile, repositoryOptions, revealListedFile, rootDirectory, rootIsGitRepo, selectNestedRepo, setPendingTurnDiffFile, turnDiffSettled, visible]);
 
     React.useEffect(() => {
         if (gateSessionRef.current !== panelSessionId) {
@@ -127,6 +160,22 @@ export function useDiffViewTurnNavigation({
         }
         setChangedFallback(null);
         const listed = findRepoFile(changedFallback.file, effectiveDirectory, changedFiles.map((file) => file.path));
-        if (listed) revealListedFile(listed);
-    }, [activeDiffScope, changedFallback, changedFiles, editorOpenGate, effectiveDirectory, fetchStatus, files, git, nestedRepos, repositoriesKnown, repositoryOptions, revealListedFile, rootDirectory, rootIsGitRepo, panelSessionId, selectNestedRepo, visible]);
+        if (listed) {
+            revealListedFile(listed);
+            return;
+        }
+        const isCurrent = changedFallback.isCurrent;
+        const openFile = () => {
+            if (rootDirectory && isFilePathWithinDirectory(changedFallback.file, rootDirectory) && isCurrent()) {
+                void openChangedFileWithoutRepository(changedFallback.file, rootDirectory, files, isCurrent);
+            }
+        };
+        if (repository && isCurrent()) {
+            void revealCommittedFile(repository, changedFallback.file, isCurrent).then((revealed) => {
+                if (!revealed) openFile();
+            });
+            return;
+        }
+        openFile();
+    }, [activeDiffScope, changedFallback, changedFiles, editorOpenGate, effectiveDirectory, fetchStatus, files, git, nestedRepos, repositoriesKnown, repositoryOptions, revealCommittedFile, revealListedFile, rootDirectory, rootIsGitRepo, panelSessionId, selectNestedRepo, visible]);
 }

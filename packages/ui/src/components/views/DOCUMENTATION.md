@@ -372,8 +372,13 @@ Git, Changes, Walkthrough, pull requests and mobile Changes use the shared
 repository picker. Selection, discovery refresh and persistence belong to
 [`useGitStore`](../../stores/DOCUMENTATION.md#usegitstorets) and
 `useNestedGitDirectory`; diff rows do not change that selection. A changed-file
-chip falling back to Changed does (*Last turn scope*), since the chip names a
-file and only its own repository can show it.
+chip does (*Last turn scope*), since the chip names a file and only its own
+repository can show it: the selection moves to that repository even when the
+turn snapshot lists the file, so the panel's context matches the diff it shows.
+When neither the snapshot nor the working tree has a diff for the file, its
+last commit opens in the commit scope; only when no commit can supply it does
+the file open instead of the click being dropped without feedback. Mobile
+Changes reports that case with a notice rather than opening the commit.
 
 ## Find in changes
 
@@ -660,7 +665,9 @@ once discovery finds no repository in the project holding it, opens in the
 editor instead (`files/openChangedFileWithoutRepository.ts`): there is no
 working-tree diff for it. Unknown or failed discovery, a file outside the
 project and a repository-owned file the list misses (a staged-only entry) keep
-the Changed path. The open checks the file with a stat first, since the
+the Changed path; when that read still lists no diff for the file (already
+committed), the commit that last touched it opens in the commit scope, and the
+file itself opens only when no commit supplies a patch. The open checks the file with a stat first, since the
 optional read answers a deleted file with an empty success: a deleted file
 shows the not-found toast, an empty one opens. The read belongs to the click
 that started it, from the click through discovery to the read: a newer chip
