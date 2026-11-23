@@ -2608,6 +2608,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabBotAccount': 'Bot hesabı',
   'settings.projects.page.field.gitlabBotAccountInfo': 'Yorumlar ve etiketler için kullanılan GitLab hesabı. En az Reporter rolü gerekir.',
   'settings.projects.page.field.gitlabBotAccountPlaceholder': 'Bir hesap seçin',
+  'settings.projects.page.field.gitlabBotAccountEmpty': 'Kullanılabilir bir GitLab hesabı bağlı değil. Entegrasyonlar bölümünden bir hesap bağlayın, sonra burada seçin.',
   'settings.projects.page.field.gitlabTemplates': 'Sorun şablonları',
   'settings.projects.page.field.gitlabTemplatesInfo': 'Sorun oluştururken sunulan açıklama taslakları. Türü ve hedef dalı yazmayın: form ikisini de soruna ekler.',
   'settings.projects.page.field.gitlabTemplateNewName': 'Yeni şablon',

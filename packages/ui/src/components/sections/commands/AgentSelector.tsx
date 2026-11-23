@@ -27,6 +27,7 @@ interface AgentSelectorProps {
     filter?: (agent: Agent) => boolean;
     dropdownPortalToBody?: boolean;
     directory?: string;
+    placeholder?: string;
 }
 
 export const AgentSelector: React.FC<AgentSelectorProps> = ({
@@ -36,8 +37,10 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
     filter,
     dropdownPortalToBody = false,
     directory,
+    placeholder,
 }) => {
     const { t } = useI18n();
+    const emptyLabel = placeholder ?? t('settings.commands.agentSelector.notSelected');
     const { isReady, isUnavailable } = useOpenCodeReadiness('agents', directory);
     const configAgents = useConfigStore((state) => selectConfigAgentsForDirectory(state, directory));
     const agentsStoreAgents = useAgentsStore((state) => state.agents);
@@ -92,7 +95,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
                         closeMobilePanel();
                     }}
                 >
-                    {t('settings.commands.agentSelector.notSelected')}
+                    {emptyLabel}
                 </MobileSheetRow>
                 {agents.map((agent) => (
                     <MobileSheetRow
@@ -133,7 +136,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
                             <>
                                 <Icon name="robot-2" className="h-3.5 w-3.5 text-muted-foreground" />
                                 <span className="typography-meta font-medium text-foreground">
-                                    {selectedAgentLabel || t('settings.commands.agentSelector.selectAgentPlaceholder')}
+                                    {selectedAgentLabel || emptyLabel}
                                 </span>
                             </>
                         )}
@@ -167,7 +170,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
                         )}>
                             <Icon name="robot-2" className="size-3.5 flex-shrink-0 text-muted-foreground" />
                             <span className="typography-ui-label min-w-0 flex-1 truncate text-start font-normal text-foreground">
-                                {agentName || t('settings.commands.agentSelector.notSelected')}
+                                {agentName || emptyLabel}
                             </span>
                             <Icon name="arrow-down-s" className="size-4 flex-shrink-0 text-muted-foreground" />
                         </div>
@@ -177,7 +180,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
                             className="typography-meta"
                             onSelect={() => handleAgentChange('')}
                         >
-                            <span className="text-muted-foreground">{t('settings.commands.agentSelector.notSelected')}</span>
+                            <span className="text-muted-foreground">{emptyLabel}</span>
                         </DropdownMenuItem>
                         {agents.map((agent) => (
                             <DropdownMenuItem

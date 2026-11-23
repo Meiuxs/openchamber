@@ -1487,6 +1487,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabBotAccount': "Bot-Konto",
   'settings.projects.page.field.gitlabBotAccountInfo': "GitLab-Konto für Kommentare und Labels. Es braucht mindestens die Rolle Reporter.",
   'settings.projects.page.field.gitlabBotAccountPlaceholder': "Konto auswählen",
+  'settings.projects.page.field.gitlabBotAccountEmpty': "Kein nutzbares GitLab-Konto verbunden. Verbinde eines unter Integrationen und wähle es hier aus.",
   'settings.projects.page.field.gitlabTemplates': "Issue-Vorlagen",
   'settings.projects.page.field.gitlabTemplatesInfo': "Vorlagen für den Beschreibungstext beim Anlegen eines Issues. Lass Typ und Zielbranch weg: das Formular schreibt beide selbst ins Issue.",
   'settings.projects.page.field.gitlabTemplateNewName': 'Neue Vorlage',

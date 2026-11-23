@@ -1536,6 +1536,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabBotAccount': "Bot account",
   'settings.projects.page.field.gitlabBotAccountInfo': "GitLab account used for comments and labels. It needs at least the Reporter role. Without a dedicated bot account, your own account works.",
   'settings.projects.page.field.gitlabBotAccountPlaceholder': "Select an account",
+  'settings.projects.page.field.gitlabBotAccountEmpty': "No usable GitLab account is connected. Connect one in Integrations, then choose it here.",
   'settings.projects.page.field.gitlabTemplates': "Issue templates",
   'settings.projects.page.field.gitlabTemplatesInfo': "Description outlines offered when filing an issue. Leave out the type and target branch: the form writes both into the issue.",
   'settings.projects.page.field.gitlabTemplateNewName': 'New template',

@@ -1787,6 +1787,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabBotAccount': 'Konto bota',
   'settings.projects.page.field.gitlabBotAccountInfo': 'Konto GitLab używane do komentarzy i etykiet. Wymaga co najmniej roli Reporter.',
   'settings.projects.page.field.gitlabBotAccountPlaceholder': 'Wybierz konto',
+  'settings.projects.page.field.gitlabBotAccountEmpty': 'Nie podłączono użytecznego konta GitLab. Podłącz je w Integracjach, a następnie wybierz tutaj.',
   'settings.projects.page.field.gitlabTemplates': 'Szablony zgłoszeń',
   'settings.projects.page.field.gitlabTemplatesInfo': 'Szablony opisu używane przy tworzeniu zgłoszenia. Pomiń typ i gałąź docelową: formularz zapisuje je sam.',
   'settings.projects.page.field.gitlabTemplateNewName': 'Nowy szablon',

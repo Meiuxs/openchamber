@@ -1407,6 +1407,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabBotAccount': 'Compte du bot',
   'settings.projects.page.field.gitlabBotAccountInfo': 'Compte GitLab utilisé pour les commentaires et les étiquettes. Il lui faut au moins le rôle Reporter.',
   'settings.projects.page.field.gitlabBotAccountPlaceholder': 'Choisir un compte',
+  'settings.projects.page.field.gitlabBotAccountEmpty': 'Aucun compte GitLab utilisable n’est connecté. Connectez-en un dans Intégrations, puis choisissez-le ici.',
   'settings.projects.page.field.gitlabTemplates': 'Modèles de ticket',
   'settings.projects.page.field.gitlabTemplatesInfo': "Modèles de description proposés à la création d'un ticket. Omets le type et la branche cible : le formulaire les ajoute lui-même au ticket.",
   'settings.projects.page.field.gitlabTemplateNewName': 'Nouveau modèle',

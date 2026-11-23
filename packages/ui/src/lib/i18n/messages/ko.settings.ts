@@ -1504,6 +1504,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabBotAccount': '봇 계정',
   'settings.projects.page.field.gitlabBotAccountInfo': '댓글과 라벨에 사용할 GitLab 계정입니다. 최소 Reporter 권한이 필요합니다.',
   'settings.projects.page.field.gitlabBotAccountPlaceholder': '계정 선택',
+  'settings.projects.page.field.gitlabBotAccountEmpty': '사용 가능한 GitLab 계정이 연결되어 있지 않습니다. 통합에서 연결한 뒤 여기에서 선택하세요.',
   'settings.projects.page.field.gitlabTemplates': '이슈 템플릿',
   'settings.projects.page.field.gitlabTemplatesInfo': '이슈를 만들 때 쓰는 본문 틀입니다. 유형과 대상 브랜치는 양식이 직접 쓰므로 본문에 넣지 마세요.',
   'settings.projects.page.field.gitlabTemplateNewName': '새 템플릿',

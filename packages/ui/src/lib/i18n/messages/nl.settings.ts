@@ -1537,6 +1537,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabBotAccount': 'Botaccount',
   'settings.projects.page.field.gitlabBotAccountInfo': 'GitLab-account voor opmerkingen en labels. Het heeft minimaal de rol Reporter nodig.',
   'settings.projects.page.field.gitlabBotAccountPlaceholder': 'Kies een account',
+  'settings.projects.page.field.gitlabBotAccountEmpty': 'Er is geen bruikbaar GitLab-account verbonden. Verbind er een bij Integraties en kies het hier.',
   'settings.projects.page.field.gitlabTemplates': 'Issuesjablonen',
   'settings.projects.page.field.gitlabTemplatesInfo': 'Sjablonen voor de beschrijving bij het aanmaken van een issue. Laat het type en de doelbranch weg: het formulier schrijft beide zelf in het issue.',
   'settings.projects.page.field.gitlabTemplateNewName': 'Nieuw sjabloon',

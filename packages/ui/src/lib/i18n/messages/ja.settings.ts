@@ -1537,6 +1537,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabBotAccount': 'ボットアカウント',
   'settings.projects.page.field.gitlabBotAccountInfo': 'コメントとラベルに使う GitLab アカウント。Reporter 以上の権限が必要です。',
   'settings.projects.page.field.gitlabBotAccountPlaceholder': 'アカウントを選択',
+  'settings.projects.page.field.gitlabBotAccountEmpty': '使用できる GitLab アカウントが接続されていません。「連携」で接続してから、ここで選択してください。',
   'settings.projects.page.field.gitlabTemplates': 'イシューテンプレート',
   'settings.projects.page.field.gitlabTemplatesInfo': 'イシュー作成時に使う本文の雛形です。種類と対象ブランチはフォームが書き込むため、本文には書かないでください。',
   'settings.projects.page.field.gitlabTemplateNewName': '新しいテンプレート',

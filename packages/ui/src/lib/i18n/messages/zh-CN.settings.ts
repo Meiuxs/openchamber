@@ -1504,6 +1504,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabBotAccount': '机器人账号',
   'settings.projects.page.field.gitlabBotAccountInfo': '用于评论和打标签的 GitLab 账号，至少需要 Reporter 权限。没有专用机器人账号时，可以直接选自己的账号共用。',
   'settings.projects.page.field.gitlabBotAccountPlaceholder': '选择账号',
+  'settings.projects.page.field.gitlabBotAccountEmpty': '还没有可用的 GitLab 账号。请先在“集成”里连接，再回到这里选择。',
   'settings.projects.page.field.gitlabTemplates': 'Issue 模板',
   'settings.projects.page.field.gitlabTemplatesInfo': '创建 issue 时可选用的正文骨架。类型和目标分支由表单自动写入，正文里不要再写。',
   'settings.projects.page.field.gitlabTemplateNewName': '新模板',

@@ -1504,6 +1504,7 @@ export const settingsDict = {
   "settings.projects.page.field.gitlabBotAccount": "Обліковий запис бота",
   "settings.projects.page.field.gitlabBotAccountInfo": "Обліковий запис GitLab для коментарів і міток. Потрібна роль щонайменше Reporter.",
   "settings.projects.page.field.gitlabBotAccountPlaceholder": "Виберіть обліковий запис",
+  'settings.projects.page.field.gitlabBotAccountEmpty': "Немає підключеного придатного облікового запису GitLab. Підключіть його в «Інтеграції», а потім виберіть тут.",
   "settings.projects.page.field.gitlabTemplates": "Шаблони задач",
   "settings.projects.page.field.gitlabTemplatesInfo": "Шаблони опису для створення задачі. Не додавайте тип і цільову гілку: форма записує їх сама.",
   "settings.projects.page.field.gitlabTemplateNewName": "Новий шаблон",

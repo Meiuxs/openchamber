@@ -1504,6 +1504,7 @@ export const settingsDict = {
   "settings.projects.page.field.gitlabBotAccount": "Conta do bot",
   "settings.projects.page.field.gitlabBotAccountInfo": "Conta do GitLab usada para comentários e rótulos. Precisa de pelo menos a função Reporter.",
   "settings.projects.page.field.gitlabBotAccountPlaceholder": "Selecione uma conta",
+  'settings.projects.page.field.gitlabBotAccountEmpty': "Nenhuma conta do GitLab utilizável está conectada. Conecte uma em Integrações e escolha aqui.",
   "settings.projects.page.field.gitlabTemplates": "Modelos de issue",
   "settings.projects.page.field.gitlabTemplatesInfo": "Modelos de descrição oferecidos ao criar uma issue. Deixe de fora o tipo e o branch de destino: o formulário escreve os dois na issue.",
   "settings.projects.page.field.gitlabTemplateNewName": "Novo modelo",

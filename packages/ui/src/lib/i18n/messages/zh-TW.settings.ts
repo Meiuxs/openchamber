@@ -1382,6 +1382,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabBotAccount': '機器人帳號',
   'settings.projects.page.field.gitlabBotAccountInfo': '用於留言和標籤的 GitLab 帳號，至少需要 Reporter 權限。沒有專用機器人帳號時，可以直接選自己的帳號共用。',
   'settings.projects.page.field.gitlabBotAccountPlaceholder': '選擇帳號',
+  'settings.projects.page.field.gitlabBotAccountEmpty': '還沒有可用的 GitLab 帳號。請先在「整合」裡連接，再回到這裡選擇。',
   'settings.projects.page.field.gitlabTemplates': 'Issue 範本',
   'settings.projects.page.field.gitlabTemplatesInfo': '建立議題時可選用的正文骨架。類型與目標分支由表單自動寫入，正文裡不要再寫。',
   'settings.projects.page.field.gitlabTemplateNewName': '新範本',

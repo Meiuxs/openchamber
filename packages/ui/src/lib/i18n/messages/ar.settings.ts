@@ -1536,6 +1536,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabBotAccount': 'حساب الروبوت',
   'settings.projects.page.field.gitlabBotAccountInfo': 'حساب GitLab المستخدم للتعليقات والوسوم. يحتاج إلى دور Reporter على الأقل.',
   'settings.projects.page.field.gitlabBotAccountPlaceholder': 'اختر حسابًا',
+  'settings.projects.page.field.gitlabBotAccountEmpty': 'لا يوجد حساب GitLab صالح متصل. اربط حسابًا في التكاملات ثم اختره هنا.',
   'settings.projects.page.field.gitlabTemplates': 'قوالب المشكلات',
   'settings.projects.page.field.gitlabTemplatesInfo': 'قوالب الوصف المتاحة عند إنشاء مشكلة. اترك النوع وفرع الهدف: يكتبهما النموذج في المشكلة.',
   'settings.projects.page.field.gitlabTemplateNewName': 'قالب جديد',

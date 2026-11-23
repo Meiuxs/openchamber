@@ -21,3 +21,6 @@ export const nextThinkingVariant = (variants: readonly string[], current: string
 
 export const modelVariantNames = (model: { readonly variants?: ModelVariantSource } | undefined): string[] =>
   listModelVariantIds(model?.variants);
+
+export const formatModelVariantLabel = (variant: string): string =>
+  variant.charAt(0).toUpperCase() + variant.slice(1);

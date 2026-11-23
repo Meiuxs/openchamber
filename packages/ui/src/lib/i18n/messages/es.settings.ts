@@ -1504,6 +1504,7 @@ export const settingsDict = {
   "settings.projects.page.field.gitlabBotAccount": "Cuenta del bot",
   "settings.projects.page.field.gitlabBotAccountInfo": "Cuenta de GitLab para comentarios y etiquetas. Necesita al menos el rol Reporter.",
   "settings.projects.page.field.gitlabBotAccountPlaceholder": "Selecciona una cuenta",
+  'settings.projects.page.field.gitlabBotAccountEmpty': "No hay ninguna cuenta de GitLab utilizable conectada. Conecta una en Integraciones y elígela aquí.",
   "settings.projects.page.field.gitlabTemplates": "Plantillas de incidencia",
   "settings.projects.page.field.gitlabTemplatesInfo": "Plantillas de descripción al crear una incidencia. Omite el tipo y la rama destino: el formulario los escribe en la incidencia.",
   "settings.projects.page.field.gitlabTemplateNewName": "Nueva plantilla",

@@ -1536,6 +1536,7 @@ export const settingsDict = {
   'settings.projects.page.field.gitlabBotAccount': 'חשבון בוט',
   'settings.projects.page.field.gitlabBotAccountInfo': 'חשבון GitLab לתגובות ולתוויות. נדרש לפחות תפקיד Reporter.',
   'settings.projects.page.field.gitlabBotAccountPlaceholder': 'בחר חשבון',
+  'settings.projects.page.field.gitlabBotAccountEmpty': 'לא מחובר חשבון GitLab שמיש. חברו אחד בהגדרות השילובים ואז בחרו אותו כאן.',
   'settings.projects.page.field.gitlabTemplates': 'תבניות בעיות',
   'settings.projects.page.field.gitlabTemplatesInfo': 'תבניות תיאור המוצעות בעת יצירת בעיה. השאירו בחוץ את הסוג ואת ענף היעד: הטופס כותב את שניהם.',
   'settings.projects.page.field.gitlabTemplateNewName': 'תבנית חדשה',
