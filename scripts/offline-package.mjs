@@ -67,6 +67,10 @@ const webTgz = path.join(repoRoot, 'packages', 'web', `openchamber-web-${version
 console.log(`OpenChamber ${version} 离线交付包`);
 
 if (!skipBuild) {
+  // 构建 web 需要 workspace 的 devDependencies；node_modules 不完整时
+  // prepare-opencode-server 会报 Cannot find installed package @opencode/server。
+  // 按锁文件恢复依赖链接，缓存优先，只有缺的包才走 registry。
+  run('bun install --frozen-lockfile --prefer-offline');
   // SDK 必须先构建：web 的 prepack 会重建内置扩展，而扩展要对着 SDK 自己的产物校验。
   run('bun run --cwd packages/sdk build');
   run('bun run build:web');
