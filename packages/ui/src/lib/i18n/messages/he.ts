@@ -66,6 +66,7 @@ import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
 import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { gitlabRunsI18n } from './gitlab-runs.i18n';
+import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -1257,6 +1258,8 @@ export const dict: Record<I18nKey, string> = {
   'worktree.bootstrap.toast.invalidConfiguration': 'יש לבדוק את תצורת מודולי המשנה ו-Git LFS של המאגר ולנסות שוב.',
   'worktree.bootstrap.toast.repositoryTooManyFiles': 'במאגר יש יותר מדי קבצים.',
   'worktree.bootstrap.toast.branchNameConflict': 'שם הענף מתנגש בענף קיים: אותו שם, או שאחד מקונן בתוך השני. שנו את שם הענף וצרו את עץ העבודה מחדש.',
+  'worktree.bootstrap.toast.submoduleSourceLocal': 'תת-המודולים לא נמשכו: OpenChamber מושך אותם רק דרך remote ברשת, ול-worktree הזה אין כזה. ה-remote של המאגר הוא תיקייה במחשב הזה, אין remote בכלל, או שהענף לא עוקב אחרי אף אחד. עבדו בתיקיית המאגר עצמה, או צרו את ה-worktree מענף שה-upstream שלו הוא remote ברשת.',
+  'worktree.bootstrap.toast.lfsSourceLocal': 'קובצי Git LFS לא נמשכו: OpenChamber מושך אותם רק דרך remote ברשת, ול-worktree הזה אין כזה. ה-remote של המאגר הוא תיקייה במחשב הזה, אין remote בכלל, או שהענף לא עוקב אחרי אף אחד. עבדו בתיקיית המאגר עצמה, או צרו את ה-worktree מענף שה-upstream שלו הוא remote ברשת.',
   'worktree.bootstrap.toast.cancelled': 'הגדרת עץ העבודה בוטלה. אפשר לנסות שוב כשמוכנים.',
   'worktree.bootstrap.toast.transportFailed': 'יש לבדוק את הגישה למאגר ואת החיבור לרשת, ולנסות שוב.',
   'worktree.bootstrap.toast.timeoutDescription': 'עץ העבודה נוצר, אבל זמן ההגדרה ברקע תם.',
@@ -1839,7 +1842,8 @@ export const dict: Record<I18nKey, string> = {
   'contextSidebar.tokens.cacheRead': 'קריאה מהמטמון',
   'contextSidebar.tokens.cacheWrite': 'כתיבה למטמון',
   'contextSidebar.tokens.cacheHit': 'פגיעה במטמון',
-  'chat.workStatus.replyCacheHit': 'פגיעה במטמון (תשובה)',
+  'chat.workStatus.replyCacheHit': 'מטמון הנחיות',
+  'chat.workStatus.replyCacheHitDescription': 'החלק מההנחיה שנקרא מהמטמון בתשובה האחרונה.',
   'contextSidebar.actions.copyJson': 'העתק JSON',
   'contextSidebar.actions.copy': 'העתק',
   'contextSidebar.actions.copied': 'הועתק',
@@ -4040,6 +4044,7 @@ export const dict: Record<I18nKey, string> = {
   ...diffFindI18n['he'],
   ...gitlabIssueI18n['he'],
   ...gitlabRunsI18n['he'],
+  ...contextWindowI18n['he'],
   ...markdownOutlineI18n['he'],
   ...markdownGithubI18n['he'],
   ...autocompleteScopeI18n['he'],

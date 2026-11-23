@@ -67,6 +67,7 @@ import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
 import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { gitlabRunsI18n } from './gitlab-runs.i18n';
+import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -1257,6 +1258,8 @@ export const dict: Record<I18nKey, string> = {
   'worktree.bootstrap.toast.invalidConfiguration': 'راجع إعدادات الوحدات الفرعية وGit LFS في المستودع، ثم أعد المحاولة.',
   'worktree.bootstrap.toast.repositoryTooManyFiles': 'يحتوي المستودع على عدد كبير جدًا من الملفات.',
   'worktree.bootstrap.toast.branchNameConflict': 'يتعارض اسم الفرع مع فرع موجود: الاسم نفسه، أو أحدهما متداخل داخل الآخر. أعد تسمية الفرع وأنشئ شجرة العمل مرة أخرى.',
+  'worktree.bootstrap.toast.submoduleSourceLocal': 'لم تُجلب الوحدات الفرعية: يجلبها OpenChamber عبر remote شبكي فقط، ولا يوجد واحد يمكن لشجرة العمل هذه استخدامه. remote المستودع مجلد على هذا الحاسوب، أو لا يوجد remote، أو أن الفرع لا يتتبع أي remote. اعمل في مجلد المستودع نفسه، أو أنشئ شجرة العمل من فرع يكون الـ upstream الخاص به remote شبكيًا.',
+  'worktree.bootstrap.toast.lfsSourceLocal': 'لم تُجلب ملفات Git LFS: يجلبها OpenChamber عبر remote شبكي فقط، ولا يوجد واحد يمكن لشجرة العمل هذه استخدامه. remote المستودع مجلد على هذا الحاسوب، أو لا يوجد remote، أو أن الفرع لا يتتبع أي remote. اعمل في مجلد المستودع نفسه، أو أنشئ شجرة العمل من فرع يكون الـ upstream الخاص به remote شبكيًا.',
   'worktree.bootstrap.toast.cancelled': 'أُلغي إعداد شجرة العمل. أعد المحاولة عندما تكون جاهزًا.',
   'worktree.bootstrap.toast.transportFailed': 'تحقق من الوصول إلى المستودع والاتصال بالشبكة، ثم أعد المحاولة.',
   'worktree.bootstrap.toast.timeoutDescription': 'أُنشئت شجرة العمل، لكن انتهت مهلة الإعداد في الخلفية.',
@@ -1839,7 +1842,8 @@ export const dict: Record<I18nKey, string> = {
   'contextSidebar.tokens.cacheRead': 'قراءة من الذاكرة المؤقتة',
   'contextSidebar.tokens.cacheWrite': 'كتابة إلى الذاكرة المؤقتة',
   'contextSidebar.tokens.cacheHit': 'إصابة الذاكرة المؤقتة',
-  'chat.workStatus.replyCacheHit': 'إصابة الذاكرة المؤقتة (الرد)',
+  'chat.workStatus.replyCacheHit': 'تخزين الطلب المؤقت',
+  'chat.workStatus.replyCacheHitDescription': 'نسبة الطلب المقروءة من الذاكرة المؤقتة في آخر رد.',
   'contextSidebar.actions.copyJson': 'نسخ JSON',
   'contextSidebar.actions.copy': 'نسخ',
   'contextSidebar.actions.copied': 'تم النسخ',
@@ -4040,6 +4044,7 @@ export const dict: Record<I18nKey, string> = {
   ...diffFindI18n['ar'],
   ...gitlabIssueI18n['ar'],
   ...gitlabRunsI18n['ar'],
+  ...contextWindowI18n['ar'],
   ...markdownOutlineI18n['ar'],
   ...markdownGithubI18n['ar'],
   ...autocompleteScopeI18n['ar'],

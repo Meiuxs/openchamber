@@ -23,6 +23,6 @@ export type NumberSettingsKey =
   | 'modelRateLimitRequests' | 'modelRateLimitWindowMinutes';
 
 export type StringArraySettingsKey =
-  | 'workStatusHiddenSections' | 'workStatusSectionOrder' | 'sidebarHiddenSections' | 'securityScopedBookmarks'
+  | 'workStatusHiddenSections' | 'workStatusSectionOrder' | 'sidebarHiddenSections' | 'sidebarPageOrder' | 'sidebarHiddenPages' | 'securityScopedBookmarks'
   | 'pinnedDirectories' | 'providerOrder' | 'usageDropdownProviders' | 'accountSwitchProviders'
   | 'terminalLoginShells' | 'collapsedModelProviders' | 'recentAgents' | 'favoriteAgents';

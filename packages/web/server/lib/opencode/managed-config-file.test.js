@@ -266,6 +266,7 @@ describe('managed OpenCode config file', () => {
       includeSecret: false,
       includeUsage: false,
       includeTerminal: false,
+      includeActions: false,
       includeWorkflow: false,
     });
   });
@@ -369,6 +370,7 @@ describe('managed OpenCode config file', () => {
       includeSecret: false,
       includeUsage: false,
       includeTerminal: false,
+      includeActions: false,
       includeWorkflow: false,
     });
   });
@@ -396,6 +398,7 @@ describe('managed OpenCode config file', () => {
       includeSecret: false,
       includeUsage: true,
       includeTerminal: false,
+      includeActions: false,
       includeWorkflow: false,
     });
   });
@@ -411,6 +414,19 @@ describe('managed OpenCode config file', () => {
     await runtime.buildManagedChildEnv();
 
     expect(agentToolRuntime.materializePlugin).toHaveBeenCalledWith(expect.objectContaining({ includeTerminal: true }));
+  });
+
+  it('injects the project actions tool only when it is switched on, also as the only tool', async () => {
+    const off = await createHarness({ settings: {} });
+    await off.runtime.buildManagedChildEnv();
+    expect(off.agentToolRuntime.materializePlugin).toHaveBeenLastCalledWith(expect.objectContaining({ includeActions: false }));
+
+    const { runtime, agentToolRuntime } = await createHarness({
+      settings: { agentControlToolEnabled: false, agentScheduleToolEnabled: false, agentWebToolEnabled: false, agentKnowledgeToolEnabled: false, agentRenderToolEnabled: false, agentSecretToolEnabled: false, agentActionsToolEnabled: true },
+    });
+    await runtime.buildManagedChildEnv();
+
+    expect(agentToolRuntime.materializePlugin).toHaveBeenCalledWith(expect.objectContaining({ includeActions: true }));
   });
 
   it('leaves a config file the user owns alone and keeps the restart requirement', async () => {

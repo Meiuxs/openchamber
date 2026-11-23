@@ -67,6 +67,7 @@ import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
 import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { gitlabRunsI18n } from './gitlab-runs.i18n';
+import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -268,6 +269,7 @@ export const dict: Record<I18nKey, string> = {
   ...diffFindI18n['ja'],
   ...gitlabIssueI18n['ja'],
   ...gitlabRunsI18n['ja'],
+  ...contextWindowI18n['ja'],
   ...markdownOutlineI18n['ja'],
   ...markdownGithubI18n['ja'],
   ...autocompleteScopeI18n['ja'],
@@ -1342,6 +1344,8 @@ export const dict: Record<I18nKey, string> = {
   'worktree.bootstrap.toast.invalidConfiguration': 'リポジトリのサブモジュールと Git LFS の設定を確認してから、再試行してください。',
   'worktree.bootstrap.toast.repositoryTooManyFiles': 'リポジトリのファイルが多すぎます。',
   'worktree.bootstrap.toast.branchNameConflict': 'ブランチ名が既存のブランチと衝突しています（同じ名前か、一方がもう一方の中に入れ子になっています）。ブランチ名を変更して、ワークツリーをもう一度作成してください。',
+  'worktree.bootstrap.toast.submoduleSourceLocal': 'サブモジュールは取得されませんでした。OpenChamber はネットワーク上のリモート経由でのみ取得しますが、この worktree には使えるリモートがありません。リポジトリのリモートがこのコンピューター上のフォルダーか、リモートが存在しないか、ブランチが何も追跡していません。リポジトリのフォルダーで直接作業するか、upstream がネットワーク上のリモートであるブランチから worktree を作成してください。',
+  'worktree.bootstrap.toast.lfsSourceLocal': 'Git LFS ファイルは取得されませんでした。OpenChamber はネットワーク上のリモート経由でのみ取得しますが、この worktree には使えるリモートがありません。リポジトリのリモートがこのコンピューター上のフォルダーか、リモートが存在しないか、ブランチが何も追跡していません。リポジトリのフォルダーで直接作業するか、upstream がネットワーク上のリモートであるブランチから worktree を作成してください。',
   'worktree.bootstrap.toast.cancelled': 'ワークツリーのセットアップはキャンセルされました。準備ができたら再試行してください。',
   'worktree.bootstrap.toast.transportFailed': 'リポジトリへのアクセスとネットワーク接続を確認してから、再試行してください。',
   'worktree.bootstrap.toast.timeoutDescription': 'ワークツリーは作成されましたが、バックグラウンドセットアップがタイムアウトしました。',
@@ -1938,7 +1942,8 @@ export const dict: Record<I18nKey, string> = {
   'contextSidebar.tokens.cacheRead': 'キャッシュ読み取り',
   'contextSidebar.tokens.cacheWrite': 'キャッシュ書き込み',
   'contextSidebar.tokens.cacheHit': 'キャッシュヒット',
-  'chat.workStatus.replyCacheHit': 'キャッシュヒット（応答）',
+  'chat.workStatus.replyCacheHit': 'プロンプトキャッシュ',
+  'chat.workStatus.replyCacheHitDescription': '直前の応答でキャッシュから読み込まれたプロンプトの割合です。',
   'contextSidebar.actions.copyJson': 'JSONをコピー',
   'contextSidebar.actions.copy': 'コピー',
   'contextSidebar.actions.copied': 'コピーしました',

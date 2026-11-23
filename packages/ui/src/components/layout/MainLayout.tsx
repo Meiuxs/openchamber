@@ -10,7 +10,10 @@ import { ContextSurfacePanes } from './ContextSurfacePanes';
 import { ZoneDropOverlay } from './ZoneDropOverlay';
 import { ZoneFitArbiter } from './ZoneFitArbiter';
 import { followZonePlacementOfOtherWindows } from './zoneSync';
+import { useContextWindowOwner } from '@/hooks/useContextWindowOwner';
+import { useContextWindowStore } from '@/lib/contextWindow/store';
 import { ContextPanelRail } from './ContextPanelRail';
+import { DetachedPanelRail } from './DetachedPanelRail';
 import { GuestHosts } from './GuestHosts';
 import { PluginPane } from './PluginPane';
 import { useGuestPages } from '@/hooks/useGuestSurfaces';
@@ -155,6 +158,8 @@ export const MainLayout: React.FC = () => {
     // Any full-page surface replacing the chat area. While open, the chat is
     // fully hidden (not just covered) so none of its floating chrome bleeds
     // through, and selecting a session or draft anywhere closes the surface.
+    useContextWindowOwner();
+    const contextPanelDetached = useContextWindowStore((state) => state.detached);
     const isSurfacePageOpen = isScheduledTasksPageOpen || isArchivePageOpen || isAutomationSessionsPageOpen || isIntegrationsCatalogOpen || isUsageStatsPageOpen || isSourceBoardOpen || isOverviewOpen || Boolean(worktreesPageProjectId) || Boolean(gitlabRunsPageProjectId) || isSpacesPageOpen || isRunOverviewOpen || Boolean(guestPage);
     const mainRef = React.useRef<HTMLElement | null>(null);
     // Cmd/Ctrl+W in the desktop app closes the page covering the chat before
@@ -233,7 +238,7 @@ export const MainLayout: React.FC = () => {
                                 <div className="relative flex flex-1 min-h-0 overflow-hidden" data-page-scroll-lock="true" data-workspace-row="true">
                                     {/* The left zone: surfaces the user moved beside the
                                         sidebar. Empty and closed, it takes no width. */}
-                                    <ContextPanel zone="left" />
+                                    {contextPanelDetached ? null : <ContextPanel zone="left" />}
                                     {/* Holds the chat and the right zone together, so its
                                         width does not move when the right zone opens. The
                                         work-status panel measures this rather than the chat,
@@ -269,19 +274,23 @@ export const MainLayout: React.FC = () => {
                                                     onDismiss={() => useUIStore.getState().setOpenGuestPage(null)} /></ErrorBoundary>
                                             </div>}
                                         </main>
-                                        <ContextPanel zone="bottom" />
+                                        {contextPanelDetached ? null : <ContextPanel zone="bottom" />}
                                         </div>
                                         <ContextPanel zone="right" />
                                         {/* After every zone: the panes attach to the bodies the
                                             zones register, behind their layout animation. */}
-                                        <ContextSurfacePanes />
-                                        <ZoneDropOverlay />
-                                        <ZoneFitArbiter />
+                                        {contextPanelDetached ? null : (
+                                            <>
+                                                <ContextSurfacePanes />
+                                                <ZoneDropOverlay />
+                                                <ZoneFitArbiter />
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             </div>
                             <div data-page-scroll-lock="true">
-                                <ErrorBoundary><ContextPanelRail /></ErrorBoundary>
+                                <ErrorBoundary>{contextPanelDetached ? <DetachedPanelRail /> : <ContextPanelRail />}</ErrorBoundary>
                             </div>
                             <ErrorBoundary><GuestHosts /></ErrorBoundary>
                         </div>

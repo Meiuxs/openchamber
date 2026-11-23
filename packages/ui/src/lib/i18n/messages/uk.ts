@@ -67,6 +67,7 @@ import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
 import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { gitlabRunsI18n } from './gitlab-runs.i18n';
+import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -278,6 +279,7 @@ export const dict: Record<I18nKey, string> = {
   ...diffFindI18n['uk'],
   ...gitlabIssueI18n['uk'],
   ...gitlabRunsI18n['uk'],
+  ...contextWindowI18n['uk'],
   ...markdownOutlineI18n['uk'],
   ...markdownGithubI18n['uk'],
   ...autocompleteScopeI18n['uk'],
@@ -1340,6 +1342,8 @@ export const dict: Record<I18nKey, string> = {
   "worktree.bootstrap.toast.invalidConfiguration": "Перевірте конфігурацію підмодулів і Git LFS у репозиторії, а потім повторіть спробу.",
   "worktree.bootstrap.toast.repositoryTooManyFiles": "У репозиторії забагато файлів.",
   "worktree.bootstrap.toast.branchNameConflict": "Назва гілки конфліктує з наявною гілкою: така сама назва або одна вкладена в іншу. Перейменуйте гілку й створіть worktree ще раз.",
+  "worktree.bootstrap.toast.submoduleSourceLocal": "Сабмодулі не підтягнуто: OpenChamber бере їх лише через мережевий remote, а в цього worktree такого немає. Remote репозиторію — папка на цьому комп'ютері, remote немає взагалі або гілка нічого не відстежує. Працюйте в самій папці репозиторію або створіть worktree від гілки, чий upstream — мережевий remote.",
+  "worktree.bootstrap.toast.lfsSourceLocal": "Файли Git LFS не підтягнуто: OpenChamber бере їх лише через мережевий remote, а в цього worktree такого немає. Remote репозиторію — папка на цьому комп'ютері, remote немає взагалі або гілка нічого не відстежує. Працюйте в самій папці репозиторію або створіть worktree від гілки, чий upstream — мережевий remote.",
   "worktree.bootstrap.toast.cancelled": "Налаштування worktree скасовано. Повторіть спробу, коли будете готові.",
   "worktree.bootstrap.toast.transportFailed": "Перевірте доступ до репозиторію та мережеве з’єднання, а потім повторіть спробу.",
   "worktree.bootstrap.toast.timeoutDescription": "Worktree створено, але час очікування фонового налаштування минув.",
@@ -1898,7 +1902,8 @@ export const dict: Record<I18nKey, string> = {
   "contextSidebar.tokens.cacheRead": "Читання кешу",
   "contextSidebar.tokens.cacheWrite": "Запис кешу",
   "contextSidebar.tokens.cacheHit": "Влучання в кеш",
-  "chat.workStatus.replyCacheHit": "Влучання в кеш (відповідь)",
+  "chat.workStatus.replyCacheHit": "Кеш промпту",
+  "chat.workStatus.replyCacheHitDescription": "Частка промпту останньої відповіді, прочитана з кешу.",
   "contextSidebar.actions.copyJson": "Скопіювати JSON",
   "contextSidebar.actions.copy": "Копіювати",
   "contextSidebar.actions.copied": "Скопійовано",

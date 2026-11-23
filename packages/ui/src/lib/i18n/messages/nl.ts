@@ -66,6 +66,7 @@ import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
 import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { gitlabRunsI18n } from './gitlab-runs.i18n';
+import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
@@ -267,6 +268,7 @@ export const dict = {
   ...diffFindI18n['nl'],
   ...gitlabIssueI18n['nl'],
   ...gitlabRunsI18n['nl'],
+  ...contextWindowI18n['nl'],
   ...markdownOutlineI18n['nl'],
   ...markdownGithubI18n['nl'],
   ...autocompleteScopeI18n['nl'],
@@ -1340,6 +1342,8 @@ export const dict = {
   'worktree.bootstrap.toast.invalidConfiguration': 'Controleer de configuratie van de submodules en Git LFS van de repository en probeer het opnieuw.',
   'worktree.bootstrap.toast.repositoryTooManyFiles': 'De repository bevat te veel bestanden.',
   'worktree.bootstrap.toast.branchNameConflict': 'De branchnaam botst met een bestaande branch: dezelfde naam, of de ene genest in de andere. Hernoem de branch en maak de worktree opnieuw aan.',
+  'worktree.bootstrap.toast.submoduleSourceLocal': 'Submodules zijn niet opgehaald: OpenChamber haalt ze alleen op via een netwerkremote, en deze worktree heeft er geen. De remote van de repository is een map op deze computer, er is geen remote, of de branch volgt er geen. Werk in de repositorymap zelf, of maak de worktree vanaf een branch waarvan de upstream een netwerkremote is.',
+  'worktree.bootstrap.toast.lfsSourceLocal': 'Git LFS-bestanden zijn niet opgehaald: OpenChamber haalt ze alleen op via een netwerkremote, en deze worktree heeft er geen. De remote van de repository is een map op deze computer, er is geen remote, of de branch volgt er geen. Werk in de repositorymap zelf, of maak de worktree vanaf een branch waarvan de upstream een netwerkremote is.',
   'worktree.bootstrap.toast.cancelled': 'De worktree-installatie is geannuleerd. Probeer het opnieuw wanneer je klaar bent.',
   'worktree.bootstrap.toast.transportFailed': 'Controleer de toegang tot de repository en de netwerkverbinding en probeer het opnieuw.',
   'worktree.bootstrap.toast.timeoutDescription': 'De worktree is aangemaakt, maar de achtergrondinrichting heeft een time-out gehad.',
@@ -1937,7 +1941,8 @@ export const dict = {
   'contextSidebar.tokens.cacheRead': 'Cache gelezen',
   'contextSidebar.tokens.cacheWrite': 'Cache geschreven',
   'contextSidebar.tokens.cacheHit': 'Cachehit',
-  'chat.workStatus.replyCacheHit': 'Cachehit (antwoord)',
+  'chat.workStatus.replyCacheHit': 'Promptcache',
+  'chat.workStatus.replyCacheHitDescription': 'Aandeel van de prompt dat bij het laatste antwoord uit de cache is gelezen.',
   'contextSidebar.actions.copyJson': 'JSON kopiëren',
   'contextSidebar.actions.copy': 'Kopiëren',
   'contextSidebar.actions.copied': 'Gekopieerd',
