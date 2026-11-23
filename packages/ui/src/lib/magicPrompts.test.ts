@@ -73,7 +73,11 @@ describe('prompt enhancement defaults', () => {
   test('the visible role and the instructions are separate prompts', () => {
     expect(getDefaultMagicPromptTemplate('session.promptEnhance.visible')).toContain('rewrite');
     expect(getDefaultMagicPromptTemplate('session.promptEnhance.instructions')).toContain('{{draft}}');
-    expect(getDefaultMagicPromptTemplate('session.promptEnhance.instructions')).toContain('Do not answer the request');
+    const instructions = getDefaultMagicPromptTemplate('session.promptEnhance.instructions');
+    expect(instructions).toContain('Do not answer the request');
+    expect(instructions).toContain('The first line must begin with the rewritten prompt itself');
+    expect(instructions).toContain('Do not introduce the result with phrases such as');
+    expect(instructions).toContain('almost unchanged.');
   });
 
   test('an override replaces the enhancement instructions', async () => {
