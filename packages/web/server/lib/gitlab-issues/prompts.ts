@@ -11,10 +11,6 @@ export class AgentOutputError extends Error {
 export interface IssueInput {
   title?: string | null | undefined;
   description?: string | null | undefined;
-  /**
-   * The issue's recent human comments. A report that was blocked for missing
-   * detail gets its answers in the thread, so the triage pass reads both.
-   */
   comments?: FeedbackLine[] | null | undefined;
 }
 
@@ -50,13 +46,6 @@ export interface PlanResult {
   outOfScope: string;
 }
 
-/**
- * What merging this change would touch, read by someone who has to verify it
- * without reading the diff: the modules it lands in, the business weight of a
- * mistake, whether older data or callers still work, how to undo it, and what
- * a tester has to cover. Produced with an approving review, because that is
- * the moment the change is about to be mergeable.
- */
 export interface ReviewImpact {
   modules: string;
   business: string;
@@ -118,11 +107,6 @@ const outputRules = [
   'Finish your final answer with exactly one fenced json block that matches the schema below. Do not put anything after it.',
 ].join('\n');
 
-/**
- * The repository's own instructions are the rules the automation is judged by.
- * AGENTS.md is the name this ecosystem uses; the parenthetical keeps the prompt
- * honest for a target project that named its file differently.
- */
 const repoRulesLine = (action: string) => [
   `Read the repository's own rules before you ${action}: AGENTS.md at the repository`,
   'root (or the equivalent agent-instructions file), and the nearest DOCUMENTATION.md',
@@ -296,10 +280,6 @@ export interface ReviewPromptInput {
   baseRef: string;
   evidence: EvidenceResult | null | undefined;
   feedbackItems?: FeedbackLine[] | null | undefined;
-  /**
-   * The independent second pass after a first reviewer approved: the implementer's
-   * report is withheld so the verdict cannot lean on the author's own reasoning.
-   */
   secondOpinion?: boolean | undefined;
 }
 
@@ -421,8 +401,6 @@ export function parseAgentOutput(text: string, stage: string): ParsedAgentOutput
       || (entry.line !== undefined && !isInteger(entry.line)))) {
       throw new AgentOutputError('findings must name a file, a severity and a note');
     }
-    // Severity is the verdict's justification: request-changes stands on blockers,
-    // and an approve that names a blocker contradicts itself instead of approving.
     const hasBlocker = findings.some((entry) => isJsonRecord(entry) && entry.severity === 'blocker');
     if (parsed.verdict === 'request-changes' && !hasBlocker) {
       throw new AgentOutputError('request-changes needs at least one blocker finding; minor findings belong on an approve');
@@ -444,9 +422,6 @@ export function parseAgentOutput(text: string, stage: string): ParsedAgentOutput
         return finding;
       }),
     };
-    // An approval is what makes a merge possible, so the impact report rides
-    // with it. A request-changes round has no merge to describe yet, and the
-    // recheck pass is a second opinion on the verdict, not a second impact report.
     if (stage === 'review' && parsed.verdict === 'approve') {
       if (!isJsonRecord(parsed.impact)) {
         throw new AgentOutputError('impact is required when verdict is approve');
@@ -571,11 +546,6 @@ export const formatReviewComment = (
     : `这是第 ${round} 轮修改要求（上限 ${maxRounds} 轮）。超限后本次运行会被阻塞，等待人工处理。`,
 ].join('\n');
 
-/**
- * The independent second review's answer. Findings here start a normal revision
- * round; the note says which reviewer is speaking so a person reading the issue
- * can tell the two passes apart.
- */
 export const formatRecheckComment = (review: ReviewResult) => [
   review.verdict === 'approve' ? '### 独立复核：通过' : '### 独立复核：需修改',
   '',
@@ -592,11 +562,6 @@ export const formatRecheckComment = (review: ReviewResult) => [
     : '独立复核不同意推送，按上述发现继续修改。',
 ].join('\n');
 
-/**
- * Posted when a revision round repeats itself: findings the earlier rounds
- * already named and the fix did not remove point at a loop, and a person
- * should look before the round budget runs out.
- */
 export const formatOscillationComment = (recurring: Finding[], round: number, maxRounds: number) => [
   `### 提醒：第 ${round} 轮审核仍在报告此前已指出的问题`,
   '',

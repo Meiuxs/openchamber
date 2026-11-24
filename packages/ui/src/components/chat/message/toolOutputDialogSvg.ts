@@ -1,4 +1,5 @@
 export const getSvgAspectRatio = (svg: SVGElement): number | null => {
+    let groupRatio: number | null = null;
     try {
         const groups = Array.from(svg.querySelectorAll('g'));
         let bestArea = 0;
@@ -20,10 +21,12 @@ export const getSvgAspectRatio = (svg: SVGElement): number | null => {
         }
 
         if (bestRatio && Number.isFinite(bestRatio) && bestRatio > 0) {
-            return bestRatio;
+            groupRatio = bestRatio;
         }
     } catch {
+        groupRatio = null;
     }
+    if (groupRatio !== null) return groupRatio;
 
     const viewBox = svg.getAttribute('data-oc-mermaid-original-viewbox') ?? svg.getAttribute('viewBox');
     if (viewBox) {

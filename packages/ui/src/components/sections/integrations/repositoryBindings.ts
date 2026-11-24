@@ -62,7 +62,7 @@ export const primaryRemoteOf = (read: SourceControlBindingRead): string => (
   read.binding?.providers[0]?.primaryRemote ?? read.repository.remotes[0]?.name ?? 'origin'
 );
 
-export type BindingTarget = { identity: SourceControlIdentity; primaryRemote: string };
+type BindingTarget = { identity: SourceControlIdentity; primaryRemote: string };
 
 export const bindingTargetForRead = (
   read: SourceControlBindingRead,
@@ -113,7 +113,7 @@ export const resetIntent = (
   confirmed: true,
 });
 
-export type RebindAllPlanEntry = {
+type RebindAllPlanEntry = {
   row: RepositoryBindingRow;
   target: BindingTarget;
   account: SourceControlAuthAccount;

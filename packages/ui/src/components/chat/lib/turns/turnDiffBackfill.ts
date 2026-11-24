@@ -3,7 +3,7 @@ import { countPatch } from './liveActivitySummary';
 import { projectTurnIndexes } from './projectTurnIndexes';
 import type { TurnChangedFile, TurnProjectionResult, TurnRecord } from './types';
 
-export interface TurnDiffEntry {
+interface TurnDiffEntry {
     file: string;
     patch?: string;
     additions?: number;

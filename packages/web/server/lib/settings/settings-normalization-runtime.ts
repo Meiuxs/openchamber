@@ -46,8 +46,6 @@ export interface SettingsProject {
   gitlabIssueReviewModel?: string;
   gitlabIssueReviewVariant?: string;
   gitlabIssueReviewAgent?: string;
-  // Both toggles are absent on projects stored before they existed; absence
-  // keeps the default-on behavior the dispatcher reads.
   gitlabIssueSecondReview?: boolean;
   gitlabIssueAutoCloseNotAnIssue?: boolean;
   gitlabIssueVerifyCommand?: string;

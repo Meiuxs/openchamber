@@ -3,32 +3,20 @@ import type { OpenCodeEvent } from "@opencode/client"
 import { z } from "zod"
 import { isEphemeralGenerationMetadata } from "@/lib/sessionEphemeralMetadata"
 import { subscribeRuntimeEndpointWillChange } from "@/lib/runtime-switch"
-import type { WorkflowRun } from "@/lib/workflows/model"
 import {
   compact,
   partIds,
-  type FilePart,
-  type FormRequest,
-  type JsonValue,
-  type Message,
-  type Metadata,
-  type ModelRef,
   type Part,
-  type PermissionRequest,
-  type PermissionRuleset,
   type Session,
-  type SessionStatus,
-  type SessionOutcome,
-  type StructuredError,
   type TokenUsageInfo,
 } from "./model"
 import { projectInboxMessage, sessionParentID, structuredErrorText, toolAttachments, toolOutputText } from "./projection"
-import { runningShellFromWire, type RunningShell, type ShellEnd } from "./background-shell"
+import { runningShellFromWire, type ShellEnd } from "./background-shell"
 
 
-import { hostTurnStart, type CatalogKind, type MessagePatch, type OpenchamberNotification, type RoutedSyncEvent, type SessionPatch, type SessionTurnStart, type SyncEvent, type ToolTransition } from "./eventsModel"
+import { type MessagePatch, type RoutedSyncEvent, type SessionPatch, type SyncEvent, type ToolTransition } from "./eventsModel"
 
-export { hostTurnStart, type CatalogKind, type MessagePatch, type OpenchamberNotification, type RoutedSyncEvent, type SessionPatch, type SessionTurnStart, type SyncEvent, type ToolTransition } from "./eventsModel"
+export { hostTurnStart, type CatalogKind, type MessagePatch, type OpenchamberNotification, type SessionPatch, type SessionTurnStart, type SyncEvent, type ToolTransition } from "./eventsModel"
 
 export const GLOBAL_EVENT_DIRECTORY = "global"
 

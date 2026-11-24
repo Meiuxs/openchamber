@@ -86,6 +86,7 @@ Each project entry carries optional issue-automation fields, all normalized so a
 - `gitlabBotCredentialId`: credential id of the GitLab bot account used for comments and labels.
 - `implementingTimeoutMinutes`: implementing-phase timeout in minutes.
 - `issueReviewModel`: a `provider/model` in the same shape `defaultModel` uses, used for issue review. An unusable value is dropped, so review falls back to the default model.
+- `gitlabIssueSecondReview` and `gitlabIssueAutoCloseNotAnIssue`: absent on projects stored before the fields existed, so absence keeps the default-on behavior the dispatcher reads.
 - `issueTemplates`: issue templates kept on the project entry. An entry without an id or a name is unusable and dropped rather than repaired; the body may be empty, which is how a person clears a built-in template.
 
 ### Why the insecure-Git-origins text keeps exactly the accepted origins (`settings-helpers.ts`)

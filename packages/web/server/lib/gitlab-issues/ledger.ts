@@ -107,12 +107,10 @@ export interface RunEntry {
   blockedFrom?: string | null | undefined;
   triageVerdict?: string | null | undefined;
   triageNoteId?: number | null | undefined;
-  /** The triage answer, kept so the panel can show why the issue was judged. */
   triage?: TriageResult | null | undefined;
   outcome?: string | null | undefined;
   approvalNoteId?: number | null | undefined;
   planNoteId?: number | null | undefined;
-  /** The plan answer, kept so the panel can show what the run set out to do. */
   plan?: PlanResult | null | undefined;
   evidenceNoteId?: number | null | undefined;
   evidence?: EvidenceResult | null | undefined;
@@ -120,12 +118,9 @@ export interface RunEntry {
   reviewNoteId?: number | null | undefined;
   reviewVerdict?: string | null | undefined;
   reviewFindings?: Finding[] | null | undefined;
-  /** What merging the change touches, written with an approving review. */
   reviewImpact?: ReviewImpact | null | undefined;
-  /** The independent second review's verdict; null until a recheck session answered. */
   recheckVerdict?: string | null | undefined;
   recheckNoteId?: number | null | undefined;
-  /** True once the run has had its one recheck, so later approvals push directly. */
   rechecked?: boolean | undefined;
   feedbackRounds?: number | undefined;
   lastFeedbackActor?: number | null | undefined;

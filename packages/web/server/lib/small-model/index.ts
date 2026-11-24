@@ -7,7 +7,7 @@ import type { JsonValue, ModelInfo } from '@opencode/client';
 import type { SmallModelRef } from './client.js';
 import type { ForwardedGenerationInput } from './contracts.js';
 import { readMergedSettingsSync } from '../settings/settings-files.js';
-import { asNonEmptyString } from '../shared/guards.js';
+import { asNonEmptyString, isRecord } from '../shared/guards.js';
 import {
   findModelInfo,
   getConfiguredSmallModelRef,
@@ -88,24 +88,31 @@ const hasProviderFields = (value: unknown): value is { providerID?: unknown; set
 const hasAPIKey = (value: unknown): value is { apiKey?: unknown } =>
   value !== null && value !== undefined;
 
-const readableErrorFields = (value: unknown) => value !== null && value !== undefined && (typeof value === 'object' || typeof value === 'function')
-  ? value as { statusCode?: unknown; status?: unknown; cause?: unknown; error?: unknown; _tag?: unknown; name?: unknown; reason?: unknown; type?: unknown }
-  : null;
+type ErrorFields = {
+  statusCode?: unknown;
+  status?: unknown;
+  cause?: unknown;
+  error?: unknown;
+  _tag?: unknown;
+  name?: unknown;
+  reason?: unknown;
+  type?: unknown;
+};
 
-const readHttpStatus = (value: unknown): number | undefined => {
-  const fields = readableErrorFields(value);
+const isErrorFields = (value: unknown): value is ErrorFields => isRecord(value);
+
+const readHttpStatus = (fields: ErrorFields | null | undefined): number | undefined => {
   if (!fields) return undefined;
-  const cause = readableErrorFields(fields.cause);
+  const cause = isErrorFields(fields.cause) ? fields.cause : null;
   for (const candidate of [fields.statusCode, fields.status, cause?.statusCode, cause?.status]) {
     if (candidate === 401 || candidate === '401') return 401;
   }
   return undefined;
 };
 
-const isProviderAuthRefusal = (error: unknown): boolean => {
-  const fields = readableErrorFields(error);
-  if (!fields) return false;
-  for (const candidate of [fields, readableErrorFields(fields.cause), readableErrorFields(fields.error)]) {
+const isProviderAuthRefusal = (error: ErrorFields): boolean => {
+  const candidates = [error, isErrorFields(error.cause) ? error.cause : null, isErrorFields(error.error) ? error.error : null];
+  for (const candidate of candidates) {
     if (!candidate) continue;
     if (readHttpStatus(candidate) === 401) return true;
     if (
@@ -360,6 +367,8 @@ const requestOptions = ({ timeoutMs, promptChars, signal }: {
   };
 };
 
+type SessionModelInput = { id: string; providerID: string; variant?: string };
+
 const generateInOpenCodeSession = async (
   client: NonNullable<ReturnType<typeof getSmallModelClient>>,
   prompt: string,
@@ -367,7 +376,7 @@ const generateInOpenCodeSession = async (
   signal: AbortSignal,
 ): Promise<string | null> => {
   if (!isString(model.id) || !isString(model.providerID)) return null;
-  const sessionModel: { id: string; providerID: string; variant?: string } = {
+  const sessionModel: SessionModelInput = {
     id: model.id,
     providerID: model.providerID,
   };
@@ -376,8 +385,10 @@ const generateInOpenCodeSession = async (
     model: sessionModel,
     metadata: { openchamber: { kind: 'ephemeral-generation' } },
   }, { signal });
-  const sessionID = asNonEmptyString(created?.id)
-    ?? asNonEmptyString((created as unknown as { data?: { id?: unknown } })?.data?.id);
+  const createdData: unknown = created;
+  const createdFields = isRecord(createdData) ? createdData : null;
+  const createdEnvelope = createdFields && isRecord(createdFields.data) ? createdFields.data : null;
+  const sessionID = asNonEmptyString(createdFields?.id) ?? asNonEmptyString(createdEnvelope?.id);
   if (!sessionID) {
     throw Object.assign(new Error('OpenCode did not return a session for small model generation'), { statusCode: 502 });
   }
@@ -463,7 +474,7 @@ export async function generateSmallModelText({ prompt, system, maxOutputTokens, 
       );
       return isString(result?.text) ? result.text : '';
     } catch (error) {
-      if (!isProviderAuthRefusal(error)) throw error;
+      if (!isErrorFields(error) || !isProviderAuthRefusal(error)) throw error;
       const text = await generateInOpenCodeSession(client, fullPrompt, model, generationOptions.signal);
       if (text === null) throw error;
       useSessionTransport = true;

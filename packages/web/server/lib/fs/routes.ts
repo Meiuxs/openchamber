@@ -495,29 +495,18 @@ const resolveGitDirsScanDepth = (value: QueryValue | undefined): keyof typeof GI
   value === 'deep' || value === 'all' ? value : 'shallow'
 );
 
-// Dependency caches and other dot-directories never hold a checkout a person
-// would open; `.git` itself is still read as the repository boundary marker
-// before this rule applies.
 const GIT_DIRS_SKIP_LIST = new Set(['node_modules', 'dist', 'build', '.venv', 'target', '.next', 'vendor', '__pycache__']);
 
 const isSkippedDirectoryName = (name: string) => (
   GIT_DIRS_SKIP_LIST.has(name) || (name.startsWith('.') && name !== '.git')
 );
 
-// Scanning one directory at a time made a large workspace's discovery take
-// seconds on Windows, where every directory read is a comparatively expensive
-// round trip. A small fixed pool keeps the response bound by the slowest few
-// directories instead of their count.
 const GIT_DIRS_SCAN_CONCURRENCY = 16;
 
 const findGitDirectories = async ({ rootPath, fsPromises, path: pathModule, maxDepth, maxDirs }: {
   rootPath: string; fsPromises: typeof nodeFsPromises; path: typeof nodePath; maxDepth: number; maxDirs: number;
 }) => {
   const found: Array<{ index: number; dir: string }> = [];
-  // One identity set holds both resolved link targets and plain paths. Plain
-  // directories are unique by construction, so resolving them costs a syscall
-  // the scan does not need; links and the root resolve, which is what keeps a
-  // link loop or a second link to a walked directory from repeating work.
   const seen = new Set<string>();
   const queue: Array<{ dir: string; depth: number; link: boolean }> = [{ dir: rootPath, depth: 0, link: false }];
   const waiters: Array<() => void> = [];
@@ -597,8 +586,6 @@ const findGitDirectories = async ({ rootPath, fsPromises, path: pathModule, maxD
           await scanDirectory(dispatched - 1, entry.dir, entry.depth, entry.link);
         } finally {
           active -= 1;
-          // Every completion can enqueue or empty the queue; waking lets
-          // waiting workers recheck, and lets them exit when root threw.
           wake();
         }
       }
@@ -613,8 +600,6 @@ const findGitDirectories = async ({ rootPath, fsPromises, path: pathModule, maxD
   const workerCount = Math.max(1, Math.min(GIT_DIRS_SCAN_CONCURRENCY, maxDirs));
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
-  // Concurrent scanning records repositories in dispatch (breadth-first,
-  // sorted-sibling) order; the index restores the serial scan's answer order.
   return found.sort((left, right) => left.index - right.index).map((entry) => entry.dir);
 };
 

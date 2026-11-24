@@ -103,8 +103,6 @@ export const resolveProjectConfig = (project: JsonObject | SettingsProject | nul
   const verifyCommand = isString(rawVerifyCommand) ? rawVerifyCommand.trim().slice(0, 500) : '';
   const enabled = project?.autoDispatchGitlabIssues === true
     && Boolean(botAccountId) && prefixValid && timeoutValid;
-  // Both toggles are opt-out: a project that never wrote the field keeps the
-  // behavior it had before the setting existed.
   const secondReview = project?.gitlabIssueSecondReview !== false;
   const autoCloseNotAnIssue = project?.gitlabIssueAutoCloseNotAnIssue !== false;
   return {

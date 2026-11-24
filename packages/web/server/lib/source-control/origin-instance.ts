@@ -20,8 +20,6 @@ export function normalizeOriginInstance(
   }
 
   const pathname = url.pathname.replace(/\/+$/u, '');
-  // A sealed instance is an origin; GitLab also lives under a plain prefix such as
-  // `/gitlab` on an intranet host, so it may keep one when `allowPath` is set.
   const pathValid = allowPath
     ? pathname === '' || /^(?:\/[A-Za-z0-9._~!$&'()*+,;=:@%-]+)+$/u.test(pathname)
     : pathname === '';

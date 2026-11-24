@@ -651,9 +651,12 @@ An instance identified by its URL origin (GitLab and other self-hostable
 providers) accepts HTTPS, HTTP on a loopback host for local deployments and
 tests, or HTTP on an origin the machine policy lists in
 `allowedInsecureGitOrigins` for an intranet host without TLS; no credentials,
-path, query, or fragment. `label` names the provider in the errors a person
-reads. `insecureOrigins` overrides the policy read for tests and callers that
-resolved it already. See the instance normalization invariant above.
+query, or fragment. A sealed instance keeps no path, but a descriptor that sets
+`allowPath` also accepts a plain prefix such as `/gitlab` on an intranet host,
+because that host serves GitLab below a prefix. `label` names the provider in
+the errors a person reads. `insecureOrigins` overrides the policy read for
+tests and callers that resolved it already. See the instance normalization
+invariant above.
 
 ### extension-descriptor.ts — extension instances and pattern compilation
 
