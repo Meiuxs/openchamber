@@ -15,6 +15,7 @@ import { itemDirectory, leftOutFolders, type AcrossReference } from './acrossRep
 import { recordLabelWrite } from './labelWrites';
 import type { CachedValue } from './referenceCache';
 import {
+    newerTrackerRead,
     referencePickerItemKey,
     trackerOfSource,
     DEFAULT_REPOSITORY_FILTER,
@@ -234,12 +235,20 @@ export function useReferenceBrowser({
     const settledPreviewItem = useDebouncedValue(previewItem, DETAIL_DEBOUNCE_MS);
     const previewSettled = Boolean(settledPreviewItem && previewItem
         && referencePickerItemKey(settledPreviewItem) === referencePickerItemKey(previewItem));
-    const { detail: trackerDetail, refresh: refreshTrackerDetail } = useTrackerItemDetail(
+    const { detail: trackerDetail, refreshFromHost: refreshTrackerDetail } = useTrackerItemDetail(
         previewItem?.source === 'tracker'
-            ? { provider: previewItem.provider, id: previewItem.item.id, containerId: previewItem.item.container?.id ?? null }
+            ? {
+                provider: previewItem.provider,
+                id: previewItem.item.id,
+                identifier: previewItem.item.identifier,
+                containerId: previewItem.item.container?.id ?? null,
+            }
             : null,
         previewSettled,
     );
+    const shownTrackerItem = previewItem?.source === 'tracker'
+        ? newerTrackerRead(previewItem.item, trackerDetail.status === 'ready' ? trackerDetail.value : null)
+        : null;
     const [revisionChoice, setRevisionChoice] = React.useState<{ key: string; sha: string } | null>(null);
     const previewRevision = revisionChoice && previewKey !== null && revisionChoice.key === previewKey ? revisionChoice.sha : null;
     const selectPreviewRevision = React.useCallback((sha: string | null) => {
@@ -335,7 +344,7 @@ export function useReferenceBrowser({
             openItem({ source: 'tracker', provider: tracker, item: shown });
             return;
         }
-        const read = await trackers?.get(tracker, identifier.trim()).catch(() => null);
+        const read = await trackers?.get(tracker, identifier.trim(), trackerContainerId).catch(() => null);
         if (read && read.connected && read.item) {
             openItem({ source: 'tracker', provider: tracker, item: read.item });
             return;
@@ -378,6 +387,7 @@ export function useReferenceBrowser({
         closeMobilePreview: () => setMobilePreviewKey(null),
         trackerDetail,
         refreshTrackerDetail,
+        shownTrackerItem,
         repositoryDetail,
         repositoryLatestDetail,
         refreshRepositoryDetail,

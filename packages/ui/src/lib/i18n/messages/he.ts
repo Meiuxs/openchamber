@@ -14,7 +14,7 @@ import { fileEditorAidsI18n } from './file-editor-aids.i18n';
 import { htmlRenderI18n } from './html-render.i18n';
 import { documentToolbarI18n } from './document-toolbar.i18n';
 import { uiBlocksI18n } from './ui-blocks.i18n';
-import { updateDialogCanaryI18n } from './update-dialog-canary.i18n';
+import { updateDialogCanaryI18n } from './update-dialog-canary.i18n'; import { updateIdleI18n } from './update-idle.i18n';
 import { aboutReleaseNotesI18n } from './about-release-notes.i18n';
 import { updateCheckErrorsI18n } from './update-check-errors.i18n';
 import { secretRequestI18n } from './secret-request.i18n';
@@ -24,6 +24,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { sessionCostI18n } from './session-cost.i18n';
 import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { rateGateI18n } from './rate-gate.i18n';
@@ -120,10 +121,14 @@ export const dict: Record<I18nKey, string> = {
   'sessions.aiRename.noSmallModel': 'נדרש מודל קטן. יש להתחבר לספק מודלים או לבחור מודל בהגדרות → הפעלות.',
   'commitComparison.mode': 'קומיט',
   'pullRequestComparison.select': 'בחר בקשת משיכה',
+  'pullRequestComparison.searchShort': 'חיפוש בבקשות משיכה',
   'pullRequestComparison.pickAbove': 'יש לבחור בקשת משיכה למעלה',
   'pullRequestComparison.diffUnavailable': "{provider} לא מספק את ההבדלים של בקשות משיכה, ולכן אי אפשר להציג אותם או לעבור עליהם כאן",
   'pullRequestComparison.partial': 'לא ניתן היה לטעון חלק מבקשות המשיכה',
   'commitComparison.select': 'בחר קומיט',
+  'commitComparison.branchDividerSingle': 'למעלה: ה-commit שנמצא רק ב-{branch}. למטה: כבר ב-{base}.',
+  'commitComparison.branchDividerPlural': 'למעלה: {count} commits שנמצאים רק ב-{branch}. למטה: כבר ב-{base}.',
+  'commitComparison.backToList': 'חזרה ל-commits',
   'commitComparison.search': 'חיפוש קומיטים…',
   'commitComparison.loadError': 'טעינת הקומיטים נכשלה',
   'commitComparison.noCommits': 'לא נמצאו קומיטים',
@@ -626,6 +631,7 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.header.displayMode.minimal': 'מינימלי',
   'sessions.sidebar.header.displayMode.showWork': 'הצג את קטע בעבודה',
   'sessions.sidebar.header.displayMode.showPinned': 'הצג את קטע המוצמדות',
+  'sessions.sidebar.header.displayMode.showSubagents': 'הצג הפעלות של סוכני משנה',
   'sessions.sidebar.header.displayMode.detailedZoneRows': 'שורות מפורטות',
   'sessions.sidebar.header.displayMode.worktreeNameByBranch': 'שם worktree לפי הענף',
   'sessions.sidebar.activity.pinnedTitle': 'מוצמדות',
@@ -1912,6 +1918,7 @@ export const dict: Record<I18nKey, string> = {
   'diffView.state.loadingDiff': 'טוען הבדלים…',
   'diffView.state.loadingChanges': 'טוען שינויים…',
   'diffView.state.largeDiff': 'הבדלים גדולים ({count} שורות שהשתנו)',
+  'diffView.state.largeDiffLongLines': 'הבדלים גדולים (שורות ארוכות מאוד)',
   'diffView.state.largeDiffDescription': 'התצוגה עלולה להיות איטית. אפשר עדיין לראות את ההבדלים בלחיצה למטה.',
   'diffView.summary.changedFilesSingle': '{count} קובץ השתנה',
   'diffView.summary.changedFilesPlural': '{count} קבצים השתנו',
@@ -3064,6 +3071,11 @@ export const dict: Record<I18nKey, string> = {
   'openInApp.actions.copyPath': 'העתק נתיב',
   'openInApp.actions.refreshApps': 'רענן יישומים',
   'openInApp.toast.pathCopied': 'הנתיב הועתק ללוח',
+  'openInApp.toast.sshOpenFailed': 'לא ניתן לפתוח את {app}. ודאו שהוא מותקן במחשב הזה.',
+  'openInApp.toast.sshInstanceChanged': 'החלון הזה עבר למופע אחר לפני ש-{app} נפתח. נסו שוב.',
+  'openInApp.toast.sshSettingsMismatch': '{app} לא יתחבר כמו המופע הזה: פקודת ה-SSH שלו מגדירה {settings}, ש-{app} לא קורא. העבירו אותן לרשומת המארח ב-~/.ssh/config.',
+  'openInApp.toast.sshUnresolved': 'לא ניתן לקרוא את הגדרות ה-SSH של המופע הזה, לכן {app} לא נפתח. בדקו את פקודת ה-SSH שלו.',
+  'openInApp.toast.sshUnsupported': '{app} לא יכול לפתוח את הפרויקט הזה דרך SSH.',
   'projectActions.actions.addActionAria': 'הוסף פעולה',
   'projectActions.actions.addAction': 'הוסף פעולה',
   'projectActions.actions.addNewAction': 'הוסף פעולה חדשה',
@@ -3993,7 +4005,7 @@ export const dict: Record<I18nKey, string> = {
   ...htmlRenderI18n.he,
   ...documentToolbarI18n.he,
   ...uiBlocksI18n.he,
-  ...updateDialogCanaryI18n.he,
+  ...updateDialogCanaryI18n.he, ...updateIdleI18n.he,
   ...aboutReleaseNotesI18n.he,
   ...updateCheckErrorsI18n.he,
   ...secretRequestI18n.he,
@@ -4003,6 +4015,7 @@ export const dict: Record<I18nKey, string> = {
   ...usageStatsI18n.he,
   ...webSearchI18n.he,
   ...sessionWarmingI18n.he,
+  ...sessionCostI18n.he,
   ...connectionHeartbeatI18n.he,
   ...compactionSettingsI18n.he,
   ...rateGateI18n.he,
@@ -4109,6 +4122,10 @@ export const dict: Record<I18nKey, string> = {
   'diffView.layout.sideBySide': 'תצוגה זה לצד זה',
   'diffView.actions.wrapLines': 'גלישת שורות',
   'diffView.actions.moreActions': 'פעולות נוספות',
+  'diffView.actions.viewOptions': 'אפשרויות תצוגת הבדלים',
+  'gitView.sidebar.resizeAria': 'שינוי גודל סרגל הצד של Git',
+  'gitView.commit.stagedCountSummary': '{count} מוכנים',
+  'gitView.commit.collapseAria': 'כווץ טופס commit',
   'session.newWorktree.trust.skip': 'דילוג',
   'chat.revertPopover.toast.restoreFailed': 'לא ניתן היה לשחזר את ההודעות שבוטלו',
   'notifications.error.bodyFallback': 'אירעה שגיאה',

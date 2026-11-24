@@ -479,7 +479,7 @@ const SourceBoardBody: React.FC<{
     const pinnedOutsideItem = asksOutside ? pinnedOutside.items.find(namesPinnedLink) ?? null : null;
     // A tracker's get takes its human identifier as well as its own id.
     const { detail: pinnedTracker, followed: pinnedTrackerFollowed } = useTrackerItemDetail(
-        tracker && pinnedTrackerId ? { provider: tracker, id: pinnedTrackerId } : null,
+        tracker && pinnedTrackerId ? { provider: tracker, id: pinnedTrackerId, identifier: pinnedTrackerId } : null,
         true,
     );
     // Only the item the link names: a lookup that fell back to a search lists others.
@@ -889,9 +889,9 @@ const SourceBoardBody: React.FC<{
                     kind={previewRun.kind}
                 />
             ) : undefined}
-            trackerStateControl={previewItem?.source === 'tracker' ? (
+            trackerStateControl={browser.shownTrackerItem ? (
                 <>
-                    <SourceBoardTrackerStatus item={previewItem.item} onChanged={browser.list.retry} />
+                    <SourceBoardTrackerStatus item={browser.shownTrackerItem} onChanged={() => { void browser.list.retry(); void browser.refreshTrackerDetail(); }} />
                     {trackerEditButton}
                 </>
             ) : undefined}

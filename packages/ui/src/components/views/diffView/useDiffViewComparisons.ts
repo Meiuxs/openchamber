@@ -21,8 +21,9 @@ import { useLastTurnDiff } from '../useLastTurnDiff';
 import { parseDiffFromFile } from '@pierre/diffs';
 import { diffCommentOriginFromSource } from '@/lib/diffCommentOrigin';
 import type { FileEntry, DiffData, DiffScope, ComparisonDiffResult, DiffViewProps } from './types';
-import { EMPTY_COMPARISON_DIFF, isNewStatusFile, isStagedStatusFile, isWorkingStatusFile, createTextDiffDataFromPatch } from './diffData';
+import { EMPTY_COMPARISON_DIFF, isNewStatusFile, isStagedStatusFile, isWorkingStatusFile, createComparisonDiffFromPatch, createTextDiffDataFromPatch } from './diffData';
 import { FULL_CONTEXT_DIFF_LINES, DEFAULT_CONTEXT_DIFF_LINES } from './diffContextLines';
+import { STACKED_DIFF_WINDOW_THRESHOLD } from './StackedDiffWindow';
 import type { GitAPI, GitStatus } from '@/lib/api/types';
 import type { useRepositoryBinding } from '@/lib/source-control/repository-binding';
 import type { useI18n } from '@/lib/i18n';
@@ -40,17 +41,19 @@ interface DiffViewComparisonsOptions {
     fetchBranches: ReturnType<typeof useGitStore.getState>['fetchBranches'];
     git: GitAPI;
     isGitRepo: boolean | null;
-    expandedFiles: Set<string>;
+    expandedFiles: ReadonlySet<string>;
+    liveStackedFiles?: ReadonlySet<string>;
     t: ReturnType<typeof useI18n>['t'];
     visible: boolean;
     onDiffScopeChange: DiffViewProps['onDiffScopeChange'];
     diffScope: DiffScope | null;
     turnId?: string;
+    commitLimit?: number;
 }
 
 export function useDiffViewComparisons({
     currentSessionId, rootDirectory, visible, activeDiffScope, status, effectiveDirectory, binding, setActiveDiffScope,
-    onDiffScopeChange, fetchBranches, git, isGitRepo, diffScope, turnId, expandedFiles, t,
+    onDiffScopeChange, fetchBranches, git, isGitRepo, diffScope, turnId, expandedFiles, liveStackedFiles, t, commitLimit,
 }: DiffViewComparisonsOptions) {
     const {
         diffs: lastTurnDiffs,
@@ -98,7 +101,7 @@ export function useDiffViewComparisons({
         if (!effectiveDirectory || !requestedPr || !status || selectedPr !== requestedPr) return;
         usePullRequestSelectionStore.getState().settleDiffRequest(effectiveDirectory, requestedPr);
     }, [effectiveDirectory, requestedPr, selectedPr, status]);
-    const commitComparison = useCommitComparison(effectiveDirectory ?? null, currentBranch, visible && activeDiffScope === 'commit' && !isVSCodeRuntime());
+    const commitComparison = useCommitComparison(effectiveDirectory ?? null, currentBranch, visible && activeDiffScope === 'commit' && !isVSCodeRuntime(), undefined, commitLimit);
     const selectedCommitHash = commitComparison.selectedCommit?.hash ?? null;
     React.useEffect(() => {
         if ((activeDiffScope === 'commit' || activeDiffScope === 'pr') && isVSCodeRuntime()) {
@@ -188,10 +191,15 @@ export function useDiffViewComparisons({
 
     const comparisonRangeKey = comparison.files ? (activeDiffScope === 'pr'
         ? JSON.stringify([comparison.key, comparison.revision]) : comparison.key) : null;
-    const comparisonPathsKey = React.useMemo(
-        () => (activeDiffScope === 'branch' || activeDiffScope === 'commit' || activeDiffScope === 'pr' ? Array.from(expandedFiles).sort().join('\0') : ''),
-        [activeDiffScope, expandedFiles]
-    );
+    const windowedLiveFiles = liveStackedFiles && (comparison.files?.length ?? 0) >= STACKED_DIFF_WINDOW_THRESHOLD
+        ? liveStackedFiles : null;
+    const comparisonPathsKey = React.useMemo(() => {
+        if (!comparisonRangeKey) return '';
+        const paths = windowedLiveFiles
+            ? [...windowedLiveFiles].filter((path) => expandedFiles.has(path))
+            : [...expandedFiles];
+        return paths.sort().join('\0');
+    }, [comparisonRangeKey, expandedFiles, windowedLiveFiles]);
 
     const fetchComparisonDiffEntry = React.useCallback(
         async (filePath: string, fullContext = false): Promise<ComparisonDiffResult> => {
@@ -206,7 +214,7 @@ export function useDiffViewComparisons({
                     };
                 }
                 const response = await loadComparisonDiff(filePath, fullContext ? FULL_CONTEXT_DIFF_LINES : DEFAULT_CONTEXT_DIFF_LINES);
-                return { status: 'ready', data: createTextDiffDataFromPatch(filePath, response.diff, fullContext ? 'full' : 'patch') };
+                return createComparisonDiffFromPatch(filePath, response.diff, fullContext ? 'full' : 'patch');
             } catch (error) {
                 return { status: 'error', message: error instanceof Error ? error.message : t('diffView.state.failedToLoadDiff') };
             }
@@ -333,7 +341,7 @@ export function useDiffViewComparisons({
         prChangeRequestTerm, commitComparison, selectedCommitHash, branches, setBaseOverride, clearBaseOverride,
         qualifiedBranchBase, branchBaseSource, isBranchBaseResolved, showBranchOption, setComparisonRetryRevision,
         commentOrigin, changeRequestReview, reviewProvider, comparison, commitFiles, commitFilesError, branchFiles,
-        branchFilesError, fetchComparisonDiffEntry, loadFullComparisonDiff, comparisonDiffData, branchFileCount,
-        changedFiles, changedFilePathsKey,
+        branchFilesError, fetchComparisonDiffEntry, loadFullComparisonDiff, comparisonDiffData, comparisonRangeKey, branchFileCount,
+        comparisonPathRevisions: branchDiffRevisions, changedFiles, changedFilePathsKey,
     };
 }

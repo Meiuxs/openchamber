@@ -179,6 +179,11 @@ export const createWebTrackerAPI = ({
       await call(provider, '/read-cache/refresh?scope=lists', { method: 'POST' }, z.unknown(), 'Failed to refresh tracker lists');
     },
 
+    async refreshItemReads(provider, identifier): Promise<void> {
+      if (await onLegacyWire()) return legacy.refreshItemReads(provider, identifier);
+      await call(provider, `/read-cache/refresh?${new URLSearchParams({ scope: 'item', identifier }).toString()}`, { method: 'POST' }, z.unknown(), 'Failed to refresh tracker item');
+    },
+
     async get(provider, id, containerId): Promise<TrackerItemResult> {
       if (await onLegacyWire()) return legacy.get(provider, id);
       // Identifiers restart per container (Local numbers per project), so the
@@ -195,7 +200,7 @@ export const createWebTrackerAPI = ({
 
     async updateState(provider, input: TrackerStateUpdateInput): Promise<TrackerItemResult> {
       if (await onLegacyWire()) return legacy.updateState(provider, input);
-      return call(provider, '/items/update', { method: 'POST', body: JSON.stringify({ id: input.id, stateId: input.stateId }) }, itemResultSchema, 'Failed to update tracker item');
+      return call(provider, '/items/update', { method: 'POST', body: JSON.stringify({ id: input.id, stateId: input.stateId, containerId: input.containerId ?? undefined }) }, itemResultSchema, 'Failed to update tracker item');
     },
 
     async mappingGet(provider): Promise<TrackerMappingResult> {

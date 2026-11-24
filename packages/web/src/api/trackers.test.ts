@@ -142,6 +142,13 @@ describe('web trackers: the neutral routes', () => {
     });
   });
 
+  it('sends the container with a state update so same-numbered items stay in their project', async () => {
+    trackerServer(() => Response.json({ connected: true, item: neutralItem }));
+    await createWebTrackerAPI({ fetch: fetchMock }).updateState('local', { id: 'LOCAL-1', stateId: 'done', containerId: 'project-b' });
+    expect(lastPath()).toBe('/api/tracker/local/items/update');
+    expect(JSON.parse(lastBody())).toEqual({ id: 'LOCAL-1', stateId: 'done', containerId: 'project-b' });
+  });
+
   it('keeps the grouping slug and the derived blocked flag the tracker reports', async () => {
     trackerServer(() => Response.json({
       connected: true,
@@ -212,6 +219,9 @@ describe('web trackers: the neutral routes', () => {
     expect(lastBody()).toBe(JSON.stringify({ kind: 'started', sessionId: 's1', identifier: 'ENG-12' }));
     await expect(api.preferencesSet('linear', { sessionComments: true })).resolves.toEqual({ sessionComments: true });
     expect(fetchMock.mock.calls.at(-1)?.[1]?.method).toBe('PUT');
+    await api.refreshItemReads('linear', 'ENG-12');
+    expect(lastPath()).toBe('/api/tracker/linear/read-cache/refresh?scope=item&identifier=ENG-12');
+    expect(fetchMock.mock.calls.at(-1)?.[1]?.method).toBe('POST');
   });
 });
 

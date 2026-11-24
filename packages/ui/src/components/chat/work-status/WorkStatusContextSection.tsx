@@ -553,8 +553,7 @@ export const WorkStatusContextSection: React.FC<Props> = ({ sessionId, directory
           // In the Tracker, read through this session's project; Cmd or Ctrl,
           // and anything the app cannot show, opens the link.
           onClick={(event) => {
-            openTrackerItem(entry.url, directory, event);
-            leaveWorkStatus?.();
+            if (openTrackerItem(entry.url, directory, event) !== 'guest-panel') leaveWorkStatus?.();
           }}
           className="group/linked"
           // The panel that shows what a session carries is the one that can

@@ -397,6 +397,10 @@
       "scope": "profile",
       "perSurface": true
     },
+    "sidebarShowSubagentSessions": {
+      "scope": "profile",
+      "perSurface": true
+    },
     "sidebarWorktreeNameByBranch": {
       "scope": "profile"
     },
@@ -860,6 +864,15 @@
     "sessionGoalDefaultBudget": {
       "scope": "profile"
     },
+    "sessionCostAlertsEnabled": {
+      "scope": "profile"
+    },
+    "sessionCostWarnThreshold": {
+      "scope": "profile"
+    },
+    "sessionCostCriticalThreshold": {
+      "scope": "profile"
+    },
     "summarizeLastMessage": {
       "scope": "profile"
     },
@@ -1033,6 +1046,10 @@
       "local": true
     },
     "contextEditorTreeWidth": {
+      "scope": "device",
+      "local": true
+    },
+    "gitSidebarWidth": {
       "scope": "device",
       "local": true
     },

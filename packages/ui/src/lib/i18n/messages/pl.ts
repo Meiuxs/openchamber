@@ -15,7 +15,7 @@ import { fileEditorAidsI18n } from './file-editor-aids.i18n';
 import { htmlRenderI18n } from './html-render.i18n';
 import { documentToolbarI18n } from './document-toolbar.i18n';
 import { uiBlocksI18n } from './ui-blocks.i18n';
-import { updateDialogCanaryI18n } from './update-dialog-canary.i18n';
+import { updateDialogCanaryI18n } from './update-dialog-canary.i18n'; import { updateIdleI18n } from './update-idle.i18n';
 import { aboutReleaseNotesI18n } from './about-release-notes.i18n';
 import { updateCheckErrorsI18n } from './update-check-errors.i18n';
 import { secretRequestI18n } from './secret-request.i18n';
@@ -25,6 +25,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { sessionCostI18n } from './session-cost.i18n';
 import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { rateGateI18n } from './rate-gate.i18n';
@@ -121,10 +122,14 @@ export const dict: Record<I18nKey, string> = {
   'sessions.aiRename.noSmallModel': 'Wymaga Small Model. Zaloguj się do dostawcy modeli lub wybierz go w Ustawienia → Sesje.',
   'commitComparison.mode': 'Commit',
   'pullRequestComparison.select': 'Wybierz pull request',
+  'pullRequestComparison.searchShort': 'Szukaj pull requestów',
   'pullRequestComparison.pickAbove': 'Wybierz pull request powyżej',
   'pullRequestComparison.diffUnavailable': "{provider} nie udostępnia diffów pull requestów, więc nie można ich tu pokazać ani omówić",
   'pullRequestComparison.partial': 'Nie udało się wczytać niektórych pull requestów',
   'commitComparison.select': 'Wybierz commit',
+  'commitComparison.branchDividerSingle': 'Powyżej: commit tylko w {branch}. Poniżej: już w {base}.',
+  'commitComparison.branchDividerPlural': 'Powyżej: commity tylko w {branch} ({count}). Poniżej: już w {base}.',
+  'commitComparison.backToList': 'Wróć do commitów',
   'commitComparison.search': 'Szukaj commitów...',
   'commitComparison.loadError': 'Nie udało się wczytać commitów',
   'commitComparison.noCommits': 'Nie znaleziono commitów',
@@ -218,7 +223,7 @@ export const dict: Record<I18nKey, string> = {
   ...htmlRenderI18n.pl,
   ...documentToolbarI18n.pl,
   ...uiBlocksI18n.pl,
-  ...updateDialogCanaryI18n.pl,
+  ...updateDialogCanaryI18n.pl, ...updateIdleI18n.pl,
   ...aboutReleaseNotesI18n.pl,
   ...updateCheckErrorsI18n.pl,
   ...secretRequestI18n.pl,
@@ -228,6 +233,7 @@ export const dict: Record<I18nKey, string> = {
   ...usageStatsI18n.pl,
   ...webSearchI18n.pl,
   ...sessionWarmingI18n.pl,
+  ...sessionCostI18n.pl,
   ...connectionHeartbeatI18n.pl,
   ...compactionSettingsI18n.pl,
   ...rateGateI18n.pl,
@@ -547,6 +553,7 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.header.displayMode.minimal': 'Minimalny',
   'sessions.sidebar.header.displayMode.showWork': 'Pokaż sekcję W toku',
   'sessions.sidebar.header.displayMode.showPinned': 'Pokaż sekcję Przypięte',
+  'sessions.sidebar.header.displayMode.showSubagents': 'Pokaż sesje podagentów',
   'sessions.sidebar.header.displayMode.detailedZoneRows': 'Szczegółowe wiersze',
   'sessions.sidebar.header.displayMode.worktreeNameByBranch': 'Nazywaj worktree według gałęzi',
   'sessions.sidebar.activity.pinnedTitle': 'Przypięte',
@@ -2256,6 +2263,10 @@ export const dict: Record<I18nKey, string> = {
   'diffView.layout.sideBySide': 'Widok obok siebie',
   'diffView.actions.wrapLines': 'Zawijanie linii',
   'diffView.actions.moreActions': 'Więcej akcji',
+  'diffView.actions.viewOptions': 'Opcje widoku diffa',
+  'gitView.sidebar.resizeAria': 'Zmień rozmiar paska bocznego Git',
+  'gitView.commit.stagedCountSummary': 'Przygotowane: {count}',
+  'gitView.commit.collapseAria': 'Zwiń formularz commita',
   'diffView.actions.expandAll': 'Rozwiń wszystko',
   'diffView.actions.collapseAll': 'Zwiń wszystko',
   'diffView.actions.openFileAtFirstChangedLine': 'Otwórz plik na pierwszej zmienionej linii',
@@ -2368,6 +2379,7 @@ export const dict: Record<I18nKey, string> = {
   'diffView.submodule.untrackedFiles': 'Ma nieśledzone pliki',
   'diffView.submodule.conflict': 'Konflikt scalania dotyczący zapisanego commita',
   'diffView.state.largeDiff': 'Duży diff ({count} zmienionych linii)',
+  'diffView.state.largeDiffLongLines': 'Duży diff (bardzo długie linie)',
   'diffView.state.largeDiffDescription': 'Renderowanie może być wolne. Nadal możesz wyświetlić diff przyciskiem poniżej.',
   'diffView.state.loadingChanges': 'Ładowanie zmian...',
   'diffView.state.loadingDiff': 'Ładowanie diffu...',
@@ -3171,6 +3183,11 @@ export const dict: Record<I18nKey, string> = {
   'openInApp.actions.openInAria': 'Otwórz w {app}',
   'openInApp.actions.refreshApps': 'Odśwież aplikacje',
   'openInApp.toast.pathCopied': 'Ścieżka skopiowana do schowka',
+  'openInApp.toast.sshOpenFailed': 'Nie udało się otworzyć {app}. Sprawdź, czy jest zainstalowany na tym komputerze.',
+  'openInApp.toast.sshInstanceChanged': 'To okno przełączyło się na inną instancję, zanim otworzył się {app}. Spróbuj ponownie.',
+  'openInApp.toast.sshSettingsMismatch': '{app} nie połączyłby się tak jak ta instancja: jej polecenie SSH ustawia {settings}, a {app} tego nie odczytuje. Przenieś te ustawienia do wpisu hosta w ~/.ssh/config.',
+  'openInApp.toast.sshUnresolved': 'Nie udało się odczytać ustawień SSH tej instancji, więc {app} nie został otwarty. Sprawdź jej polecenie SSH.',
+  'openInApp.toast.sshUnsupported': '{app} nie może otworzyć tego projektu przez SSH.',
   'planView.actions.copyPlanContents': 'Kopiuj treść planu',
   'planView.actions.implement': 'Wdróż',
   'planView.actions.improve': 'Ulepsz',

@@ -125,7 +125,7 @@ type Connected<T> = { connected: false } | ({ connected: true } & T);
 export type TrackerListResult = Connected<{ items: TrackerItemSummary[]; cursor: string | null; hasMore: boolean; facets?: TrackerListFacets }>;
 export type TrackerItemResult = Connected<{ item: TrackerItem | null }>;
 export type TrackerStatesResult = Connected<{ states: TrackerWorkflowState[] }>;
-export type TrackerStateUpdateInput = { id: string; stateId: string };
+export type TrackerStateUpdateInput = { id: string; stateId: string; containerId?: string | null };
 
 /** Create input for `POST /api/tracker/:provider/items/create`; the container (a Linear team, a local project) is required. */
 export type TrackerCreateItemInput = {
@@ -271,6 +271,7 @@ export interface TrackerAPI {
   authActivate(provider: TrackerProviderId, accountId: string): Promise<TrackerAuthStatus>;
   list(provider: TrackerProviderId, options?: TrackerListOptions): Promise<TrackerListResult>;
   refreshListReads(provider: TrackerProviderId): Promise<void>;
+  refreshItemReads(provider: TrackerProviderId, identifier: string): Promise<void>;
   get(provider: TrackerProviderId, id: string, containerId?: string | null): Promise<TrackerItemResult>;
   states(provider: TrackerProviderId, containerId: string): Promise<TrackerStatesResult>;
   updateState(provider: TrackerProviderId, input: TrackerStateUpdateInput): Promise<TrackerItemResult>;

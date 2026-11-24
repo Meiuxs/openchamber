@@ -524,7 +524,7 @@ export function readTrackerItemDetail(trackers: TrackerAPI, provider: string, it
 }
 
 /** The previewed tracker item's description and comments; asked once `settled`, like a repository item's. */
-export function useTrackerItemDetail(item: { provider: string; id: string; containerId?: string | null } | null, settled: boolean) {
+export function useTrackerItemDetail(item: { provider: string; id: string; identifier?: string | null; containerId?: string | null } | null, settled: boolean) {
     const { trackers } = useRuntimeAPIs();
     const provider = item?.provider ?? null;
     const itemId = item?.id ?? null;
@@ -554,5 +554,10 @@ export function useTrackerItemDetail(item: { provider: string; id: string; conta
         () => (key ? trackerDetails.ensure(key, fetch, { force: true }).then(() => undefined, () => undefined) : Promise.resolve()),
         [fetch, key],
     );
-    return { detail, refresh, followed: live.followed };
+    const identifier = cached.status === 'ready' ? cached.value.identifier : item?.identifier ?? null;
+    const refreshFromHost = React.useCallback(async () => {
+        if (trackers && provider && identifier) await trackers.refreshItemReads(provider, identifier).catch(() => undefined);
+        await refresh();
+    }, [identifier, provider, refresh, trackers]);
+    return { detail, refresh, refreshFromHost, followed: live.followed };
 }

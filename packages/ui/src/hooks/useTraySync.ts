@@ -1,4 +1,5 @@
 import React from 'react';
+import { useIdleDesktopUpdate } from '@/hooks/useIdleDesktopUpdate';
 import type { Session } from '@/lib/opencode/model';
 import { canUseElectronDesktopIPC, invokeDesktop, isDesktopLocalOriginActive } from '@/lib/desktop';
 import { getRuntimeApiBaseUrl } from '@/lib/runtime-switch';
@@ -180,7 +181,7 @@ const buildUsage = (): TrayUsage => {
     const rows: TrayUsageRow[] = [];
     for (const [label, window] of Object.entries(result.usage?.windows ?? {})) {
       const percent = mode === 'remaining' ? window.remainingPercent : window.usedPercent;
-      rows.push({ label: formatWindowLabel(label), value: formatQuotaWindowValueLabel(window, percent, t) });
+      rows.push({ label: formatWindowLabel(label), value: formatQuotaWindowValueLabel(window, percent, t, mode) });
     }
 
     const status = !result.ok && result.error
@@ -386,6 +387,7 @@ const buildSnapshot = (instanceName: string, includeTray: boolean): TraySnapshot
 };
 
 export const useTraySync = (): void => {
+  useIdleDesktopUpdate();
   React.useEffect(() => {
     if (!isTrayPlatform() || !canUseElectronDesktopIPC()) return;
     const trayEnabled = isTrayEnabled();

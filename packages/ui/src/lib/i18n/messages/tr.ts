@@ -14,7 +14,7 @@ import { fileEditorAidsI18n } from './file-editor-aids.i18n';
 import { htmlRenderI18n } from './html-render.i18n';
 import { documentToolbarI18n } from './document-toolbar.i18n';
 import { uiBlocksI18n } from './ui-blocks.i18n';
-import { updateDialogCanaryI18n } from './update-dialog-canary.i18n';
+import { updateDialogCanaryI18n } from './update-dialog-canary.i18n'; import { updateIdleI18n } from './update-idle.i18n';
 import { aboutReleaseNotesI18n } from './about-release-notes.i18n';
 import { updateCheckErrorsI18n } from './update-check-errors.i18n';
 import { secretRequestI18n } from './secret-request.i18n';
@@ -24,6 +24,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { sessionCostI18n } from './session-cost.i18n';
 import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { rateGateI18n } from './rate-gate.i18n';
@@ -120,10 +121,14 @@ export const dict = {
   'sessions.aiRename.noSmallModel': 'Small Model gerekir. Bir model sağlayıcısına giriş yapın veya Ayarlar → Oturumlar\'dan birini seçin.',
   'commitComparison.mode': 'Commit',
   'pullRequestComparison.select': 'Çekme isteği seçin',
+  'pullRequestComparison.searchShort': 'Pull request ara',
   'pullRequestComparison.pickAbove': 'Yukarıdan bir çekme isteği seçin',
   'pullRequestComparison.diffUnavailable': "{provider} çekme isteklerinin farklarını sunmuyor, bu yüzden burada gösterilemez veya adım adım incelenemez",
   'pullRequestComparison.partial': 'Bazı çekme istekleri yüklenemedi',
   'commitComparison.select': 'Commit seç',
+  'commitComparison.branchDividerSingle': 'Yukarıda: yalnızca {branch} içinde olan commit. Aşağıda: zaten {base} içinde.',
+  'commitComparison.branchDividerPlural': 'Yukarıda: yalnızca {branch} içinde olan {count} commit. Aşağıda: zaten {base} içinde.',
+  'commitComparison.backToList': 'Commit listesine dön',
   'commitComparison.search': 'Commit ara...',
   'commitComparison.loadError': 'Commitler yüklenemedi',
   'commitComparison.noCommits': 'Commit bulunamadı',
@@ -156,7 +161,7 @@ export const dict = {
   ...htmlRenderI18n.tr,
   ...documentToolbarI18n.tr,
   ...uiBlocksI18n.tr,
-  ...updateDialogCanaryI18n.tr,
+  ...updateDialogCanaryI18n.tr, ...updateIdleI18n.tr,
   ...aboutReleaseNotesI18n.tr,
   ...updateCheckErrorsI18n.tr,
   ...secretRequestI18n.tr,
@@ -166,6 +171,7 @@ export const dict = {
   ...usageStatsI18n.tr,
   ...webSearchI18n.tr,
   ...sessionWarmingI18n.tr,
+  ...sessionCostI18n.tr,
   ...connectionHeartbeatI18n.tr,
   ...compactionSettingsI18n.tr,
   ...rateGateI18n.tr,
@@ -638,6 +644,7 @@ export const dict = {
   'sessions.sidebar.header.displayMode.minimal': 'Minimal',
   'sessions.sidebar.header.displayMode.showWork': 'Devam eden bölümünü göster',
   'sessions.sidebar.header.displayMode.showPinned': 'Sabitlenenler bölümünü göster',
+  'sessions.sidebar.header.displayMode.showSubagents': 'Alt ajan oturumlarını göster',
   'sessions.sidebar.header.displayMode.detailedZoneRows': 'Ayrıntılı satırlar',
   'sessions.sidebar.header.displayMode.worktreeNameByBranch': 'Worktree’leri dala göre adlandır',
   'sessions.sidebar.activity.pinnedTitle': 'Sabitlenenler',
@@ -1890,6 +1897,7 @@ export const dict = {
   'diffView.state.loadingDiff': 'Diff yükleniyor...',
   'diffView.state.loadingChanges': 'Değişiklikler yükleniyor...',
   'diffView.state.largeDiff': 'Büyük diff ({count} değiştirilen satır)',
+  'diffView.state.largeDiffLongLines': 'Büyük diff (çok uzun satırlar)',
   'diffView.state.largeDiffDescription': 'Görüntüleme yavaş olabilir. Aşağıya tıklayarak diff\'i yine de görüntüleyebilirsiniz.',
   'diffView.summary.changedFilesSingle': '{count} dosya değişti',
   'diffView.summary.changedFilesPlural': '{count} dosya değişti',
@@ -1907,6 +1915,10 @@ export const dict = {
   'diffView.layout.sideBySide': 'Yan yana görünüm',
   'diffView.actions.wrapLines': 'Satır kaydırma',
   'diffView.actions.moreActions': 'Diğer işlemler',
+  'diffView.actions.viewOptions': 'Fark görünümü seçenekleri',
+  'gitView.sidebar.resizeAria': 'Git kenar çubuğunu yeniden boyutlandır',
+  'gitView.commit.stagedCountSummary': '{count} hazırlandı',
+  'gitView.commit.collapseAria': 'Commit formunu daralt',
   'diffView.actions.openFileInEditorAtChange': 'Bu dosyayı değişiklik konumunda editörde aç',
   'diffView.actions.openFileAtFirstChangedLine': 'Bu dosyayı ilk değişen satırda aç',
   'diffView.actions.reviewAria': 'Değişiklikleri incele',
@@ -2987,6 +2999,11 @@ export const dict = {
   'openInApp.actions.copyPath': 'Yolu Kopyala',
   'openInApp.actions.refreshApps': 'Uygulamaları Yenile',
   'openInApp.toast.pathCopied': 'Yol panoya kopyalandı',
+  'openInApp.toast.sshOpenFailed': '{app} açılamadı. Bu bilgisayarda yüklü olduğundan emin olun.',
+  'openInApp.toast.sshInstanceChanged': '{app} açılmadan önce bu pencere başka bir örneğe geçti. Tekrar deneyin.',
+  'openInApp.toast.sshSettingsMismatch': '{app} bu örnekle aynı şekilde bağlanmaz: SSH komutu {settings} ayarlıyor ve {app} bunları okumuyor. Bunları ~/.ssh/config içindeki ana bilgisayar girdisine taşıyın.',
+  'openInApp.toast.sshUnresolved': 'Bu örneğin SSH ayarları okunamadı, bu yüzden {app} açılmadı. SSH komutunu kontrol edin.',
+  'openInApp.toast.sshUnsupported': '{app} bu projeyi SSH üzerinden açamıyor.',
   'projectActions.actions.addActionAria': 'Eylem ekle',
   'projectActions.actions.addAction': 'Eylem ekle',
   'projectActions.actions.addNewAction': 'Yeni eylem ekle',

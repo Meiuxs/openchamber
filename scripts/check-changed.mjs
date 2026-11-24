@@ -172,12 +172,18 @@ export const parseOxlintReport = (stdout) => {
 };
 
 const runOxlint = (files, cwd) => {
-  if (files.length === 0) return [];
-  const result = spawnSync('bunx', ['oxlint', '-c', OXLINT_CONFIG, '-f', 'json', ...files], {
-    cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
-  });
-  if (!result.stdout) throw new Error(`oxlint produced no report: ${result.stderr}`);
-  return parseOxlintReport(result.stdout);
+  const diagnostics = [];
+  const batchSize = 40;
+  for (let index = 0; index < files.length; index += batchSize) {
+    const batch = files.slice(index, index + batchSize);
+    const result = spawnSync('bunx', ['oxlint', '-c', OXLINT_CONFIG, '-f', 'json', ...batch], {
+      cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+    });
+    if (result.error) throw result.error;
+    if (!result.stdout) throw new Error(`oxlint produced no report: ${result.stderr}`);
+    diagnostics.push(...parseOxlintReport(result.stdout));
+  }
+  return diagnostics;
 };
 
 const checkRatchet = (base, files, renames, deleted) => {

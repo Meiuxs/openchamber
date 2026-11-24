@@ -17,6 +17,7 @@ import { sanitizeDictationSettings } from './settings-dictation.js';
 import { normalizeGatewayList } from '../rate-gate/policy.js';
 import type { ClearableStringSettingsKey, NumberSettingsKey, StringArraySettingsKey, StringSettingsKey } from './settings-keys.js';
 import { keepOmittedBuiltinSections, sanitizeSidebarSections, sanitizeSidebarSettings, type SidebarSection } from './settings-sidebar.js';
+import { keepOrderedSessionCostAmounts, sanitizeSessionLimitSettings } from './settings-session-limits.js';
 
 const settingsDocumentSchema = z.looseObject({});
 export type SettingsDocument = z.infer<typeof settingsDocumentSchema>;
@@ -141,7 +142,7 @@ type BooleanSettingsKey =
   | 'desktopLanAccessEnabled' | 'desktopKeepAwakeEnabled' | 'desktopMinimizeToTrayEnabled' | 'desktopMacMenuBarEnabled'
   | 'desktopLinuxNativeFrame' | 'messageSearchEnabled' | 'messageSearchReasoningEnabled'
   | 'sidebarKeepWorkInPlace' | 'sidebarKeepPinnedInPlace' | 'sidebarShowChatsSection' | 'sidebarShowWorkSection'
-  | 'sidebarShowPinnedSection' | 'sidebarDetailedZoneRows' | 'sidebarWorktreeNameByBranch'
+  | 'sidebarShowPinnedSection' | 'sidebarDetailedZoneRows' | 'sidebarShowSubagentSessions' | 'sidebarWorktreeNameByBranch'
   | 'draftStartersVisible' | 'draftStartersCraftGoalAdded' | 'draftStartersScheduleTaskAdded'
   | 'showReasoningTraces' | 'streamingAutoFollowEnabled' | 'expandReasoningWhileStreaming'
   | 'codeBlockLineWrap' | 'tableCellWrap' | 'copyMessagesAsPlainText' | 'autoSaveEnabled' | 'fileEditorWrapLines'
@@ -149,7 +150,7 @@ type BooleanSettingsKey =
   | 'openTrackerLinksOnBoard' | 'diffWrapLines' | 'diffHideWhitespace' | 'allowPromptingSubagentSessions'
   | 'savePastedImagesAsFiles' | 'showOpenCodeRestartConfirm' | 'sessionTabsEnabled' | 'sessionTabsPerWorkspace'
   | 'terminalCloseOnExit' | 'terminalOpenOnProjectAction' | 'sessionRecapEnabled' | 'sessionSuggestionEnabled'
-  | 'sessionWorkEnabled' | 'sessionReviewOfferEnabled' | 'sessionGoalEnabled' | 'sessionGoalDefaultBudgetEnabled'
+  | 'sessionWorkEnabled' | 'sessionReviewOfferEnabled' | 'sessionGoalEnabled' | 'sessionGoalDefaultBudgetEnabled' | 'sessionCostAlertsEnabled'
   | 'collapsibleThinkingBlocks' | 'showTextJustificationActivity' | 'showDeletionDialog' | 'nativeNotificationsEnabled'
   | 'notifyOnSubtasks' | 'notifyOnCompletion' | 'notifyOnPullRequests' | 'notifyOnError' | 'notifyOnQuestion'
   | 'summarizeLastMessage' | 'autoDeleteEnabled' | 'sessionRetentionOnlyArchived' | 'sessionRetentionIncludeInWork'
@@ -160,7 +161,6 @@ type BooleanSettingsKey =
   | 'promptNavigatorEnabled' | 'wideChatLayoutEnabled' | 'showSplitAssistantMessageActions' | 'directoryShowHidden'
   | 'filesViewShowGitignored' | 'reportUsage' | 'responseStyleEnabled' | 'dictationEnabled' | 'dictationAutoSend'
   | 'sttCorrectTranscript' | (typeof AGENT_TOOL_BOOLEAN_KEYS)[number];
-
 
 export interface UsageModelGroups {
   customGroups?: { id: string; label: string; models: string[]; order: number }[];
@@ -200,6 +200,8 @@ export type SanitizedSettings = Partial<Record<BooleanSettingsKey, boolean>>
     documentAttachBehavior?: 'ask' | 'save' | 'convert';
     fileEditorKeymap?: 'default' | 'vim';
     sessionGoalChecker?: 'classifier' | 'small-model';
+    sessionCostWarnThreshold?: number;
+    sessionCostCriticalThreshold?: number;
     notificationMode?: 'always' | 'hidden-only';
     notificationTemplates?: object;
     usageDisplayMode?: 'usage' | 'remaining';
@@ -584,12 +586,9 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
     if (isBoolean(candidate.sidebarShowWorkSection)) {
       result.sidebarShowWorkSection = candidate.sidebarShowWorkSection;
     }
-    if (candidate.sidebarShowPinnedSection === true || candidate.sidebarShowPinnedSection === false) {
-      result.sidebarShowPinnedSection = candidate.sidebarShowPinnedSection;
-    }
-    if (candidate.sidebarDetailedZoneRows === true || candidate.sidebarDetailedZoneRows === false) {
-      result.sidebarDetailedZoneRows = candidate.sidebarDetailedZoneRows;
-    }
+    if (isBoolean(candidate.sidebarShowPinnedSection)) result.sidebarShowPinnedSection = candidate.sidebarShowPinnedSection;
+    if (isBoolean(candidate.sidebarDetailedZoneRows)) result.sidebarDetailedZoneRows = candidate.sidebarDetailedZoneRows;
+    if (isBoolean(candidate.sidebarShowSubagentSessions)) result.sidebarShowSubagentSessions = candidate.sidebarShowSubagentSessions;
     if (candidate.sidebarWorktreeNameByBranch === true || candidate.sidebarWorktreeNameByBranch === false) {
       result.sidebarWorktreeNameByBranch = candidate.sidebarWorktreeNameByBranch;
     }
@@ -764,21 +763,7 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
     if (isBoolean(candidate.sessionReviewOfferEnabled)) {
       result.sessionReviewOfferEnabled = candidate.sessionReviewOfferEnabled;
     }
-    if (isBoolean(candidate.sessionGoalEnabled)) {
-      result.sessionGoalEnabled = candidate.sessionGoalEnabled;
-    }
-    if (candidate.sessionGoalChecker === 'classifier' || candidate.sessionGoalChecker === 'small-model') {
-      result.sessionGoalChecker = candidate.sessionGoalChecker;
-    }
-    if (isInteger(candidate.sessionGoalMaxAutoTurns) && candidate.sessionGoalMaxAutoTurns >= 1 && candidate.sessionGoalMaxAutoTurns <= 200) {
-      result.sessionGoalMaxAutoTurns = candidate.sessionGoalMaxAutoTurns;
-    }
-    if (isBoolean(candidate.sessionGoalDefaultBudgetEnabled)) {
-      result.sessionGoalDefaultBudgetEnabled = candidate.sessionGoalDefaultBudgetEnabled;
-    }
-    if (isNumber(candidate.sessionGoalDefaultBudget) && Number.isFinite(candidate.sessionGoalDefaultBudget) && candidate.sessionGoalDefaultBudget > 0) {
-      result.sessionGoalDefaultBudget = Math.floor(candidate.sessionGoalDefaultBudget);
-    }
+    sanitizeSessionLimitSettings(candidate, result);
     if (isBoolean(candidate.collapsibleThinkingBlocks)) {
       result.collapsibleThinkingBlocks = candidate.collapsibleThinkingBlocks;
     }
@@ -1379,6 +1364,7 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
     if (Array.isArray(changes.sidebarSections) && Array.isArray(current.sidebarSections)) {
       next.sidebarSections = keepOmittedBuiltinSections(sanitizeSidebarSections(current.sidebarSections), changes.sidebarSections);
     }
+    keepOrderedSessionCostAmounts(current, next);
 
     return next;
   };

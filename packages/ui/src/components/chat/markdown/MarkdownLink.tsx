@@ -29,8 +29,9 @@ import { MarkdownMediaLinkContext, useMarkdownMedia } from './markdown-media-con
 import { openMarkdownDocumentLink } from '@/components/views/files/previews/useMarkdownLocalAssets';
 import { claimGuestIdentifier, claimGuestUrl } from '@/lib/guests/links';
 import { guestPanelOpensHere } from '@/lib/guests/phone';
+import { useGuestScopeStore } from '@/lib/guests/folders';
 import { useGuestsStore } from '@/lib/guests/store';
-import { isBuiltInLink, runGuestLink } from './guestLinkClick';
+import { guestPanelHiddenHere, isBuiltInLink, runGuestLink } from './guestLinkClick';
 
 function useConfirmedInlineFile(raw: string, inputKind: FileReferenceSource = 'path'): string | null {
   const { directory, fileReferences, confirmFile } = useMarkdownPresentation();
@@ -141,9 +142,12 @@ function GuestIdentifierLink({ identifier, className, children }: { identifier: 
   const claim = guestLinks ? claimGuestIdentifier(guestLinks, identifier) : null;
   const guest = useGuestsStore((state) => (claim ? state.guests.find((entry) => entry.id === claim.guestId) : undefined));
   const name = guest?.name;
+  const scopePaths = useGuestScopeStore((state) => state.paths);
   const openChatLink = useOpenChatLink(directory);
   if (!claim || !guest || !name) return <>{children}</>;
-  const pageUrl = claim.action === 'open' && !guestPanelOpensHere(guest) ? claim.url : undefined;
+  const pageUrl = claim.action === 'open' && (!guestPanelOpensHere(guest) || guestPanelHiddenHere(guest, scopePaths) !== null)
+    ? claim.url
+    : undefined;
   const activate = (event: React.MouseEvent | React.KeyboardEvent) => {
     if ('key' in event && event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -253,7 +257,13 @@ function ScreenMarkdownHref({ href, children: originalChildren, node, ...props }
     }
     if (href.startsWith('#') && !media?.documentAssets) {
       event.preventDefault();
-      const id = decodeURIComponent(href.slice(1));
+      const fragment = href.slice(1);
+      let id: string;
+      try {
+        id = decodeURIComponent(fragment);
+      } catch {
+        id = fragment;
+      }
       const root = event.currentTarget.closest('[data-markdown-content]');
       const target = root ? Array.from(root.querySelectorAll<HTMLElement>('[id]')).find((element) => element.id === id) : null;
       target?.scrollIntoView({ block: 'nearest' });

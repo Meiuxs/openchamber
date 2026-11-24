@@ -162,12 +162,12 @@ export const AboutSettings: React.FC<AboutSettingsProps> = ({ initialUpdateDialo
     error: s.error,
     downloading: s.downloading,
     downloaded: s.downloaded,
-    installing: s.installing,
+    installing: s.installing, idlePhase: s.idlePhase, idleReason: s.idleReason, idleRemainingMs: s.idleRemainingMs,
     progress: s.progress,
     runtimeType: s.runtimeType,
     checkForUpdates: s.checkForUpdates,
     downloadUpdate: s.downloadUpdate,
-    restartToUpdate: s.restartToUpdate,
+    restartToUpdate: s.restartToUpdate, queueIdleInstall: s.queueIdleInstall, cancelIdleInstall: s.cancelIdleInstall,
   })));
   const { isMobile } = useDeviceInfo();
   const isNativeApp = React.useMemo(() => isCapacitorApp(), []);
@@ -741,11 +741,11 @@ export const AboutSettings: React.FC<AboutSettingsProps> = ({ initialUpdateDialo
           info={update.info}
           downloading={updateStore.downloading}
           downloaded={updateStore.downloaded}
-          installing={updateStore.installing}
+          installing={updateStore.installing} idlePhase={updateStore.idlePhase} idleReason={updateStore.idleReason} idleRemainingMs={updateStore.idleRemainingMs}
           progress={updateStore.progress}
           error={update.error}
           onDownload={updateStore.downloadUpdate}
-          onRestart={updateStore.restartToUpdate}
+          onRestart={updateStore.restartToUpdate} onInstallWhenIdle={updateStore.queueIdleInstall} onCancelIdleInstall={updateStore.cancelIdleInstall}
           runtimeType={update.runtimeType}
         />
         {remoteHostUpdateDialog}
@@ -901,11 +901,11 @@ export const AboutSettings: React.FC<AboutSettingsProps> = ({ initialUpdateDialo
         info={update.info}
         downloading={updateStore.downloading}
         downloaded={updateStore.downloaded}
-        installing={updateStore.installing}
+        installing={updateStore.installing} idlePhase={updateStore.idlePhase} idleReason={updateStore.idleReason} idleRemainingMs={updateStore.idleRemainingMs}
         progress={updateStore.progress}
         error={update.error}
         onDownload={updateStore.downloadUpdate}
-        onRestart={updateStore.restartToUpdate}
+        onRestart={updateStore.restartToUpdate} onInstallWhenIdle={updateStore.queueIdleInstall} onCancelIdleInstall={updateStore.cancelIdleInstall}
         runtimeType={update.runtimeType}
       />
       {remoteHostUpdateDialog}

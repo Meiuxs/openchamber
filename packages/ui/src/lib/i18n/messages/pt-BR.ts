@@ -15,7 +15,7 @@ import { fileEditorAidsI18n } from './file-editor-aids.i18n';
 import { htmlRenderI18n } from './html-render.i18n';
 import { documentToolbarI18n } from './document-toolbar.i18n';
 import { uiBlocksI18n } from './ui-blocks.i18n';
-import { updateDialogCanaryI18n } from './update-dialog-canary.i18n';
+import { updateDialogCanaryI18n } from './update-dialog-canary.i18n'; import { updateIdleI18n } from './update-idle.i18n';
 import { aboutReleaseNotesI18n } from './about-release-notes.i18n';
 import { updateCheckErrorsI18n } from './update-check-errors.i18n';
 import { secretRequestI18n } from './secret-request.i18n';
@@ -25,6 +25,7 @@ import { settingsHintsI18n } from './settings-hints.i18n';
 import { usageStatsI18n } from './usage-stats.i18n';
 import { webSearchI18n } from './websearch.i18n';
 import { sessionWarmingI18n } from './session-warming.i18n';
+import { sessionCostI18n } from './session-cost.i18n';
 import { connectionHeartbeatI18n } from './connection-heartbeat.i18n';
 import { compactionSettingsI18n } from './compaction-settings.i18n';
 import { rateGateI18n } from './rate-gate.i18n';
@@ -121,10 +122,14 @@ export const dict: Record<I18nKey, string> = {
   'sessions.aiRename.noSmallModel': 'Precisa de um Small Model. Entre em um provedor de modelos ou escolha um em Configurações → Sessões.',
   'commitComparison.mode': 'Commit',
   'pullRequestComparison.select': 'Selecionar pull request',
+  'pullRequestComparison.searchShort': 'Pesquisar pull requests',
   'pullRequestComparison.pickAbove': 'Escolha um pull request acima',
   'pullRequestComparison.diffUnavailable': "{provider} não fornece o diff de pull requests, então não dá para mostrá-los nem percorrê-los aqui",
   'pullRequestComparison.partial': 'Não foi possível carregar alguns pull requests',
   'commitComparison.select': 'Selecionar commit',
+  'commitComparison.branchDividerSingle': 'Acima: o commit que só está em {branch}. Abaixo: já em {base}.',
+  'commitComparison.branchDividerPlural': 'Acima: {count} commits que só estão em {branch}. Abaixo: já em {base}.',
+  'commitComparison.backToList': 'Voltar aos commits',
   'commitComparison.search': 'Buscar commits...',
   'commitComparison.loadError': 'Não foi possível carregar os commits',
   'commitComparison.noCommits': 'Nenhum commit encontrado',
@@ -228,7 +233,7 @@ export const dict: Record<I18nKey, string> = {
   ...htmlRenderI18n['pt-BR'],
   ...documentToolbarI18n['pt-BR'],
   ...uiBlocksI18n['pt-BR'],
-  ...updateDialogCanaryI18n['pt-BR'],
+  ...updateDialogCanaryI18n['pt-BR'], ...updateIdleI18n['pt-BR'],
   ...aboutReleaseNotesI18n['pt-BR'],
   ...updateCheckErrorsI18n['pt-BR'],
   ...secretRequestI18n['pt-BR'],
@@ -238,6 +243,7 @@ export const dict: Record<I18nKey, string> = {
   ...usageStatsI18n['pt-BR'],
   ...webSearchI18n['pt-BR'],
   ...sessionWarmingI18n['pt-BR'],
+  ...sessionCostI18n['pt-BR'],
   ...connectionHeartbeatI18n['pt-BR'],
   ...compactionSettingsI18n['pt-BR'],
   ...rateGateI18n['pt-BR'],
@@ -724,6 +730,7 @@ export const dict: Record<I18nKey, string> = {
   "sessions.sidebar.header.displayMode.minimal": "Mínimo",
   "sessions.sidebar.header.displayMode.showWork": "Mostrar em andamento",
   "sessions.sidebar.header.displayMode.showPinned": "Mostrar fixadas",
+  "sessions.sidebar.header.displayMode.showSubagents": "Mostrar sessões de subagentes",
   "sessions.sidebar.header.displayMode.detailedZoneRows": "Linhas detalhadas",
   "sessions.sidebar.header.displayMode.worktreeNameByBranch": "Nomear worktrees pelo branch",
   "sessions.sidebar.activity.pinnedTitle": "Fixadas",
@@ -1972,6 +1979,7 @@ export const dict: Record<I18nKey, string> = {
   "diffView.state.loadingDiff": "Carregando diff...",
   "diffView.state.loadingChanges": "Carregando alterações...",
   "diffView.state.largeDiff": "Diff grande ({count} linhas alteradas)",
+  "diffView.state.largeDiffLongLines": "Diff grande (linhas muito longas)",
   "diffView.state.largeDiffDescription": "A renderização pode ser lenta. Você ainda pode ver o diff pelo botão abaixo.",
   "diffView.summary.changedFilesSingle": "{count} arquivo modificado",
   "diffView.summary.changedFilesPlural": "{count} arquivos modificados",
@@ -1996,6 +2004,10 @@ export const dict: Record<I18nKey, string> = {
   "diffView.layout.sideBySide": "Visualização lado a lado",
   "diffView.actions.wrapLines": "Quebra de linha",
   "diffView.actions.moreActions": "Mais ações",
+  "diffView.actions.viewOptions": "Opções de visualização do diff",
+  "gitView.sidebar.resizeAria": "Redimensionar a barra lateral do Git",
+  "gitView.commit.stagedCountSummary": "{count} em stage",
+  "gitView.commit.collapseAria": "Recolher formulário de commit",
   "diffView.actions.openFileInEditorAtChange": "Abrir este arquivo no editor nesta alteração",
   "diffView.actions.openFileAtFirstChangedLine": "Abrir este arquivo na primeira linha alterada",
   'diffView.actions.reviewAria': 'Revisar alterações',
@@ -3127,6 +3139,11 @@ export const dict: Record<I18nKey, string> = {
   "openInApp.actions.copyPath": "Copiar caminho",
   "openInApp.actions.refreshApps": "Atualizar aplicativos",
   "openInApp.toast.pathCopied": "Caminho copiado para a área de transferência",
+  "openInApp.toast.sshOpenFailed": "Não foi possível abrir o {app}. Verifique se ele está instalado neste computador.",
+  "openInApp.toast.sshInstanceChanged": "Esta janela mudou para outra instância antes de o {app} abrir. Tente novamente.",
+  "openInApp.toast.sshSettingsMismatch": "O {app} não se conectaria como esta instância: o comando SSH dela define {settings}, que o {app} não lê. Mova essas configurações para a entrada do host em ~/.ssh/config.",
+  "openInApp.toast.sshUnresolved": "Não foi possível ler as configurações SSH desta instância, então o {app} não foi aberto. Verifique o comando SSH dela.",
+  "openInApp.toast.sshUnsupported": "O {app} não consegue abrir este projeto via SSH.",
   "projectActions.actions.addActionAria": "Adicionar ação",
   "projectActions.actions.addAction": "Adicionar ação",
   "projectActions.actions.addNewAction": "Adicionar nova ação",

@@ -62,7 +62,7 @@ export const SourceBoardTrackerStatus: React.FC<{ item: TrackerItemSummary; onCh
         if (stateId === currentId || updating) return;
         setUpdating(true);
         try {
-            const result = await trackers.updateState(item.provider, { id: item.id, stateId });
+            const result = await trackers.updateState(item.provider, { id: item.id, stateId, containerId: item.container?.id ?? undefined });
             if (!result.connected || !result.item) {
                 toast.error(t('sourceBoard.toast.statusUpdateFailed'));
                 return;

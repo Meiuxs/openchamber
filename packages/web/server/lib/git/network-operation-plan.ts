@@ -219,7 +219,7 @@ const parseAuxiliaryGrants = (value: JsonValue | undefined) => {
 type TransferEndpointOptions = { httpsName?: boolean; insecureOrigins?: Set<string> | null };
 
 const isSafeTransferEndpoint = (value: string, providers: typeof sourceControlProviderDescriptors | null = null, { httpsName = false, insecureOrigins = null }: TransferEndpointOptions = {}) => {
-  if (value.length > 4096) return false;
+  if (value.length > 4096 || /[\0-\x20\x7f]/.test(value)) return false;
   if (!value.includes('://')) {
     const match = value.match(/^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?:([^\s:\\]+)$/);
     return match !== null && !/[?#]/.test(value) && !capture(match, 1).startsWith('-')
@@ -239,7 +239,7 @@ const isSafeTransferEndpoint = (value: string, providers: typeof sourceControlPr
     && (!parsed.username || ((parsed.protocol === 'ssh:' || httpsName) && /^[A-Za-z0-9._][A-Za-z0-9._-]*$/.test(parsed.username)))
     && !parsed.password && !parsed.search && !parsed.hash
     && Boolean(parsed.hostname) && Boolean(parsed.pathname) && parsed.pathname !== '/'
-    && !/[\0-\x20\x7f\\]/.test(pathname)
+    && /^[\x20-\x5b\x5d-\x7e\u0080-\uffff]*$/.test(pathname)
     && pathname.split('/').slice(1).every((part) => part && part !== '.' && part !== '..');
 };
 const assertSafeExistingEndpoint = (endpoint: JsonValue | undefined, providers: typeof sourceControlProviderDescriptors | null = null, options: TransferEndpointOptions | undefined = undefined) => {

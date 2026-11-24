@@ -1,4 +1,5 @@
 import { registerNotificationEmitRoutes } from '../notifications/emit-route.js';
+import { registerFreePortRoute } from './free-port-route.js';
 import { registerHttpResponseDiagnostics } from './core-routes.js';
 import type {
   AuthAndAccessDependencies,
@@ -193,6 +194,8 @@ export const createBootstrapRuntime = (dependencies: BootstrapDependencies) => {
 
     notificationEmitRoutes.registerApiRoute(requireApiAuth);
     rateGateRuntime?.registerStatusRoute(app, requireApiAuth);
+
+    registerFreePortRoute({ app, requireAuth: requireApiAuth });
 
     registerTtsRoutes(app, { sayTTSCapability });
 

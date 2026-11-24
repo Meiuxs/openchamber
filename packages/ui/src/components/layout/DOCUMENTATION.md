@@ -12,10 +12,11 @@ its scopes and seeding belong to `stores/DOCUMENTATION.md`
 The menu of a file tab in `ContextPanel.tsx` acts on the right-clicked tab,
 including when it is inactive. Copy relative path uses the current project
 directory (`contextPanelPaths.ts`, which also labels same-named tabs); reveal
-follows the file tree and shows whenever `files.revealPath` exists, in a
-browser included: `POST /api/fs/reveal` opens the folder on the machine running
-the server, which for a local server is the reader's own machine. VS Code does
-not mount `ContextPanel`, so it has no such menu.
+follows the file tree and shows whenever `files.revealPath` exists, except in a
+browser client runtime where there is no local file manager to reveal in:
+`POST /api/fs/reveal` opens the folder on the machine running the server, which
+for a local server is the reader's own machine. VS Code does not mount
+`ContextPanel`, so it has no such menu.
 
 ## Context panel file tabs
 
@@ -352,6 +353,9 @@ zone itself activates descendant focus-visible selectors across a large tree.
 The right slot clips both axes so tab reveal cannot scroll its wider hidden
 content and drag the work-status card sideways. A size data attribute conveys
 the target size without an inherited CSS variable that restyles descendants.
+The zone and its card take their size as literal widths for the same reason:
+the zone's size used to be an inherited custom property, and every expand or
+collapse restyled the whole surface inside, 10,000 elements for the Git panel.
 
 ### Why local titlebar width publication and not a root variable
 
@@ -366,6 +370,19 @@ height directly so sidebar animation does not force layout reads.
 Portalled toolbars sit in the header DOM while their React events follow a
 different ancestry. Native listeners cover the header's empty drag regions
 without taking buttons, fields or strips that already own their gestures.
+
+### Why one native no-drag region for the session tabs
+
+Electron can count a tab's no-drag rectangle even where the scroller clips it.
+While the tabs overflow (`data-tabs-overflow`), the scroller supplies one
+bounded native region so hidden tabs cannot block window dragging in the
+sidebar, and every gap that lies inside the viewport (`data-gap-in-view` on the
+slot after it, set on scroll and resize) gets a full-height drag region of its
+own, the slot's `::after`, apart from the separator's `::before`. Gaps move the
+window at the start and after scrolling, next to a clipped tab too. A strip that fits keeps per-tab regions and its gaps
+drag through the header. Tab controls keep their no-drag class for the header's
+gesture handler; open dialogs and menus turn the gap regions off like the
+header's.
 
 ### Why grouped hidden settings and not a visible allowlist
 

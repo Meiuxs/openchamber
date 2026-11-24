@@ -5,7 +5,7 @@ import { getRuntimeExtraHeadersSync } from './runtime-auth';
 import { isCapacitorApp } from './platform';
 import { isRelayModeActive } from './relay/runtime-tunnel';
 import { subscribeRuntimeEndpointChanged } from './runtime-switch';
-import { isVSCodeRuntime } from './desktop';
+import { isDesktopShell, isVSCodeRuntime } from './desktop';
 import { canDriveBrowserPage } from './browser/hostCapability';
 import { parseBrowserControlEvent, type BrowserControlEvent } from './browser/controlEvents';
 import { messageQueueUpdatedEventSchema, type MessageQueueUpdatedEvent } from '@/stores/messageQueueStore';
@@ -22,6 +22,7 @@ import { rateGateStatusSchema, type RateGateStatus } from './rate-gate/status';
 import { limitFailoverSchema, type LimitFailoverEvent } from './limitFailoverEvent';
 import type { SyncEvent } from './opencode/events';
 import { classifyStreamPayload } from '@/sync/event-pipeline';
+import { dispatchAppearanceChangedEvent, type AppearanceChangedEvent } from './appearanceEvents';
 
 type ScheduledTaskRanEvent = {
   type: 'scheduled-task-ran';
@@ -97,8 +98,6 @@ type GuestsChangedEvent = { type: 'guests-changed' };
 type GuestMarksChangedEvent = { type: 'guest-marks-changed' };
 
 type GuestServiceEvent = { type: 'guest-service-event'; guestId: string; topic: string; data: JsonValue };
-
-type ThemesChangedEvent = { type: 'themes-changed' };
 
 type RateGateEvent = { type: 'rate-gate'; status: RateGateStatus };
 
@@ -191,6 +190,7 @@ const notificationPropertiesSchema = z.object({
 });
 
 type OpenChamberEvent =
+  | AppearanceChangedEvent
   | { type: 'terminal-sessions-changed' }
   | { type: 'notification'; payload: z.infer<typeof notificationPropertiesSchema> }
   | { type: 'event-stream-ready'; connectionId: string | null }
@@ -225,7 +225,6 @@ type OpenChamberEvent =
   | GuestsChangedEvent
   | GuestMarksChangedEvent
   | GuestServiceEvent
-  | ThemesChangedEvent
   | LimitFailoverEvent
   | RateGateEvent
   | ProjectContextChangedEvent
@@ -309,6 +308,7 @@ const connectFetchStream = (canControlBrowser: boolean) => {
       const response = await runtimeFetch('/api/openchamber/events', {
         query: canControlBrowser ? { browser: '1' } : undefined,
         headers: { Accept: 'text/event-stream' },
+        credentials: 'include',
         signal: controller.signal,
       });
       if (controller.signal.aborted) {
@@ -584,10 +584,7 @@ const dispatchFromEnvelope = (envelope: { type: string; properties: unknown }) =
     return;
   }
 
-  if (envelope.type === 'openchamber:themes-changed') {
-    for (const listener of listeners) listener({ type: 'themes-changed' });
-    return;
-  }
+  if (dispatchAppearanceChangedEvent(envelope, listeners)) return;
 
   if (envelope.type === 'openchamber:limit-failover') {
     const parsed = limitFailoverSchema.safeParse(envelope.properties);
@@ -730,7 +727,7 @@ const connect = () => {
   cleanupSource();
 
   const canControlBrowser = canDriveBrowserPage();
-  if (isRelayModeActive() || (Object.keys(getRuntimeExtraHeadersSync()).length > 0 && isCapacitorApp())) {
+  if (isDesktopShell() || isRelayModeActive() || (Object.keys(getRuntimeExtraHeadersSync()).length > 0 && isCapacitorApp())) {
     connectFetchStream(canControlBrowser);
     return;
   }
