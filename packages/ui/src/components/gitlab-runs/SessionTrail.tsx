@@ -2,9 +2,8 @@
  * The sessions a run has opened, as one compact row: the activity each one
  * belongs to and the time it started, clicking through to the session itself.
  *
- * `RunSteps` answers the same question with the full per-stop trail; this is
- * the one-line version for a card that is folded — the sessions a fix and its
- * reviews opened stay reachable without opening anything.
+ * This is the one-line version for a folded card, so the sessions a fix and
+ * its reviews opened stay reachable without opening anything.
  */
 import * as React from 'react';
 

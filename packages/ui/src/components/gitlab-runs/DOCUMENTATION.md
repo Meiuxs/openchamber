@@ -13,6 +13,12 @@ one run that belongs to the item it has open.
   through it, so a new ledger field is added once. `projectEntryId`, `sessions`,
   `events` and `issueState` are optional: a server older than those fields still
   lists, and only the global view's actions need the first one.
+  `recordPath` and `projectDirectory` are optional too and transform to null:
+  a run whose delivery note was never written, or whose settings entry is gone,
+  simply offers no note action.
+- `GUIDE_KEYS` includes `record-write-failed`: a run blocked on the delivery
+  note explains that the note could not be written and names the folder or path
+  to fix, and says the automation retries on its own.
 - `useGitlabRuns(directory, { pollWhileActive, includeDone })` reads
   `/api/gitlab-issues/runs`; a `null` directory asks for every project. A failed
   read keeps the last list and sets `error`. A directory the server says is not
@@ -65,9 +71,9 @@ unreadable session leaves the other sessions' files in place. `FlowAudit` draws
 the stops, the events at each stop and one "open session" action per session;
 that action opens the session's chat view, where its tools and output are
 readable. The ledger only records event summaries, so the chat view is the log
-detail and the trail is its index. `RunSteps` stays the in-card version for the
-board's per-item status, and `RunRail` stays the one-line version where there is
-no room for names.
+detail and the trail is its index. `SessionTrail` stays the in-card version for
+the board's per-item status, and `RunRail` stays the one-line version where
+there is no room for names.
 
 Which stops show is `railOf(run)`; a blocked run marks the stop it was blocked
 from instead of adding one, because `blocked` is a state of the run and not a
@@ -81,12 +87,12 @@ loop started; how many rounds it has been through rides on the run as
 `feedbackRounds` and shows beside the review round. Both fields are
 optional-read, so a server older than them still lists.
 
-`sessionTrailOf` is the one source both trail views read: the full per-stop
-list in `RunSteps`, and the compact one-line `SessionTrail` on a folded card.
-The folded card keeps the trail visible because the sessions a fix and its
-reviews opened are the run's work — a card that shows only the live session
-hides everything that already happened, and the step view is a click further
-away than the card itself.
+`sessionTrailOf` is the one source the compact trail and the file collector
+read: `SessionTrail` draws the one-line list on a folded card, and
+`useRunFiles` uses it to decide which sessions' messages to inspect. The folded
+card keeps the trail visible because the sessions a fix and its reviews opened
+are the run's work — a card that shows only the live session hides everything
+that already happened, and each session's chat view is a click away.
 
 A stop's clock comes from the first event that entered it *and* carries a time:
 a stop is entered by the move and, when it starts a session, by the session start
@@ -98,6 +104,13 @@ their own clock for the same reason.
 The issue and merge-request links are anchors, not text-styled buttons: they open
 a page outside the app, and a link that only underlines on hover reads as text.
 The external-link mark beside them says the same thing before the pointer moves.
+When `recordPath` and `projectDirectory` are both set, `RunDetail` shows a
+delivery note action beside those links. It opens the note through
+`useUIStore.getState().openContextFile(projectDirectory, recordPath)`, the same
+local file path the app uses for any other file, so it works in web, desktop,
+VS Code and mobile. The action is absent when the note was never written or the
+project entry is gone. The note is a separate document, not a section inside the
+panel, so the section nav does not change.
 
 A session is a link under the stop it served — the fix, and one per review round
 — because that is the question it answers: what did the run do here, and where
@@ -117,7 +130,7 @@ appear on the issue.
 `AutomationSessionsView.tsx` is a separate page, reached from the sidebar. It
 asks for every project's runs with `includeDone` so finished runs stay
 reachable, then flattens each run's `sessions` into one row per session through
-`archiveRowsOf`. Rows group by the project that owns their run. Automation
+`sessionsOf`. Rows group by the project that owns their run. Automation
 sessions are hidden from the global session list, so the ledger is the only
 index that names them; opening a row passes the run's `worktreePath` to
 `setCurrentSession`, which is what lets a hidden session be admitted and read

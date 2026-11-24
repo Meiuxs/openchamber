@@ -20,7 +20,7 @@ import type { Metadata, Part } from '@/lib/opencode/model';
 
 import { sessionTrailOf, type Run } from './runModel';
 
-export type ChangedFile = {
+type ChangedFile = {
   path: string;
   status: 'added' | 'modified';
   added: number | null;

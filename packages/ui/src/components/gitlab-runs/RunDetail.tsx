@@ -14,6 +14,7 @@ import { Icon } from '@/components/icon/Icon';
 import { Button } from '@/components/ui/button';
 import { useI18n, type I18nKey } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { useUIStore } from '@/stores/useUIStore';
 
 import {
   guideKey,
@@ -89,6 +90,8 @@ export const RunDetail: React.FC<{
   const plan = run.plan;
   const impact = run.reviewImpact;
   const evidence = run.evidence;
+  const recordPath = run.recordPath ?? null;
+  const projectDirectory = run.projectDirectory ?? null;
 
   const triageLabel = triage
     ? t(triage.verdict === 'valid'
@@ -180,6 +183,15 @@ export const RunDetail: React.FC<{
             <a href={run.mrUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--primary-text)] hover:underline">
               MR !{run.mrIid}
             </a>
+          ) : null}
+          {recordPath && projectDirectory ? (
+            <button
+              type="button"
+              onClick={() => useUIStore.getState().openContextFile(projectDirectory, recordPath)}
+              className="text-[var(--primary-text)] hover:underline"
+            >
+              {t('gitlabRuns.detail.deliveryRecord')}
+            </button>
           ) : null}
           {run.branch ? (
             <span className="ms-auto flex min-w-0 max-w-full items-center gap-1" title={run.branch}>

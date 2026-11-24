@@ -95,6 +95,7 @@ const GUIDE_KEYS = {
   'feedback-limit': true,
   'insufficient-info': true,
   'not-an-issue': true,
+  'record-write-failed': true,
 } satisfies Record<string, true>;
 
 export const guideKey = (reason: string | null): I18nKey => {
@@ -130,9 +131,6 @@ const issueStateSchema = z.object({
   state: z.enum(['opened', 'closed']).nullable(),
   labels: z.array(z.string()),
 });
-
-export type RunEvent = z.infer<typeof runEventSchema>;
-export type RunIssueState = z.infer<typeof issueStateSchema>;
 
 /**
  * What the run concluded at each stage. Every shape is optional on the wire
@@ -181,12 +179,6 @@ const reviewImpactSchema = z.object({
   rollback: z.string(),
   testScope: z.string(),
 });
-
-export type RunTriage = z.infer<typeof triageSchema>;
-export type RunPlan = z.infer<typeof planSchema>;
-export type RunEvidence = z.infer<typeof evidenceSchema>;
-export type RunFinding = z.infer<typeof findingSchema>;
-export type RunReviewImpact = z.infer<typeof reviewImpactSchema>;
 
 /**
  * One session a run opened, with the stop it served: `stage` is the phase it
@@ -251,6 +243,8 @@ const runSchema = z.object({
   evidence: evidenceSchema.nullish().transform((value) => value ?? null),
   reviewFindings: z.array(findingSchema).nullish().transform((value) => value ?? []),
   reviewImpact: reviewImpactSchema.nullish().transform((value) => value ?? null),
+  recordPath: z.string().nullish().transform((value) => value ?? null).optional(),
+  projectDirectory: z.string().nullish().transform((value) => value ?? null).optional(),
 });
 
 export const runsResponseSchema = z.object({
@@ -279,30 +273,6 @@ export const formatAge = (iso: string | null): string | null => {
   if (hours < 24) return new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' }).format(-hours, 'hour');
   return new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' }).format(-Math.round(hours / 24), 'day');
 };
-
-/**
- * One session in the automation archive, derived from the ledger rather than
- * from the session list: automation sessions are hidden from that list, so the
- * ledger is the only place that names them. The run carries the project and
- * the worktree needed to open a hidden session by ID.
- */
-export type RunArchiveRow = {
-  key: string;
-  sessionId: string;
-  run: Run;
-  stage: string | null;
-  at: string | null;
-};
-
-export const archiveRowsOf = (runs: Run[]): RunArchiveRow[] => (
-  runs.flatMap((run) => sessionTrailOf(run).map((session) => ({
-    key: `${run.key}:${session.sessionId}`,
-    sessionId: session.sessionId,
-    run,
-    stage: session.stage,
-    at: session.at,
-  })))
-);
 
 /** A run that has not reached its end: the only kind the board's status shows. */
 export const isActiveRun = (run: Run): boolean => run.phase !== 'done';

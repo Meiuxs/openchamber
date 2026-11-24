@@ -15,7 +15,7 @@ export type AutomationRemovalDeps = {
   removeWorktree: (project: { id: string; path: string }, worktree: WorktreeMetadata) => Promise<void>;
 };
 
-export type AutomationRemoval = {
+type AutomationRemoval = {
   deleted: boolean;
   /**
    * `unused` when no worktree had to go (it is still shared, or there is none),
