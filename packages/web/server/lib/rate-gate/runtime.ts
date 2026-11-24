@@ -14,6 +14,7 @@ import { buildRateGatePluginSource } from './plugin-source.js';
 export const WAITING_TTL_MS = 90_000;
 export const WAIT_STAGGER_MS = 250;
 const FALLBACK_COOLDOWN_MS = 1_000;
+const MAX_BACKOFF_MS = 5 * 60_000;
 const MAX_STAGGER_POSITIONS = 8;
 const SUPPORT_TTL_MS = 30_000;
 export type RateGateLogDetails = Record<string, string | number | boolean | null | undefined>;
@@ -60,6 +61,7 @@ type AccountState = {
   grants: number[];
   authoritative: { remaining: number; resetAt: number } | null;
   limitedUntil: number | null;
+  consecutive429: number;
   waiting: Map<string, number>;
 };
 
@@ -162,6 +164,7 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
       grants: [],
       authoritative: null,
       limitedUntil: null,
+      consecutive429: 0,
       waiting: new Map(),
     };
     states.set(account.key, created);
@@ -186,7 +189,7 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
 
   const usageOf = (state: AccountState, remaining: number, limit: number) => {
     const total = state.authoritative ? state.grants.length + remaining : limit;
-    return { used: total - remaining, limit: total };
+    return { used: Math.min(state.grants.length, total), limit: total };
   };
 
   const spendGrant = (state: AccountState, at: number) => {
@@ -197,6 +200,7 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
   };
 
   const retryAtFor = (state: AccountState, at: number, windowMs: number) => {
+    if (state.limitedUntil !== null && state.limitedUntil > at) return state.limitedUntil;
     const candidates: number[] = [];
     if (state.grants[0]) candidates.push(state.grants[0] + windowMs);
     if (state.authoritative) candidates.push(state.authoritative.resetAt);
@@ -223,14 +227,28 @@ export const createRateGateRuntime = (deps: RateGateRuntimeDependencies): RateGa
     if (input.status === 429) {
       prune(state, at, windowMs);
       state.authoritative = null;
+      // OpenCode retries one failed request into several 429 reports. Once a
+      // cooldown is running, a duplicate neither escalates nor moves its end:
+      // recomputing here could shorten a gateway time or a running backoff.
+      const wasLimited = state.limitedUntil !== null && state.limitedUntil > at;
+      if (wasLimited) return;
       const localNext = state.grants[0] ? state.grants[0] + windowMs : at + FALLBACK_COOLDOWN_MS;
       const gatewayNext = Math.max(at + (limits.retryAfterMs ?? 0), reportedReset);
-      state.limitedUntil = gatewayNext > at ? gatewayNext : localNext;
+      if (gatewayNext > at) {
+        state.consecutive429 = 0;
+        state.limitedUntil = gatewayNext;
+        return;
+      }
+      state.consecutive429 += 1;
+      const base = state.grants[0] ? windowMs : FALLBACK_COOLDOWN_MS;
+      const cooldown = Math.min(base * 2 ** Math.max(0, state.consecutive429 - 1), MAX_BACKOFF_MS);
+      state.limitedUntil = Math.max(localNext, at + cooldown);
       return;
     }
     if (limits.remaining !== null && reportedReset > at) {
       state.authoritative = { remaining: limits.remaining, resetAt: reportedReset };
     }
+    if (input.status < 400) state.consecutive429 = 0;
   };
 
   const computeStatus = async (): Promise<RateGateStatus> => {

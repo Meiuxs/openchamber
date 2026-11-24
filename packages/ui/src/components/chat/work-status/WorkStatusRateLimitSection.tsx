@@ -40,11 +40,18 @@ export const WorkStatusRateLimitSection: React.FC<{ visible?: boolean }> = ({ vi
   if (!status || !status.enabled || accounts.length === 0) return null;
 
   const tightest = accounts[0];
+  const tightestUntil = tightest.limitedUntil;
   const summary = (
     <span className="inline-flex items-center gap-1.5">
-      <WorkStatusValue tone={toneOf(tightest, now)}>
-        {`${tightest.used}/${tightest.limit}`}
-      </WorkStatusValue>
+      {tightestUntil !== null && tightestUntil > now ? (
+        <WorkStatusValue tone="error">
+          {t('chat.workStatus.rateLimit.limitedUntil', { time: clock(tightestUntil, now) })}
+        </WorkStatusValue>
+      ) : (
+        <WorkStatusValue tone={toneOf(tightest, now)}>
+          {`${tightest.used}/${tightest.limit}`}
+        </WorkStatusValue>
+      )}
       {accounts.some((account) => account.waiting.length > 0) ? (
         <span className="text-muted-foreground">
           {t('chat.workStatus.rateLimit.queued', { count: accounts.reduce((total, account) => total + account.waiting.length, 0) })}

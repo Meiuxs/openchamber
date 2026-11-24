@@ -438,4 +438,103 @@ describe('the usage a panel reads', () => {
     await runtime.acquire(acquireBody({ sessionID: 's2' }));
     await expect(runtime.status()).resolves.toMatchObject({ accounts: [{ used: 2, limit: 100, remaining: 98 }] });
   });
+
+  it('counts what was admitted, not a forced zero, while the account is cooling', async () => {
+    const { runtime } = await setup({ requests: 100, windowMinutes: 1, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    await runtime.report({ providerID: 'intranet', sessionID: 's1', accountKey: 'credential:a', status: 429 });
+    await expect(runtime.status()).resolves.toMatchObject({ accounts: [{ used: 1, limit: 100, remaining: 0 }] });
+  });
+});
+
+describe('backoff on repeated 429 without a gateway time', () => {
+  const cool = (runtime, sessionID = 's1') => runtime.report({
+    providerID: 'intranet', sessionID, accountKey: 'credential:a', status: 429,
+  });
+
+  it('doubles the cooldown for each 429 after the previous one expired', async () => {
+    const { runtime, advance, at } = await setup({ requests: 100, windowMinutes: 1, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    await cool(runtime);
+    expect((await runtime.status()).accounts[0].limitedUntil).toBe(at() + 60_000);
+    advance(60_000);
+    await runtime.acquire(acquireBody({ sessionID: 's2' }));
+    await cool(runtime, 's2');
+    expect((await runtime.status()).accounts[0].limitedUntil).toBe(at() + 120_000);
+  });
+
+  it('does not escalate for the retries of one 429', async () => {
+    const { runtime, at } = await setup({ requests: 100, windowMinutes: 1, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    await cool(runtime);
+    await cool(runtime);
+    await cool(runtime);
+    expect((await runtime.status()).accounts[0].limitedUntil).toBe(at() + 60_000);
+  });
+
+  it('starts over after a success', async () => {
+    const { runtime, advance, at } = await setup({ requests: 100, windowMinutes: 1, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    await cool(runtime);
+    advance(60_000);
+    await runtime.acquire(acquireBody({ sessionID: 's2' }));
+    await cool(runtime, 's2');
+    advance(120_000);
+    await runtime.acquire(acquireBody({ sessionID: 's3' }));
+    await runtime.report({ providerID: 'intranet', sessionID: 's3', accountKey: 'credential:a', status: 200 });
+    await cool(runtime, 's3');
+    expect((await runtime.status()).accounts[0].limitedUntil).toBe(at() + 60_000);
+  });
+
+  it('keeps the whole backoff even when the local window ends sooner', async () => {
+    const { runtime, advance } = await setup({ requests: 100, windowMinutes: 1, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    await cool(runtime);
+    advance(60_000);
+    await runtime.acquire(acquireBody({ sessionID: 's2' }));
+    await cool(runtime, 's2');
+    const limitedUntil = (await runtime.status()).accounts[0].limitedUntil;
+    expect(limitedUntil).toBe(1_000_000 + 60_000 + 120_000);
+    expect((await runtime.acquire(acquireBody({ sessionID: 's3' }))).retryAt).toBe(limitedUntil);
+  });
+
+  it('honours a gateway retry time instead of escalating', async () => {
+    const { runtime, advance, at } = await setup({ requests: 100, windowMinutes: 1, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    await runtime.report({ providerID: 'intranet', sessionID: 's1', accountKey: 'credential:a', status: 429, retryAfterMs: 2_000 });
+    advance(2_000);
+    await runtime.acquire(acquireBody({ sessionID: 's2' }));
+    await runtime.report({ providerID: 'intranet', sessionID: 's2', accountKey: 'credential:a', status: 429, retryAfterMs: 2_000 });
+    expect((await runtime.status()).accounts[0].limitedUntil).toBe(at() + 2_000);
+  });
+
+  it('keeps the end of a cooldown when a duplicate 429 arrives later in it', async () => {
+    const { runtime, advance, at } = await setup({ requests: 100, windowMinutes: 1, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    await cool(runtime);
+    const until = at() + 60_000;
+    advance(30_000);
+    await cool(runtime);
+    expect((await runtime.status()).accounts[0].limitedUntil).toBe(until);
+  });
+
+  it('does not shorten a gateway cooldown with a headerless duplicate', async () => {
+    const { runtime, at } = await setup({ requests: 100, windowMinutes: 1, gateways: ['http://gw.corp'] });
+    await runtime.report({ providerID: 'intranet', sessionID: 's1', accountKey: 'credential:a', status: 429, retryAfterMs: 120_000 });
+    await cool(runtime);
+    expect((await runtime.status()).accounts[0].limitedUntil).toBe(at() + 120_000);
+  });
+
+  it('does not collapse a backoff once the window has rolled during it', async () => {
+    const { runtime, advance, at } = await setup({ requests: 100, windowMinutes: 1, gateways: ['http://gw.corp'] });
+    await runtime.acquire(acquireBody());
+    await cool(runtime);
+    advance(60_000);
+    await runtime.acquire(acquireBody({ sessionID: 's2' }));
+    await cool(runtime, 's2');
+    const until = at() + 120_000;
+    advance(60_000);
+    await cool(runtime, 's2');
+    expect((await runtime.status()).accounts[0].limitedUntil).toBe(until);
+  });
 });

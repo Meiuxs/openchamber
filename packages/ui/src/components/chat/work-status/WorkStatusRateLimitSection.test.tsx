@@ -134,6 +134,27 @@ describe('work status request rate section', () => {
     expect(text).toContain('1 queued');
   });
 
+  test('a limited summary shows the cooldown instead of a misleading used count', async () => {
+    served = statusWith({
+      accounts: [account({
+        used: 1,
+        limit: 100,
+        remaining: 0,
+        resetAt: NOW + 38_000,
+        limitedUntil: NOW + 38_000,
+        waiting: [{ sessionId: 'ses_1', until: NOW + 30_000 }],
+      })],
+    });
+    await render();
+
+    const heading = container.querySelector('[data-work-status-section="rateLimit"] [data-work-status-heading]');
+    const text = heading?.textContent ?? '';
+    expect(text).toContain('limited until');
+    expect(text).toContain('0:38');
+    expect(text).toContain('1 queued');
+    expect(text).not.toContain('1/100');
+  });
+
   test('an account with quota says when its next slot frees', async () => {
     await render();
     const text = container.textContent ?? '';
