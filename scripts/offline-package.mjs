@@ -30,6 +30,10 @@ const deliveryDir = path.join(repoRoot, 'scripts', 'delivery');
 // OpenCode discover user-level skills.
 const deliveredSkills = ['gitlab-issue-create'];
 const skillsRoot = path.join(repoRoot, '.agents', 'skills');
+// OpenCode commands shipped with the package, copied into the user-level
+// command directory so they are reachable as /<name> in any project.
+const deliveredCommands = ['gitlab-issue-auto.md'];
+const commandsRoot = path.join(repoRoot, '.opencode', 'commands');
 const argv = process.argv.slice(2);
 const has = (name) => argv.includes(name);
 const value = (name, fallback = null) => {
@@ -53,9 +57,9 @@ const fail = (message) => {
 
 // 每步一条 shell 字符串：spawnSync 传 args 数组加 shell:true 只是把它们拼接
 // (DEP0190)，而且各平台的命令本来就不一样。
-const run = (command, { cwd = repoRoot } = {}) => {
+const run = (command, { cwd = repoRoot, env = process.env } = {}) => {
   console.log(`> ${command}`);
-  const result = spawnSync(command, { stdio: 'inherit', shell: true, cwd });
+  const result = spawnSync(command, { stdio: 'inherit', shell: true, cwd, env });
   if (result.status !== 0) {
     fail(`命令执行失败，退出码 ${result.status ?? `信号 ${result.signal}`}: ${command}`);
   }
@@ -67,13 +71,24 @@ const webTgz = path.join(repoRoot, 'packages', 'web', `openchamber-web-${version
 console.log(`OpenChamber ${version} 离线交付包`);
 
 if (!skipBuild) {
-  // 构建 web 需要 workspace 的 devDependencies；node_modules 不完整时
-  // prepare-opencode-server 会报 Cannot find installed package @opencode/server。
+  // 构建 web 需要 workspace 的 devDependencies；node_modules 不完整时构建会中途失败。
   // 按锁文件恢复依赖链接，缓存优先，只有缺的包才走 registry。
   run('bun install --frozen-lockfile --prefer-offline');
   // SDK 必须先构建：web 的 prepack 会重建内置扩展，而扩展要对着 SDK 自己的产物校验。
   run('bun run --cwd packages/sdk build');
-  run('bun run build:web');
+  // 离线包用运行机器上的 opencode。web 默认会把内置服务打进 build/opencode-server，
+  // 运行时它优先于 PATH，所以这里跳过这一步。
+  run('bun run build:web', {
+    env: { ...process.env, OPENCHAMBER_SKIP_BUNDLED_OPENCODE_SERVER: '1' },
+  });
+}
+
+// build:web 会清空 build/；--skip-build 时旧产物可能还带着内置服务，一并清掉，
+// 免得它随 build/ 打进 tarball 并在运行时盖过系统的 opencode。
+const bundledServerDir = path.join(repoRoot, 'packages', 'web', 'build', 'opencode-server');
+if (fs.existsSync(bundledServerDir)) {
+  fs.rmSync(bundledServerDir, { recursive: true, force: true });
+  console.log(`清理内置 OpenCode 服务产物: ${path.relative(repoRoot, bundledServerDir)}`);
 }
 
 // 清掉旧版本的 tarball：tgz 与 zip 同放一个目录，安装脚本靠通配符读版本号，
@@ -152,10 +167,16 @@ for (const name of deliveredSkills) {
     fail(`缺少随包 skill：.agents/skills/${name}/SKILL.md`);
   }
 }
+for (const name of deliveredCommands) {
+  if (!fs.existsSync(path.join(commandsRoot, name))) {
+    fail(`缺少随包 command：.opencode/commands/${name}`);
+  }
+}
 // 组装目录：zip 要同时收文件和 skills 目录，flat 的 -j / 逐个 Path 列不够用。
 const stagingDir = path.join(repoRoot, `openchamber-intranet-${version}-staging`);
 fs.rmSync(stagingDir, { recursive: true, force: true });
 fs.mkdirSync(path.join(stagingDir, 'skills'), { recursive: true });
+fs.mkdirSync(path.join(stagingDir, 'commands'), { recursive: true });
 const deliveryFiles = ['install.ps1', 'install.sh', 'INSTALL.txt', 'RELEASE-NOTES.md', 'policy.example.json'];
 for (const name of deliveryFiles) {
   fs.copyFileSync(path.join(deliveryDir, name), path.join(stagingDir, name));
@@ -166,11 +187,18 @@ for (const tgz of [sdkTgz, webTgz]) {
 for (const name of deliveredSkills) {
   fs.cpSync(path.join(skillsRoot, name), path.join(stagingDir, 'skills', name), { recursive: true });
 }
+for (const name of deliveredCommands) {
+  fs.copyFileSync(path.join(commandsRoot, name), path.join(stagingDir, 'commands', name));
+}
 // 安装脚本只按这份清单装 skill；仓库 .agents/skills 下的其它开发技能不会进包，
 // 也不会因为将来有人往 skills/ 里多放目录而被顺手装到用户机器上。
 fs.writeFileSync(
   path.join(stagingDir, 'skills', 'manifest.json'),
   `${JSON.stringify({ skills: deliveredSkills }, null, 2)}\n`,
+);
+fs.writeFileSync(
+  path.join(stagingDir, 'commands', 'manifest.json'),
+  `${JSON.stringify({ commands: deliveredCommands }, null, 2)}\n`,
 );
 try {
   if (process.platform === 'win32') {
@@ -233,6 +261,16 @@ if (install) {
     fs.rmSync(dest, { recursive: true, force: true });
     fs.cpSync(path.join(skillsRoot, name), dest, { recursive: true });
     console.log(`已安装 skill：${dest}`);
+  }
+  const commandsTarget = path.join(
+    process.env.XDG_CONFIG_HOME?.trim() || path.join(os.homedir(), '.config'),
+    'opencode',
+    'commands',
+  );
+  for (const name of deliveredCommands) {
+    fs.mkdirSync(commandsTarget, { recursive: true });
+    fs.copyFileSync(path.join(commandsRoot, name), path.join(commandsTarget, name));
+    console.log(`已安装 command：${path.join(commandsTarget, name)}`);
   }
 }
 

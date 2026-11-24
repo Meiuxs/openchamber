@@ -11,12 +11,16 @@ SDK tarball 读取版本号，换新版本 zip 不需要改脚本。
 - openchamber-sdk-<version>.tgz  @openchamber/sdk，带类型定义的 guest SDK
 - install.ps1 / install.sh       Windows / Linux、macOS 一键安装与原地更新脚本
 - skills/                        随包 agent skills，安装时复制到用户级 skill 目录
+- commands/                      随包 OpenCode 命令，安装时复制到用户级命令目录
 - RELEASE-NOTES.md               本版本更新内容
 - INSTALL.txt                    本说明
 
 要求：Node.js >= 24.14.0（engines 字段会强制检查）。除包内自带的 SDK 外，
 其余运行时依赖（@opencode/client、@opencode/schema、express、node-pty 等）
 需要能从本机 npm 缓存或内部镜像解析，见“安装”。
+
+本包不内置 OpenCode 服务。运行机器需装好 opencode 并加入 PATH，或在 policy.json
+用 opencodeBinary 指定它的绝对路径。
 
 快速安装 / 更新（推荐）
 =======================
@@ -64,6 +68,18 @@ skills/ 下未列入清单的目录一律跳过，安装脚本不扫描目录。
                           默认只建 issue，由人确认后手动加 ai-ready；加 --ai-ready
                           时由调用者账号打标签，该账号成为触发者，需要是项目
                           Developer 且在 OpenChamber 中绑定同实例账号。
+
+随包 commands
+=============
+安装脚本只安装 commands/manifest.json 列出的命令文件：复制到
+~/.config/opencode/commands/<name>.md（设了 XDG_CONFIG_HOME 时用该目录），
+同名文件按新版本覆盖，用户自己新增的命令不受影响。安装后在任何工程的
+OpenCode 会话里都能用 /<name> 调用。
+
+当前随包：
+
+    /gitlab-issue-auto   按模板提交一个 GitLab issue 并直接打上 ai-ready，自动化
+                         随即领取；参数是问题描述。
 
 安装
 ====

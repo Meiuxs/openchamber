@@ -252,6 +252,51 @@ else
   fi
 fi
 
+# --- 随包 commands ----------------------------------------------------------
+# 与 skills 同一规则：只装 commands/manifest.json 列出的命令文件，复制到
+# 用户级 OpenCode 命令目录，任何工程里都能以 /<name> 调用。
+title "随包 commands"
+COMMANDS_SOURCE="$SCRIPT_DIR/commands"
+COMMANDS_TARGET="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/commands"
+COMMANDS_MANIFEST="$COMMANDS_SOURCE/manifest.json"
+if [[ ! -f "$COMMANDS_MANIFEST" ]]; then
+  echo "  随包未包含 commands 清单（旧交付包），跳过。"
+else
+  if ! command_names="$(node -e '
+    const fs = require("fs");
+    const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const list = Array.isArray(data) ? data : (data && Array.isArray(data.commands) ? data.commands : []);
+    for (const name of list) if (typeof name === "string") console.log(name);
+  ' "$COMMANDS_MANIFEST")"; then
+    echo "警告: 无法解析 $COMMANDS_MANIFEST，跳过随包 commands。" >&2
+    command_names=""
+  fi
+  if [[ -z "$command_names" ]]; then
+    echo "  清单里没有 command，跳过。"
+  else
+    while IFS= read -r command_name; do
+      [[ -n "$command_name" ]] || continue
+      if [[ ! "$command_name" =~ ^[a-z0-9-]+\.md$ ]]; then
+        echo "警告: 跳过非法 command 名：$command_name" >&2
+        continue
+      fi
+      if [[ ! -f "$COMMANDS_SOURCE/$command_name" ]]; then
+        echo "警告: 跳过缺失的 command：$command_name" >&2
+        continue
+      fi
+      command_dest="$COMMANDS_TARGET/$command_name"
+      if [[ $DRY_RUN -eq 1 ]]; then
+        echo "  [dry-run] 复制 $COMMANDS_SOURCE/$command_name -> $command_dest（覆盖同名 command）"
+        continue
+      fi
+      mkdir -p "$COMMANDS_TARGET"
+      cp "$COMMANDS_SOURCE/$command_name" "$command_dest"
+      echo "  已安装 command：$command_dest"
+    done <<< "$command_names"
+    echo "  只安装清单列出的 command；新会话中生效。"
+  fi
+fi
+
 # --- 数据目录 ---------------------------------------------------------------
 title "数据目录"
 DATA_DIR="${OPENCHAMBER_DATA_DIR:-$HOME/.config/openchamber}"

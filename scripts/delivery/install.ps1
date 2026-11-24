@@ -255,6 +255,41 @@ else {
   Write-Host '  只安装 skills/manifest.json 列出的 skill；新会话中生效。'
 }
 
+# --- 随包 commands ----------------------------------------------------------
+# 与 skills 同一规则：只装 commands/manifest.json 列出的命令文件，复制到
+# 用户级 OpenCode 命令目录，任何工程里都能以 /<name> 调用。
+Write-Title '随包 commands'
+$commandsSource = Join-Path $PSScriptRoot 'commands'
+$configHome = if ($env:XDG_CONFIG_HOME) { $env:XDG_CONFIG_HOME } else { Join-Path $env:USERPROFILE '.config' }
+$commandsTarget = Join-Path $configHome 'opencode\commands'
+$commandsManifest = Join-Path $commandsSource 'manifest.json'
+if (-not (Test-Path -LiteralPath $commandsManifest)) {
+  Write-Host '  随包未包含 commands 清单（旧交付包），跳过。'
+}
+else {
+  $commandNames = @((Get-Content -LiteralPath $commandsManifest -Raw -Encoding UTF8 | ConvertFrom-Json).commands)
+  foreach ($name in $commandNames) {
+    if ($name -notmatch '^[a-z0-9-]+\.md$') {
+      Write-Warning "跳过非法 command 名：$name"
+      continue
+    }
+    $source = Join-Path $commandsSource $name
+    if (-not (Test-Path -LiteralPath $source)) {
+      Write-Warning "跳过缺失的 command：$name"
+      continue
+    }
+    $dest = Join-Path $commandsTarget $name
+    if ($DryRun) {
+      Write-Host "  [dry-run] 复制 $source -> $dest（覆盖同名 command）"
+      continue
+    }
+    New-Item -ItemType Directory -Force -Path $commandsTarget | Out-Null
+    Copy-Item -Force -LiteralPath $source -Destination $dest
+    Write-Host "  已安装 command：$dest"
+  }
+  Write-Host '  只安装 commands/manifest.json 列出的 command；新会话中生效。'
+}
+
 # --- 数据目录 --------------------------------------------------------------
 Write-Title '数据目录'
 if (-not $DryRun) { New-Item -ItemType Directory -Force -Path $dataDir | Out-Null }
