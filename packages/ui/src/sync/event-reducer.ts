@@ -20,6 +20,7 @@ import {
   isSameCompletedCompaction,
 } from "./message-ordering"
 import { createMessageIndexHints } from "./message-index-hints"
+import { areEquivalent, areMessagesEquivalent, arePartsEquivalent } from "./event-equivalence"
 
 const messageIndexHints = createMessageIndexHints()
 
@@ -98,17 +99,6 @@ function areSessionStatusesEqual(left: SessionStatus | undefined, right: Session
   }
   return true
 }
-
-function areJsonEquivalent<T extends object>(left: T | undefined, right: T | undefined): boolean {
-  if (left === right) return true
-  if (left === undefined || right === undefined) return false
-  try {
-    return JSON.stringify(left) === JSON.stringify(right)
-  } catch {
-    return false
-  }
-}
-
 
 export type GlobalEventResult = {
   type: "refresh"
@@ -351,7 +341,7 @@ export function applyDirectoryEvent(
         return true
       }
 
-      if (areJsonEquivalent(sessions[result.index], next)) return false
+      if (areEquivalent(sessions[result.index], next)) return false
       sessions[result.index] = next
       markSessionEvent(sessionID, false)
       return true
@@ -450,7 +440,7 @@ export function applyDirectoryEvent(
       const messageIndex = messageIndexHints.find(messages, info.id)
       if (messageIndex >= 0) {
         const existing = messages[messageIndex]
-        if (areJsonEquivalent(existing, info)) {
+        if (areMessagesEquivalent(existing, info)) {
           syncDebug.reducer.messageUpdatedUnchanged(info.sessionID, info.id, info.role, undefined, undefined)
           return false
         }
@@ -490,7 +480,7 @@ export function applyDirectoryEvent(
       }
       const existing = messages[messageIndex]
       const updated = applyMessagePatch(existing, patch)
-      if (updated === existing || areJsonEquivalent(existing, updated)) return false
+      if (updated === existing || areMessagesEquivalent(existing, updated)) return false
       const next = [...messages]
       if (existing.time.created === updated.time.created) {
         next[messageIndex] = updated
@@ -577,7 +567,7 @@ export function applyDirectoryEvent(
       const { sessionID, messageID, parts } = event.properties
       const missingOwningMessage = !hasMessage(draft, sessionID, messageID)
       const existing = draft.part[messageID]
-      if (existing && areJsonEquivalent(existing, parts)) return false
+      if (existing && arePartsEquivalent(existing, parts)) return false
       draft.part[messageID] = parts
       return missingOwningMessage
         ? {

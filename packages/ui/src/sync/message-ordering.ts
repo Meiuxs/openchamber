@@ -6,11 +6,17 @@ export const findMessageIndex = (messages: readonly Message[], messageID: string
 
 export const isSameCompletedCompaction = (a: Message, b: Message): boolean => {
   if (a.role !== "compaction" || b.role !== "compaction" || a.status !== "completed" || b.status !== "completed") return false
-  const settlement = ({ reason, summary, model, cost, tokens }: typeof a) => JSON.stringify([
-    reason, summary, model?.providerID, model?.id, model?.variant, cost,
-    tokens?.input, tokens?.output, tokens?.reasoning, tokens?.cache.read, tokens?.cache.write,
-  ])
-  return settlement(a) === settlement(b)
+  return a.reason === b.reason
+    && a.summary === b.summary
+    && a.model?.providerID === b.model?.providerID
+    && a.model?.id === b.model?.id
+    && a.model?.variant === b.model?.variant
+    && a.cost === b.cost
+    && a.tokens?.input === b.tokens?.input
+    && a.tokens?.output === b.tokens?.output
+    && a.tokens?.reasoning === b.tokens?.reasoning
+    && a.tokens?.cache?.read === b.tokens?.cache?.read
+    && a.tokens?.cache?.write === b.tokens?.cache?.write
 }
 
 export const insertMessageInEventOrder = <T extends Message>(messages: T[], message: T): number => {
