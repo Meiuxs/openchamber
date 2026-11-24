@@ -16,8 +16,8 @@ import { normalizeGitOutputPath } from './output-path.js';
 import { overlayEnvironment } from '../environment/variables.js';
 import { primaryWorktreeRootFromGitDir, unsupportedRepositoryRootReason } from './repository-root.js';
 import { isString } from '../shared/guards.js';
+import { createRemoteRefRefresher } from './refresh-remote-ref.js';
 import { resolveSshAuthSock } from './ssh-auth-sock.js';
-import { randomUUID } from 'crypto';
 import { knownWorktreeBootstrapFailureCode, worktreeBootstrapFailureMessage } from './worktree-bootstrap-storage.js';
 import { BRANCH_CREATION_SOURCE_RE, findRestackedParent, isOwnRemoteCopy } from './branch-restack.js';
 import { cleanBranchName, existingBranchLocalRefs, parseRemoteBranchRef } from './existing-branch-refs.js';
@@ -2070,7 +2070,6 @@ const runWorktreeStartCommand = async (directory: string, command: string | unde
   });
 };
 
-
 const isAttachedGitWorktreeDirectory = async (directory: string) => {
   try {
     const result = await runGitCommand(directory, ['rev-parse', '--is-inside-work-tree']);
@@ -3432,6 +3431,7 @@ const refResolvesToCommit = async (git: SimpleGit, ref: string) => {
     .then((value) => Boolean(String(value || '').trim()))
     .catch(() => false);
 };
+export const refreshRemoteRef = createRemoteRefRefresher({ createRepositoryGitContext, runGitCommand });
 
 async function assertRangeRefsResolve(git: SimpleGit, repoRoot: string, refs: string[]) {
   for (const ref of refs) {
@@ -4809,7 +4809,6 @@ export async function getWorktrees(directory: string) {
   }
 }
 
-
 const TASK_TITLE_MAX_LENGTH = 120;
 const BRANCH_TITLE_KEY_PATTERN = '^branch\\..*\\.description$';
 
@@ -4831,7 +4830,6 @@ const readBranchTitles = async (repositoryDirectory: string) => {
   }
   return titles;
 };
-
 
 const BRANCH_PIN_KEY_PATTERN = '^branch\\..*\\.openchamberpinned$';
 const BRANCH_PIN_KEY_SUFFIX = '.openchamberpinned';
@@ -5039,7 +5037,6 @@ export async function seedBranchTaskTitle(directory: string, branch: string, raw
     console.warn('Failed to seed the worktree task title:', error instanceof Error ? error.message : String(error));
   });
 }
-
 
 const MAX_TRACKED_WORKTREE_DIRECTORIES = 500;
 const MAX_TRACKED_WORKTREE_REPOSITORIES = 200;
@@ -5719,6 +5716,9 @@ const fetchRemoteBranchRef = async (primaryWorktree: string, remoteName: string,
   if (!remote || !branch) {
     return;
   }
+  if (!(await runGitCommand(primaryWorktree, ['check-ref-format', `refs/heads/${branch}`])).success) {
+    return;
+  }
 
   const refspec = `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`;
   await runGitCommandOrThrow(
@@ -6192,8 +6192,8 @@ const replaceWorktreeGitDirectoryLink = async (primaryWorktree: string, worktree
     return false;
   };
   const contents = `gitdir: ${process.platform === 'win32' ? toGitPath(metadataDirectory) : metadataDirectory}\n`;
-  const temporaryEntry = `${gitEntry}.openchamber-${randomUUID()}`;
-  const claimedLinkEntry = `${gitEntry}.openchamber-${randomUUID()}`;
+  const temporaryEntry = `${gitEntry}.openchamber-${crypto.randomUUID()}`;
+  const claimedLinkEntry = `${gitEntry}.openchamber-${crypto.randomUUID()}`;
   let temporaryIdentity;
   let claimedLink = false;
   let releaseLinkClaim: boolean | undefined = false;
@@ -6251,7 +6251,7 @@ const replaceWorktreeGitDirectoryLink = async (primaryWorktree: string, worktree
     };
     if (!await sameDirectoriesExist() || !await isTemporaryFile(gitEntry)) return;
 
-    const claimedEntry = `${gitEntry}.openchamber-${randomUUID()}`;
+    const claimedEntry = `${gitEntry}.openchamber-${crypto.randomUUID()}`;
     try {
       await fsp.rename(gitEntry, claimedEntry);
     } catch (error) {

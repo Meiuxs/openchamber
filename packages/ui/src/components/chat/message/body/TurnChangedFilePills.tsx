@@ -3,13 +3,11 @@ import { useMobileAppActions } from '@/apps/mobileAppContext';
 import type { TurnChangedFile } from '../../lib/turns/types';
 import { cn } from '@/lib/utils';
 import { useChatSessionSelection } from '../../chatColumnSession';
-import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useUIStore } from '@/stores/useUIStore';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { getGitDiff } from '@/lib/gitDiffApi';
 import { opencodeClient } from '@/lib/opencode/client';
-import { openTurnFileDiffInEditor } from '../openTurnFileDiffInEditor';
-import { toast } from '@/components/ui';
+import { useOpenTurnDiff } from '../useOpenTurnDiff';
 import { Icon } from '@/components/icon/Icon';
 import { HoverTooltip } from '@/components/ui/row-tooltip';
 import { useI18n } from '@/lib/i18n';
@@ -17,7 +15,7 @@ import { useEffectiveDirectory } from '@/hooks/useEffectiveDirectory';
 import { hasTextSelectionInside } from '@/lib/textSelection';
 import { isFilePathWithinDirectory, toAbsoluteFilePath } from '@/lib/path-utils';
 import { DiffCount } from '@/components/ui/diff-count';
-import { DEFAULT_CONTEXT_DIFF_LINES, FULL_CONTEXT_DIFF_LINES } from '@/components/views/diffView/diffContextLines';
+import { DEFAULT_CONTEXT_DIFF_LINES } from '@/components/views/diffView/diffContextLines';
 import { PlainDiffFallback } from '../parts/PlainDiffFallback';
 import { dispatchRowExpand } from '../../lib/scroll/timelineScrollIntent';
 import { diffPathsMatch as pathsMatch } from '../../lib/turns/diffPaths';
@@ -193,37 +191,14 @@ const InteractiveFileRows = React.memo(({ files, turnId }: { files: TurnChangedF
     const { t } = useI18n();
     const effectiveDirectory = useEffectiveDirectory();
     const { sessionId } = useChatSessionSelection();
-    const isMobile = useUIStore((state) => state.isMobile);
-    const navigateToDiff = useUIStore((state) => state.navigateToDiff);
-    const openContextDiff = useUIStore((state) => state.openContextDiff);
-    const setPendingTurnDiffFile = useUIStore((state) => state.setPendingTurnDiffFile);
+    const openFileTurnDiff = useOpenTurnDiff();
     const mobileActions = useMobileAppActions();
     const runtime = useRuntimeAPIs();
     const turnDiffRequest = React.useRef<{ key: string; promise: Promise<TurnFileDiff[]> } | null>(null);
 
     const openTurnDiff = React.useCallback((file: string) => {
-        const editor = runtime.editor;
-        if (runtime.runtime.isVSCode && editor && effectiveDirectory) {
-            if (!sessionId) return;
-            void opencodeClient.getSessionTurnDiff(sessionId, { directory: effectiveDirectory, from: turnId, context: FULL_CONTEXT_DIFF_LINES })
-                .then((turnDiff) => openTurnFileDiffInEditor({ directory: effectiveDirectory, editor, file, turnDiff }))
-                .catch(() => toast.error(t('diffView.state.failedToLoadDiff')));
-            return;
-        }
-
-        if (mobileActions) {
-            mobileActions.openChanges({ diffPath: file, scope: 'turn', turnId, sessionId, directory: effectiveDirectory });
-            return;
-        }
-
-        setPendingTurnDiffFile({ file, sessionId, turnId, panelSessionId: useSessionUIStore.getState().currentSessionId });
-        if (!isMobile && effectiveDirectory) {
-            openContextDiff(effectiveDirectory, file, false, 'turn');
-            return;
-        }
-
-        navigateToDiff(file, false, 'turn');
-    }, [effectiveDirectory, isMobile, mobileActions, navigateToDiff, openContextDiff, runtime, sessionId, setPendingTurnDiffFile, t, turnId]);
+        openFileTurnDiff({ directory: effectiveDirectory ?? null, file, sessionId, turnId });
+    }, [effectiveDirectory, openFileTurnDiff, sessionId, turnId]);
 
     const openFile = React.useCallback((file: string) => {
         if (!effectiveDirectory) return;

@@ -1183,7 +1183,7 @@ const sessionLead = createSessionLeadServer({
 
 const sessionKnowledgeRuntime = createManagedSessionKnowledgeRuntime({
   hasProjectActions: (directory) => agentToolRuntime?.hasProjectActions(directory) ?? Promise.resolve(false),
-  isToolHost: () => !isExternalOpenCode && !ENV_SKIP_OPENCODE_START,
+  isManagedOpenCode: () => !isExternalOpenCode && !ENV_SKIP_OPENCODE_START, readExternalBridgeToken: () => managedConfigRuntime?.readExternalBridgeToken() ?? null,
   readSettings: () => readSettingsFromDiskMigrated(),
   readExtensionInstructions: guestAgentContext.instructionText,
   readLeadBrief: sessionLead.readBriefForEntry,
@@ -2796,7 +2796,7 @@ async function main(options: WebUiServerOptions = {}) {
     agentToolRuntime,
     limitFailoverRuntime,
     rateGateRuntime,
-    registerExternalBridgeRoutes: (expressApp) => managedConfigRuntime?.registerExternalBridgeRoutes(expressApp),
+    registerExternalBridgeRoutes: (expressApp) => managedConfigRuntime?.registerExternalBridgeRoutes(expressApp, sessionKnowledgeRuntime.isToolHost),
     desktopUpdater,
     getOpenCodeCompatibility,
     skipBodyParsing: (req) => spacesHost?.skipsBodyParsing(req) === true,
