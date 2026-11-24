@@ -782,6 +782,12 @@ describe("classifyStreamPayload", () => {
     expect(classifyStreamPayload("text", undefined)).toEqual({ kind: "events", events: [] })
   })
 
+  test("drops a wire event with malformed data instead of throwing", () => {
+    const malformed = { id: "evt_1", type: "session.created" }
+    expect(() => classifyStreamPayload(malformed, undefined)).not.toThrow()
+    expect(classifyStreamPayload(malformed, undefined)).toEqual({ kind: "events", events: [] })
+  })
+
   // Each delta used to be tried against nine OpenChamber schemas before the
   // wire schema; failed zod parses build issue objects, so this cost ~37us per
   // delta (750ms for 20k on an M-series laptop). Dispatching on `type` brings

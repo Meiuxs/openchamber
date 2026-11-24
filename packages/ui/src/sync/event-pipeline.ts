@@ -280,15 +280,22 @@ function translateOpenchamberEvent(type: string, payload: unknown): SyncEvent | 
 }
 
 function translateWirePayload(payload: unknown, frameDirectory: string | undefined, isStale?: StaleWireEventCheck): Array<{ directory: string; event: SyncEvent }> {
-  if (!wireEventSchema.safeParse(payload).success) return []
-  // SAFETY: the discriminator and location were validated above; the rest of
-  // the shape is the server's generated contract, narrowed per `type` by the
-  // translator.
-  const event = payload as OpenCodeEvent
-  if (isStale?.(event)) return []
-  const routed = routeWireEvent(event)
-  if (!frameDirectory) return routed
-  return routed.map((entry) => (entry.directory === GLOBAL_EVENT_DIRECTORY ? { ...entry, directory: frameDirectory } : entry))
+  // The wire schema validates the envelope only; translators dereference
+  // `data.*`. A malformed frame must be dropped, never allowed to throw into
+  // the stream loop.
+  try {
+    if (!wireEventSchema.safeParse(payload).success) return []
+    // SAFETY: the discriminator and location were validated above; the rest of
+    // the shape is the server's generated contract, narrowed per `type` by the
+    // translator.
+    const event = payload as OpenCodeEvent
+    if (isStale?.(event)) return []
+    const routed = routeWireEvent(event)
+    if (!frameDirectory) return routed
+    return routed.map((entry) => (entry.directory === GLOBAL_EVENT_DIRECTORY ? { ...entry, directory: frameDirectory } : entry))
+  } catch {
+    return []
+  }
 }
 
 type ClassifiedStreamPayload =
