@@ -1196,6 +1196,31 @@ describe.runIf(canRunGit())('diffs for status paths that are not plain files', (
 // ---------------------------------------------------------------------------
 
 describe('getStatus', () => {
+  it('serves a cached status to batch callers until the repository changes', async () => {
+    if (!canRunGit()) return;
+
+    const repo = createTempDir();
+    runGit(repo, ['init', '-b', 'main']);
+    runGit(repo, ['config', 'user.email', 'test@example.com']);
+    runGit(repo, ['config', 'user.name', 'Test User']);
+    fs.writeFileSync(path.join(repo, 'tracked.txt'), 'one\n');
+    runGit(repo, ['add', 'tracked.txt']);
+    runGit(repo, ['commit', '-m', 'Initial commit']);
+
+    const first = await getStatus(repo, { cache: true });
+    const second = await getStatus(repo, { cache: true });
+    expect(second).toBe(first);
+
+    fs.writeFileSync(path.join(repo, 'staged.txt'), 'two\n');
+    runGit(repo, ['add', 'staged.txt']);
+    const afterStage = await getStatus(repo, { cache: true });
+    expect(afterStage).not.toBe(first);
+    expect(afterStage.files).toContainEqual(expect.objectContaining({ path: 'staged.txt', index: 'A' }));
+
+    const uncached = await getStatus(repo);
+    expect(uncached).not.toBe(afterStage);
+  });
+
   it('names a rename\'s source path, and only both paths read as a rename diff', async () => {
     if (!canRunGit()) return;
 

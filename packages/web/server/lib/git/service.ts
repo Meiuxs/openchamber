@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { simpleGit } from 'simple-git';
 import { createSerialRefresh } from './serial-refresh.js';
+import { createKeyedTtlCache } from './status-cache.js';
 import { stripAppImageLauncherEnv } from '../inherited-env.js';
 import fs from 'fs';
 import path from 'path';
@@ -2913,17 +2914,80 @@ const expandUntrackedDirectories = async (repoRoot: string, files: FileStatusRes
 const MAX_CONCURRENT_STATUS_READS = 4;
 const statusRefresh = createSerialRefresh<{ lightMode: boolean }, Awaited<ReturnType<typeof readStatus>>>({ maxConcurrent: MAX_CONCURRENT_STATUS_READS });
 
-export async function getStatus(directory: string, options: { mode?: string | undefined } = {}) {
+// Status reads shell out to git and are the hottest source-control call. The
+// multi-directory batch routes opt in with `cache: true` so several clients
+// polling the same directories share one read; single reads stay uncached, so
+// a caller that just mutated the repository always sees its own change.
+// Turn activity invalidates the entry (see invalidateStatusCache).
+const STATUS_CACHE_TTL_MS = 5_000;
+type CachedStatus = { signature: string; status: Awaited<ReturnType<typeof readStatus>> };
+// Entries are shared by reference: callers treat status results as read-only.
+const statusCache = createKeyedTtlCache<CachedStatus>({ ttlMs: STATUS_CACHE_TTL_MS });
+
+// Staging, committing, checkout and merges rewrite .git/index or .git/HEAD, so
+// their mtimes mark the cached entry stale immediately — otherwise the client
+// that refetches right after a mutation would be served the pre-mutation state.
+// A directory whose git directory cannot be located (a subdirectory of a repo)
+// yields no signature and is never cached, so it keeps its old freshness.
+const readStatusSignature = (normalizedDirectory: string): string => {
+  const dotGit = path.join(normalizedDirectory, '.git');
+  let gitDirectory = dotGit;
+  try {
+    if (!fs.statSync(dotGit).isDirectory()) {
+      const pointer = /^gitdir:\s*(.+)$/im.exec(fs.readFileSync(dotGit, 'utf8'));
+      if (!pointer?.[1]) {
+        return '';
+      }
+      gitDirectory = path.resolve(normalizedDirectory, pointer[1].trim());
+    }
+    const index = fs.statSync(path.join(gitDirectory, 'index'));
+    const head = fs.statSync(path.join(gitDirectory, 'HEAD'));
+    return `${index.mtimeMs}:${index.size}:${head.mtimeMs}:${head.size}`;
+  } catch {
+    return '';
+  }
+};
+
+const statusCacheKey = (normalizedDirectory: string, lightMode: boolean): string =>
+  `${normalizedDirectory}\u0000${lightMode ? 'light' : 'full'}`;
+
+export function invalidateStatusCache(directory?: string): void {
+  const normalizedDirectory = directory === undefined ? '' : (normalizeDirectoryPath(directory) ?? '').trim();
+  if (!normalizedDirectory) {
+    statusCache.clear();
+    return;
+  }
+  statusCache.invalidate(statusCacheKey(normalizedDirectory, true));
+  statusCache.invalidate(statusCacheKey(normalizedDirectory, false));
+}
+
+export async function getStatus(directory: string, options: { mode?: string | undefined; cache?: boolean } = {}) {
   const normalizedDirectory = normalizeDirectoryPath(directory);
   if (!isPrimitiveString(normalizedDirectory) || !normalizedDirectory.trim()) {
     throw new Error('directory is required');
   }
   const lightMode = options.mode === 'light';
-  return statusRefresh.run(
+  const cacheKey = statusCacheKey(normalizedDirectory, lightMode);
+  const signatureBeforeRead = options.cache === true ? readStatusSignature(normalizedDirectory) : '';
+  if (options.cache === true && signatureBeforeRead !== '') {
+    const cached = statusCache.get(cacheKey);
+    if (cached && cached.signature === signatureBeforeRead) {
+      return cached.status;
+    }
+  }
+  const result = await statusRefresh.run(
     normalizedDirectory,
     { lightMode },
     (requests) => readStatus(normalizedDirectory, requests.every((request) => request.lightMode)),
   );
+  if (options.cache === true) {
+    // Only cache when the repository did not change while the read ran.
+    const signatureAfterRead = readStatusSignature(normalizedDirectory);
+    if (signatureAfterRead !== '' && signatureAfterRead === signatureBeforeRead) {
+      statusCache.set(cacheKey, { signature: signatureAfterRead, status: result });
+    }
+  }
+  return result;
 }
 
 export async function getTrackingBranch(directory: string) {

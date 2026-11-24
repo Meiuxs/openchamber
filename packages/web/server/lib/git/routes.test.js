@@ -1584,8 +1584,8 @@ describe('batched project reads', () => {
       { directory: '/plain', isGitRepository: false, status: { isGitRepository: false, files: [], branch: null, ahead: 0, behind: 0 }, root: null },
       { directory: '/repo-b', isGitRepository: true, status: { isGitRepository: true, branch: 'b-/repo-b', files: [], ahead: 0, behind: 0 }, root: '/repo-b/root' },
     ] });
-    expect(gitLibraries.getStatus).toHaveBeenCalledWith('/repo-a');
-    expect(gitLibraries.getStatus).toHaveBeenCalledWith('/repo-b');
+    expect(gitLibraries.getStatus).toHaveBeenCalledWith('/repo-a', { cache: true });
+    expect(gitLibraries.getStatus).toHaveBeenCalledWith('/repo-b', { cache: true });
   });
 
   it('isolates a failing status to its own directory', async () => {

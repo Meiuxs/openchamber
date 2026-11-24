@@ -1,4 +1,5 @@
 import { registerFsRoutes } from '../fs/routes.js';
+import { invalidateStatusCache } from '../git/service.js';
 import { createRipgrepResolver } from '../fs/ripgrep.js';
 import { registerEnvironmentRoutes } from '../environment/routes.js';
 import { registerQuotaRoutes } from '../quota/routes.js';
@@ -690,6 +691,9 @@ export const createFeatureRoutesRuntime = (dependencies: FeatureRuntimeDependenc
       if (settlingDirectories.has(directory)) return;
       settlingDirectories.set(directory, setTimeout(() => {
         settlingDirectories.delete(directory);
+        // The turn just touched files; drop the cached status so the
+        // refresh the clients are about to request reads the new state.
+        invalidateStatusCache(directory);
         const clients = getOpenChamberEventClients();
         for (const client of clients) {
           try {

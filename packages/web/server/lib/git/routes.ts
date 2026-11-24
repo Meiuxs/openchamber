@@ -710,7 +710,7 @@ export function registerGitRoutes(app: Application, {
           void observeWorktreeTopology(directory);
           reads.push((async () => {
             try {
-              entry.status = await getStatus(directory);
+              entry.status = await getStatus(directory, { cache: true });
             } catch (error) {
               console.error('Git project batch status failed:', directory, error);
               entry.status = null;
@@ -864,7 +864,7 @@ export function registerGitRoutes(app: Application, {
       status: { current: '', tracking: null, ahead: 0, behind: 0, files: [], isClean: true },
     };
     void observeWorktreeTopology(directory);
-    return { isGitRepository: true, status: await getStatus(directory, { mode }) };
+    return { isGitRepository: true, status: await getStatus(directory, { mode, cache: true }) };
   });
 
   app.get('/api/git/status', async (req, res) => {
