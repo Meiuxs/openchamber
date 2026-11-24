@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useVisibilityInterval } from '@/hooks/useVisibilityInterval';
 
 import { Icon } from '@/components/icon/Icon';
 import { Spinner } from '@/components/ui/spinner';
@@ -40,17 +41,16 @@ export const SourceBoardChecksDialog: React.FC<{
     const running = runs.some((run) => run.status === 'in_progress' || run.status === 'queued');
     const [now, setNow] = React.useState(() => Date.now());
 
+    const load = React.useCallback(() => {
+        setNow(Date.now());
+        void useChangeRequestContextStore.getState().ensure(sourceControl, context, pull.number, { includeCIDetails: true, project, force: true });
+    }, [context, project, pull.number, sourceControl]);
+
     React.useEffect(() => {
-        if (!open) return;
-        const load = () => {
-            setNow(Date.now());
-            void useChangeRequestContextStore.getState().ensure(sourceControl, context, pull.number, { includeCIDetails: true, project, force: true });
-        };
-        load();
-        if (!running) return;
-        const interval = window.setInterval(load, RUNNING_REFRESH_MS);
-        return () => window.clearInterval(interval);
-    }, [context, open, project, pull.number, running, sourceControl]);
+        if (open) load();
+    }, [load, open]);
+
+    useVisibilityInterval(load, RUNNING_REFRESH_MS, { enabled: open && running });
 
     const formatTimestamp = React.useCallback((value?: string) => {
         if (!value) return '';

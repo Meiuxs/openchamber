@@ -1,4 +1,5 @@
 import React from 'react';
+import { useVisibilityInterval } from '@/hooks/useVisibilityInterval';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/icon/Icon';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
@@ -27,12 +28,7 @@ const formatDuration = (milliseconds: number): string => {
 
 function LaneDuration({ session, busy }: { session: Session; busy: boolean }): React.ReactNode {
   const [now, setNow] = React.useState(() => Date.now());
-  React.useEffect(() => {
-    if (!busy) return;
-    setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [busy]);
+  useVisibilityInterval(() => setNow(Date.now()), 1000, { enabled: busy });
   const end = busy ? now : session.time.idle;
   if (!end) return null;
   return <span className="inline-flex items-center gap-1"><Icon name="time" className="size-3" />{formatDuration(end - session.time.created)}</span>;

@@ -201,7 +201,12 @@ export const useMergedWorktreeCleanup = ({ enabled }: { enabled: boolean }): voi
       if (state.currentSessionId !== previous.currentSessionId
         || state.availableWorktreesByProject !== previous.availableWorktreesByProject) schedule();
     });
-    const interval = setInterval(() => void pass(), PASS_INTERVAL_MS);
+    const interval = setInterval(() => {
+      // The cleanup pass touches the network; skip it while the window is
+      // hidden and let the next visible tick pick it up.
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void pass();
+    }, PASS_INTERVAL_MS);
     void pass();
 
     return () => {

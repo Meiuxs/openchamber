@@ -527,16 +527,20 @@ export const PlanView: React.FC<PlanViewProps> = ({ visible = true, savedProject
         }
       }
     };
+    const pollWhenVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void poll();
+    };
     const release = observeProjectContext(savedPlanProjectRef, poll);
-    let interval = window.setInterval(() => { void poll(); }, 2000);
+    let interval = window.setInterval(pollWhenVisible, 2000);
     const watch = loadedProjectPlanPath
-      ? watchFileOnScreen(savedPlanProjectRef.path, loadedProjectPlanPath, () => { void poll(); })
+      ? watchFileOnScreen(savedPlanProjectRef.path, loadedProjectPlanPath, pollWhenVisible)
       : null;
     let stopped = false;
     void watch?.watching.then((watching) => {
       if (!watching || stopped) return;
       window.clearInterval(interval);
-      interval = window.setInterval(() => { void poll(); }, WATCHED_PLAN_POLL_MS);
+      interval = window.setInterval(pollWhenVisible, WATCHED_PLAN_POLL_MS);
     });
     return () => {
       stopped = true;

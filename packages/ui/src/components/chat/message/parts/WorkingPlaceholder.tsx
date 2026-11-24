@@ -1,4 +1,5 @@
 import React from 'react';
+import { useVisibilityInterval } from '@/hooks/useVisibilityInterval';
 import { useI18n, type Locale } from '@/lib/i18n';
 import { agentStatusSignature, type AgentStatus } from '@/lib/agentStatus';
 import { useAgentStatusLabel } from '@/hooks/useAgentStatusLabel';
@@ -49,24 +50,19 @@ export function WorkingPlaceholder({
 
   const [retryCountdown, setRetryCountdown] = React.useState<number | null>(null);
 
-  React.useEffect(() => {
+  const retryTargetAt = React.useMemo(() => {
     const rawNext = retryInfo?.next;
-    if (!rawNext || rawNext <= 0) {
-      setRetryCountdown(null);
-      return;
-    }
+    return rawNext && rawNext > 0 ? toRetryTargetTimestamp(rawNext) : null;
+  }, [retryInfo?.next]);
 
-    const retryTargetAt = toRetryTargetTimestamp(rawNext);
+  React.useEffect(() => {
+    if (retryTargetAt === null) setRetryCountdown(null);
+  }, [retryTargetAt]);
 
-    const update = () => {
-      const remaining = Math.max(0, retryTargetAt - Date.now());
-      setRetryCountdown(Math.ceil(remaining / 1000));
-    };
-
-    update();
-    const id = setInterval(update, 500);
-    return () => clearInterval(id);
-  }, [retryInfo?.next, retryInfo?.attempt]);
+  useVisibilityInterval(() => {
+    if (retryTargetAt === null) return;
+    setRetryCountdown(Math.ceil(Math.max(0, retryTargetAt - Date.now()) / 1000));
+  }, 500, { enabled: retryTargetAt !== null });
 
   const clearTimers = React.useCallback(() => {
     if (processQueueTimerRef.current) {
