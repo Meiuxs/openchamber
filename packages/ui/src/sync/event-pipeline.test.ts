@@ -784,7 +784,13 @@ describe("classifyStreamPayload", () => {
 
   test("drops a wire event with malformed data instead of throwing", () => {
     const malformed = { id: "evt_1", type: "session.created" }
-    expect(() => classifyStreamPayload(malformed, undefined)).not.toThrow()
+    let threw = false
+    try {
+      classifyStreamPayload(malformed, undefined)
+    } catch {
+      threw = true
+    }
+    expect(threw).toBe(false)
     expect(classifyStreamPayload(malformed, undefined)).toEqual({ kind: "events", events: [] })
   })
 
