@@ -59,7 +59,7 @@ const Probe: React.FC<ProbeProps> = ({ request, initialScope = 'turn', panelSess
     fetchStatus: async () => { await statusRead.promise; return true; },
     // SAFETY: the fallback hands git only to the fetchStatus stub above.
     git: {} as GitAPI,
-    changedFiles: [changed],
+    workingFiles: [changed],
     // SAFETY: a file inside a repository never reaches the Files API.
     files: {} as FilesAPI,
   });
@@ -93,7 +93,7 @@ type NestedProbeProps = {
   rootIsGitRepo: boolean | null;
   nestedRepos: NestedRepoDiscovery | undefined;
   repositoryOptions: string[] | null;
-  changedFilesByDirectory: Record<string, FileEntry[]>;
+  workingFilesByDirectory: Record<string, FileEntry[]>;
   turnFiles: TurnSnapshotDiff[];
   files: FilesAPI;
   gitApi?: Partial<GitAPI>;
@@ -101,7 +101,7 @@ type NestedProbeProps = {
 
 const NestedProbe: React.FC<NestedProbeProps> = ({
   request, initialRepository, rootIsGitRepo, nestedRepos, repositoryOptions,
-  changedFilesByDirectory, turnFiles, files, gitApi = {},
+  workingFilesByDirectory, turnFiles, files, gitApi = {},
 }) => {
   const [activeDiffScope, setActiveDiffScope] = React.useState<DiffScope>('turn');
   const [pending, setPending] = React.useState<Request | null>(request);
@@ -125,7 +125,7 @@ const NestedProbe: React.FC<NestedProbeProps> = ({
     fetchStatus: async () => true,
     // SAFETY: the probe only reaches the optional methods its tests stub.
     git: gitApi as GitAPI,
-    changedFiles: changedFilesByDirectory[effectiveDirectory] ?? [],
+    workingFiles: workingFilesByDirectory[effectiveDirectory] ?? [],
     files,
   });
   return null;
@@ -191,7 +191,7 @@ describe('useDiffViewTurnNavigation', () => {
         rootIsGitRepo={false}
         nestedRepos={[`${ROOT}/a`, `${ROOT}/b`]}
         repositoryOptions={[`${ROOT}/a`, `${ROOT}/b`]}
-        changedFilesByDirectory={{ [`${ROOT}/b`]: [changedEntry('src/x.ts')] }}
+        workingFilesByDirectory={{ [`${ROOT}/b`]: [changedEntry('src/x.ts')] }}
         turnFiles={[]}
         files={filesWithContent('export {};\n')}
       />,
@@ -209,7 +209,7 @@ describe('useDiffViewTurnNavigation', () => {
         rootIsGitRepo={false}
         nestedRepos={[`${ROOT}/a`, `${ROOT}/b`]}
         repositoryOptions={[`${ROOT}/a`, `${ROOT}/b`]}
-        changedFilesByDirectory={{}}
+        workingFilesByDirectory={{}}
         turnFiles={[{ file: 'b/src/x.ts', patch: '@@ -1 +1 @@\n-a\n+b\n' }]}
         files={filesWithContent('export {};\n')}
       />,
@@ -228,7 +228,7 @@ describe('useDiffViewTurnNavigation', () => {
         // SAFETY: this is the exact unsupported variant the component receives.
         nestedRepos={'unsupported' as NestedRepoDiscovery}
         repositoryOptions={null}
-        changedFilesByDirectory={{ [ROOT]: [] }}
+        workingFilesByDirectory={{ [ROOT]: [] }}
         turnFiles={[]}
         files={filesWithContent('# notes\n')}
       />,
@@ -238,6 +238,9 @@ describe('useDiffViewTurnNavigation', () => {
       .filter((tab) => tab.mode === 'file')
       .map((tab) => tab.targetPath);
     expect(openFiles).toContain(`${ROOT}/notes/x.md`);
+    // The file belongs to no repository, so the panel must not detour through
+    // the Git Changes scope before opening it.
+    expect(scopes).not.toContain('working');
   });
 
   test('a committed change opens the commit that last touched the file', async () => {
@@ -248,7 +251,7 @@ describe('useDiffViewTurnNavigation', () => {
         rootIsGitRepo={false}
         nestedRepos={[`${ROOT}/b`]}
         repositoryOptions={[`${ROOT}/b`]}
-        changedFilesByDirectory={{ [`${ROOT}/b`]: [] }}
+        workingFilesByDirectory={{ [`${ROOT}/b`]: [] }}
         turnFiles={[]}
         files={filesWithContent('export {};\n')}
         gitApi={committedGit}

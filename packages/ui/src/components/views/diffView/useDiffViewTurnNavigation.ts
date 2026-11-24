@@ -2,7 +2,7 @@ import React from 'react';
 import { findRepoFile, getRelativeFilePath, isFilePathWithinDirectory, toAbsoluteFilePath } from '@/lib/path-utils';
 import { findFileRepository } from '@/lib/nestedRepositories';
 import { isVSCodeRuntime } from '@/lib/desktop';
-import type { FilesAPI, GitAPI } from '@/lib/api/types';
+import type { FilesAPI, GitAPI, GitStatus } from '@/lib/api/types';
 import type { useUIStore } from '@/stores/useUIStore';
 import { useGitStore, type NestedRepoDiscovery } from '@/stores/useGitStore';
 import { commitSelectionKey, useCommitSelectionStore } from '@/stores/useCommitSelectionStore';
@@ -10,7 +10,8 @@ import {
     beginChangedFileOpen, createLatestRequestGate, isProjectFileOutsideRepositories, openChangedFileWithoutRepository,
 } from '../files/openChangedFileWithoutRepository';
 import type { TurnSnapshotDiff } from '../turnSnapshotDiff';
-import type { DiffScope, DiffViewProps, FileEntry } from './types';
+import type { DiffScope, DiffViewProps } from './types';
+import { isWorkingStatusFile } from './diffData';
 
 interface DiffViewTurnNavigationOptions {
     visible: boolean;
@@ -38,7 +39,7 @@ interface DiffViewTurnNavigationOptions {
     selectNestedRepo: ReturnType<typeof useGitStore.getState>['selectNestedRepo'];
     fetchStatus: ReturnType<typeof useGitStore.getState>['fetchStatus'];
     git: GitAPI;
-    changedFiles: FileEntry[];
+    workingFiles: GitStatus['files'];
     files: FilesAPI;
 }
 
@@ -46,7 +47,7 @@ export function useDiffViewTurnNavigation({
     visible, activeDiffScope, setActiveDiffScope, setDisplayFile, setDisplayFileStaged, shouldPinAfterAlignRef,
     pendingScrollTargetRef, expandStackedFile, setScrollRequestNonce, pendingTurnDiffFile, diffScope,
     panelSessionId, setPendingTurnDiffFile, turnDiffSettled, rootDirectory, lastTurnDiffs, onDiffScopeChange, effectiveDirectory,
-    repositoriesKnown, rootIsGitRepo, nestedRepos, repositoryOptions, selectNestedRepo, fetchStatus, git, changedFiles,
+    repositoriesKnown, rootIsGitRepo, nestedRepos, repositoryOptions, selectNestedRepo, fetchStatus, git, workingFiles,
     files,
 }: DiffViewTurnNavigationOptions) {
     const [changedFallback, setChangedFallback] = React.useState<{
@@ -115,8 +116,6 @@ export function useDiffViewTurnNavigation({
         setChangedFallback({
             file, picked: false, statusReadFor: null, isCurrent: beginChangedFileOpen(editorOpenGate, panelSessionId),
         });
-        setActiveDiffScope('working');
-        onDiffScopeChange?.('working');
     }, [activeDiffScope, diffScope, editorOpenGate, effectiveDirectory, lastTurnDiffs, onDiffScopeChange, panelSessionId, pendingTurnDiffFile, repositoryOptions, revealListedFile, rootDirectory, rootIsGitRepo, selectNestedRepo, setPendingTurnDiffFile, turnDiffSettled, visible]);
 
     React.useEffect(() => {
@@ -125,7 +124,7 @@ export function useDiffViewTurnNavigation({
             editorOpenGate.cancel();
         }
         if (!changedFallback || !visible || !effectiveDirectory) return;
-        if (activeDiffScope !== 'working' || !changedFallback.isCurrent()) {
+        if ((activeDiffScope !== 'turn' && activeDiffScope !== 'working') || !changedFallback.isCurrent()) {
             setChangedFallback(null);
             return;
         }
@@ -159,8 +158,11 @@ export function useDiffViewTurnNavigation({
             return;
         }
         setChangedFallback(null);
-        const listed = findRepoFile(changedFallback.file, effectiveDirectory, changedFiles.map((file) => file.path));
+        const workingPaths = workingFiles.filter(isWorkingStatusFile).map((file) => file.path);
+        const listed = findRepoFile(changedFallback.file, effectiveDirectory, workingPaths);
         if (listed) {
+            setActiveDiffScope('working');
+            onDiffScopeChange?.('working');
             revealListedFile(listed);
             return;
         }
@@ -177,5 +179,5 @@ export function useDiffViewTurnNavigation({
             return;
         }
         openFile();
-    }, [activeDiffScope, changedFallback, changedFiles, editorOpenGate, effectiveDirectory, fetchStatus, files, git, nestedRepos, repositoriesKnown, repositoryOptions, revealCommittedFile, revealListedFile, rootDirectory, rootIsGitRepo, panelSessionId, selectNestedRepo, visible]);
+    }, [activeDiffScope, changedFallback, editorOpenGate, effectiveDirectory, fetchStatus, files, git, nestedRepos, repositoriesKnown, repositoryOptions, revealCommittedFile, revealListedFile, rootDirectory, rootIsGitRepo, panelSessionId, selectNestedRepo, visible, workingFiles]);
 }

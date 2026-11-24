@@ -64,11 +64,15 @@ export const projectTurnChangedFiles = (
 ): TurnChangedFile[] | undefined => {
     const summary = summarizeLiveActivity(assistantMessages);
 
-    const files = summary.changedFiles.map((change): TurnChangedFile => (
-        change.additions !== undefined && change.deletions !== undefined
-            ? { file: change.path, additions: change.additions, deletions: change.deletions, inTurnDiff: true }
-            : { file: change.path, inTurnDiff: true }
-    ));
+    const files = summary.changedFiles.map((change): TurnChangedFile => {
+        if (change.additions === undefined || change.deletions === undefined) {
+            return { file: change.path, inTurnDiff: true };
+        }
+        if (change.patch) {
+            return { file: change.path, additions: change.additions, deletions: change.deletions, inTurnDiff: true, patch: change.patch };
+        }
+        return { file: change.path, additions: change.additions, deletions: change.deletions, inTurnDiff: true };
+    });
 
     return files.length > 0 ? files : undefined;
 };

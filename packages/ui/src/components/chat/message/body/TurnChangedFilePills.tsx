@@ -21,6 +21,7 @@ import { DEFAULT_CONTEXT_DIFF_LINES, FULL_CONTEXT_DIFF_LINES } from '@/component
 import { PlainDiffFallback } from '../parts/PlainDiffFallback';
 import { dispatchRowExpand } from '../../lib/scroll/timelineScrollIntent';
 import { diffPathsMatch as pathsMatch } from '../../lib/turns/diffPaths';
+import { chooseTurnFilePatch } from '../../lib/turns/turnFilePatch';
 
 const InlineTurnDiff = React.lazy(() =>
     import('../parts/ToolPartDiffPreview').then((module) => ({ default: module.default })),
@@ -243,8 +244,12 @@ const InteractiveFileRows = React.memo(({ files, turnId }: { files: TurnChangedF
         && (!effectiveDirectory || isFilePathWithinDirectory(toAbsoluteFilePath(effectiveDirectory, file.file), effectiveDirectory))
     ), [effectiveDirectory]);
 
-    const loadPatch = React.useCallback(async (path: string): Promise<string> => {
-        if (!sessionId) throw new Error(t('diffView.state.failedToLoadDiff'));
+    const loadPatch = React.useCallback(async (file: TurnChangedFile): Promise<string> => {
+        const path = file.file;
+        if (!sessionId) {
+            if (file.patch) return file.patch;
+            throw new Error(t('diffView.state.failedToLoadDiff'));
+        }
         const key = JSON.stringify([sessionId, effectiveDirectory, turnId]);
         if (!turnDiffRequest.current || turnDiffRequest.current.key !== key) {
             turnDiffRequest.current = {
@@ -262,7 +267,11 @@ const InteractiveFileRows = React.memo(({ files, turnId }: { files: TurnChangedF
             throw error;
         }
         const entry = diffs.find((candidate) => pathsMatch(candidate.file, path));
-        if (entry) return entry.patch;
+        // The snapshot is a Git view of the turn: for a file Git does not
+        // track it can describe the whole file as new. The tool's patch keeps
+        // the row's counts and the expanded diff in agreement.
+        const chosen = chooseTurnFilePatch(file, entry?.patch);
+        if (chosen) return chosen;
         if (effectiveDirectory) {
             const workingTree = await getGitDiff(effectiveDirectory, { path, contextLines: DEFAULT_CONTEXT_DIFF_LINES }).catch(() => null);
             if (workingTree?.diff.trim()) return workingTree.diff;
@@ -293,7 +302,7 @@ const InteractiveFileRows = React.memo(({ files, turnId }: { files: TurnChangedF
                         key={file.file}
                         file={file}
                         canExpand={opensDiff}
-                        loadPatch={opensDiff ? () => loadPatch(file.file) : undefined}
+                        loadPatch={opensDiff ? () => loadPatch(file) : undefined}
                         onOpen={file.inTurnDiff === false ? undefined : opensDiff ? openTurnDiff : openFile}
                     />
                 );

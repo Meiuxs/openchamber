@@ -130,6 +130,12 @@ those call patches. A file a tool wrote outside that directory can never be in
 the snapshot, so its row has no arrow and its name opens the file itself. A
 file the snapshot does not contain keeps no expand arrow.
 
+A changed file also carries the tool's own patch, so the projection keeps it:
+the row's counts were measured from that patch, and the expanded diff must
+agree with them. Only a single call's patch is kept, because two edits summed
+into one row cannot be shown as one diff. When a file has several call patches,
+the row falls back to the snapshot exactly as before.
+
 ### Why write-created files backfill their counts from the turn diff
 
 A write call's metadata carries no patch or line counts, so its file would

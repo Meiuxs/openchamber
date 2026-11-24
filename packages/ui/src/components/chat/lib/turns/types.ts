@@ -32,6 +32,8 @@ export interface TurnChangedFile {
     additions?: number;
     deletions?: number;
     inTurnDiff?: boolean;
+    // The tool's own patch, when a single call wrote the file in this turn.
+    patch?: string;
 }
 
 export interface TurnSummaryRecord {

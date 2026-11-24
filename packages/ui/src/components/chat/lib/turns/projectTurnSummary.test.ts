@@ -37,8 +37,8 @@ describe('projectTurnChangedFiles', () => {
         expect(projectTurnChangedFiles([
             assistant('a', [edit('one', '/project/src/a.ts'), edit('two', '/project/src/b.ts')], 'stop'),
         ])).toEqual([
-            { file: '/project/src/a.ts', additions: 2, deletions: 1, inTurnDiff: true },
-            { file: '/project/src/b.ts', additions: 2, deletions: 1, inTurnDiff: true },
+            { file: '/project/src/a.ts', additions: 2, deletions: 1, inTurnDiff: true, patch: diff },
+            { file: '/project/src/b.ts', additions: 2, deletions: 1, inTurnDiff: true, patch: diff },
         ]);
     });
 
@@ -73,7 +73,7 @@ describe('projectTurnRecords changed files', () => {
         expect(streaming.turns[0]?.changedFiles).toBeUndefined();
 
         const finished = projectTurnRecords([user(), assistant('a', parts, 'stop')], options);
-        expect(finished.turns[0]?.changedFiles).toEqual([{ file: '/project/src/a.ts', additions: 2, deletions: 1, inTurnDiff: true }]);
+        expect(finished.turns[0]?.changedFiles).toEqual([{ file: '/project/src/a.ts', additions: 2, deletions: 1, inTurnDiff: true, patch: diff }]);
     });
 
     test('leaves files out while the setting is off', () => {

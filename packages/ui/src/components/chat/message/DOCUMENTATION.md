@@ -177,7 +177,11 @@ each file gets a row with its own counts. The row's arrow expands that file's
 snapshot diff under the row through the chat's lazy unified preview, so the
 reader stays in the transcript; the file name still opens the full turn diff.
 The expansion asks for default (three-line) context so it shows the changed
-hunks instead of reprinting the whole file.
+hunks instead of reprinting the whole file. A snapshot is a Git view, so for a
+file Git does not track it can describe the whole file as new; the expansion
+therefore prefers the row's own tool patch whenever the snapshot accounts for
+fewer lines than the row's counts, keeping the diff and the counts in
+agreement.
 The card takes a tone step and the rows take spacing rather than borders, and
 a file outside the turn diff has no arrow. A file a tool wrote outside the
 session directory can never appear in that snapshot, so where the row offers

@@ -45,6 +45,7 @@ interface TurnFileChange {
     path: string;
     additions?: number;
     deletions?: number;
+    patch?: string;
 }
 
 export interface LiveActivitySummary {
@@ -97,7 +98,19 @@ interface FileChangeRecord {
     additions: number;
     deletions: number;
     complete: boolean;
+    // The tool's own patch for this file, kept only when a single call wrote
+    // it: several edits cannot be shown as one diff.
+    patch?: string;
+    patchCount: number;
 }
+
+// Only one call's patch can be shown for a file: a second patch would make the
+// expanded diff disagree with the summed counts, so the patch is dropped.
+const takeFilePatch = (record: FileChangeRecord, patchText: string | undefined) => {
+    if (!patchText) return;
+    record.patchCount += 1;
+    record.patch = record.patchCount === 1 ? patchText : undefined;
+};
 
 export function summarizeLiveActivity(messages: readonly ChatMessageEntry[]): LiveActivitySummary {
     const summary: LiveActivitySummary = {
@@ -165,7 +178,8 @@ export function summarizeLiveActivity(messages: readonly ChatMessageEntry[]): Li
                 const key = keyOf(canonical);
                 if (callPaths.has(key)) continue;
                 callPaths.add(key);
-                const stats = countPatch(file.patch ?? file.diff)
+                const patchText = file.patch ?? file.diff;
+                const stats = countPatch(patchText)
                     ?? (file.additions !== undefined && file.deletions !== undefined
                         ? { additions: file.additions, deletions: file.deletions } : undefined);
                 const isAddOrDelete = file.type === 'add' || file.type === 'delete'
@@ -188,12 +202,13 @@ export function summarizeLiveActivity(messages: readonly ChatMessageEntry[]): Li
                     }
                 }
                 if (!record) {
-                    record = { path: getRelativeFilePath(canonical, root), additions: 0, deletions: 0, complete: true };
+                    record = { path: getRelativeFilePath(canonical, root), additions: 0, deletions: 0, complete: true, patchCount: 0 };
                 } else if (file.movePath) {
                     record.path = getRelativeFilePath(canonical, root);
                 }
                 changedFiles.set(key, record);
                 callRecords.push(record);
+                takeFilePatch(record, patchText);
                 if (!stats) {
                     unstattedRecords.push(record);
                 } else {
@@ -204,13 +219,15 @@ export function summarizeLiveActivity(messages: readonly ChatMessageEntry[]): Li
                 }
             }
             if (unstattedRecords.length > 0) {
-                const fallback = countPatch(metadata?.patch ?? metadata?.diff);
+                const fallbackPatch = metadata?.patch ?? metadata?.diff;
+                const fallback = countPatch(fallbackPatch);
                 if (fallback) {
                     callAdditions = fallback.additions;
                     callDeletions = fallback.deletions;
                     if (callRecords.length === 1) {
                         callRecords[0].additions += fallback.additions;
                         callRecords[0].deletions += fallback.deletions;
+                        takeFilePatch(callRecords[0], fallbackPatch);
                     } else {
                         for (const record of unstattedRecords) record.complete = false;
                     }
@@ -224,9 +241,13 @@ export function summarizeLiveActivity(messages: readonly ChatMessageEntry[]): Li
         }
     }
     summary.files = changedFiles.size;
-    summary.changedFiles = Array.from(changedFiles.values(), (record) => record.complete
-        ? { path: record.path, additions: record.additions, deletions: record.deletions }
-        : { path: record.path });
+    summary.changedFiles = Array.from(changedFiles.values(), (record) => {
+        if (!record.complete) return { path: record.path };
+        if (record.patch) {
+            return { path: record.path, additions: record.additions, deletions: record.deletions, patch: record.patch };
+        }
+        return { path: record.path, additions: record.additions, deletions: record.deletions };
+    });
     summary.subagents = subagents.size;
     return summary;
 }

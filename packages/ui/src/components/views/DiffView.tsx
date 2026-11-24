@@ -202,7 +202,8 @@ export const DiffView: React.FC<DiffViewProps> = ({
         pendingTurnDiffFile, diffScope, panelSessionId: currentSessionId, setPendingTurnDiffFile, turnDiffSettled, rootDirectory,
         lastTurnDiffs, onDiffScopeChange,
         effectiveDirectory, repositoriesKnown, rootIsGitRepo, nestedRepos, repositoryOptions, selectNestedRepo, fetchStatus, git,
-        changedFiles, files,
+        workingFiles: status?.files ?? [],
+        files,
     });
     React.useEffect(() => {
         if (!displayFile) {

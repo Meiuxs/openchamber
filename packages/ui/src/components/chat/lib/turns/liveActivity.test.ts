@@ -234,7 +234,10 @@ describe('live activity report', () => {
         expect(result).toMatchObject({ files: 2, additions: 2, deletions: 2, hasCompleteDiff: true });
         // The call's patch cannot be split between two files, so only the
         // file with its own patch keeps numbers.
-        expect(result.changedFiles).toEqual([{ path: '/project/a', additions: 2, deletions: 1 }, { path: '/project/b' }]);
+        expect(result.changedFiles).toEqual([
+            { path: '/project/a', additions: 2, deletions: 1, patch: diff },
+            { path: '/project/b' },
+        ]);
     });
 
     test('write content is not a diff and partial stats are not shown as a complete total', () => {
@@ -243,7 +246,10 @@ describe('live activity report', () => {
             tool('write', 'write', { input: { path: 'b', content: 'one\ntwo\nthree' } }),
         ])]);
         expect(result).toMatchObject({ files: 2, hasCompleteDiff: false });
-        expect(result.changedFiles).toEqual([{ path: 'a', additions: 2, deletions: 1 }, { path: 'b' }]);
+        expect(result.changedFiles).toEqual([
+            { path: 'a', additions: 2, deletions: 1, patch: diff },
+            { path: 'b' },
+        ]);
     });
 
     // v2 assistant messages carry no working directory, so a path is listed
@@ -258,7 +264,7 @@ describe('live activity report', () => {
         expect(result.changedFiles).toEqual([
             { path: '/project/src/new.ts', additions: 2, deletions: 2 },
             { path: '/project/src/a.ts', additions: 1, deletions: 0 },
-            { path: '/elsewhere/b.ts', additions: 2, deletions: 1 },
+            { path: '/elsewhere/b.ts', additions: 2, deletions: 1, patch: diff },
         ]);
     });
 
