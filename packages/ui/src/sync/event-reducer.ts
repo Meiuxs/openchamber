@@ -16,10 +16,12 @@ import { dropSessionCaches } from "./session-cache"
 import { syncDebug } from "./debug"
 import { shouldSkipStaleSessionEvent } from "./session-event-freshness"
 import {
-  findMessageIndex,
   insertMessageInEventOrder,
   isSameCompletedCompaction,
 } from "./message-ordering"
+import { createMessageIndexHints } from "./message-index-hints"
+
+const messageIndexHints = createMessageIndexHints()
 
 type DedupeMetadata = {
   __dedupeNextDeltaFields?: string[]
@@ -144,7 +146,7 @@ function hasMessage(draft: State, sessionID: string | undefined, messageID: stri
   if (!sessionID) return false
   const messages = draft.message[sessionID]
   if (!messages) return false
-  return messages.some((message) => message.id === messageID)
+  return messageIndexHints.find(messages, messageID) >= 0
 }
 
 const findRunningCompactionIndex = (messages: readonly Message[]): number => {
@@ -363,7 +365,7 @@ export function applyDirectoryEvent(
       const messages = draft.message[sessionID]
       let changed = false
       if (messages && messages.length > 0) {
-        const index = findMessageIndex(messages, to)
+        const index = messageIndexHints.find(messages, to)
         const from = index >= 0 ? index : session?.revert?.messageID === to ? 0 : -1
         if (from >= 0) {
           for (const removed of messages.slice(from)) delete draft.part[removed.id]
@@ -440,12 +442,12 @@ export function applyDirectoryEvent(
       const running = messages[runningCompaction]
       if (running && running.time.created <= info.time.created) {
         info = { ...info, id: running.id, time: { ...running.time } }
-      } else if (info.role === "compaction" && findMessageIndex(messages, info.id) < 0) {
+      } else if (info.role === "compaction" && messageIndexHints.find(messages, info.id) < 0) {
         const settled = info
         const twin = messages.find((message) => isSameCompletedCompaction(message, settled))
         if (twin) info = { ...twin, ...info, id: twin.id, time: { ...twin.time } }
       }
-      const messageIndex = findMessageIndex(messages, info.id)
+      const messageIndex = messageIndexHints.find(messages, info.id)
       if (messageIndex >= 0) {
         const existing = messages[messageIndex]
         if (areJsonEquivalent(existing, info)) {
@@ -478,7 +480,7 @@ export function applyDirectoryEvent(
         }
       }
       const shellID = messageID.startsWith("shell:") ? messageID.slice("shell:".length) : undefined
-      const messageIndex = shellID ? findShellMessageIndex(messages, shellID) : findMessageIndex(messages, messageID)
+      const messageIndex = shellID ? findShellMessageIndex(messages, shellID) : messageIndexHints.find(messages, messageID)
       if (messageIndex < 0) {
         if (shellID) return false
         return {
@@ -519,12 +521,13 @@ export function applyDirectoryEvent(
       const messages = draft.message[sessionID]
       if (messages) {
         const next = [...messages]
-        const messageIndex = findMessageIndex(next, messageID)
+        const messageIndex = messageIndexHints.find(next, messageID)
         if (messageIndex >= 0) {
           next.splice(messageIndex, 1)
           draft.message[sessionID] = next
         }
       }
+      messageIndexHints.forget(messageID)
       delete draft.part[messageID]
       return true
     }
