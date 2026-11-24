@@ -106,6 +106,12 @@ async function createFixture() {
     configureIdentity: vi.fn(async (input) => { state.calls.identity = input; }),
     commitCountSince: vi.fn(async () => 1),
     hasDiffSince: vi.fn(async () => true),
+    describeChanges: vi.fn(async () => ({
+      baseRef: 'origin/main',
+      files: [{ path: 'src/a.ts', status: 'modified', added: 1, removed: 0 }],
+      commits: [{ sha: 'abc123', subject: 'fix: keep the token' }],
+      capturedAt: new Date(NOW).toISOString(),
+    })),
     pushBranch: vi.fn(async ({ branch }) => {
       state.calls.pushes.push(branch);
       return { branch, sha: 'abc123' };
@@ -189,6 +195,9 @@ async function createFixture() {
     },
     createHttpsCredentialReference: () => 'ocgit:v2:https:gitlab:ref',
     ledger,
+    // The note is covered by record.test.js and the dispatcher tests; this
+    // fixture uses a fake checkout path, so keep the real writer off disk.
+    writeRecord: vi.fn(async () => ({ path: 'D:/repo/.openchamber/issue-records/team/repo/issue-17.md', written: true })),
     logger: { info() {}, warn() {} },
     now: () => NOW,
     issueScanEveryTicks: 1,

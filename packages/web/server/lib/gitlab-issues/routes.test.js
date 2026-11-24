@@ -1,6 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { registerGitlabIssueRoutes } from './routes.js';
+
+const tempDirs = [];
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+});
 
 const createRouteRegistry = () => {
   const routes = new Map();
@@ -354,6 +362,48 @@ describe('GitLab run panel routes', () => {
     await runsHandler({ query: { directory: '/repo' } }, res);
 
     expect(res.body.runs[0]).toMatchObject({ triageVerdict: null, outcome: null });
+  });
+
+  it('reports the record path only when the file exists', async () => {
+    const checkout = await fs.mkdtemp(path.join(os.tmpdir(), 'routes-record-'));
+    tempDirs.push(checkout);
+    const recordPath = path.join(checkout, '.openchamber', 'issue-records', 'group', 'repo', 'issue-17.md');
+    await fs.mkdir(path.dirname(recordPath), { recursive: true });
+    await fs.writeFile(recordPath, '# Fix login (#17)\n', 'utf8');
+    const { runsHandler } = createHarness({
+      runs: [runRecord()],
+      projects: [{
+        id: 'p1',
+        path: checkout,
+        gitlabIssueBotAccountId: 'acc-1',
+        autoDispatchGitlabIssues: true,
+      }],
+    });
+    const res = createResponse();
+
+    // The global branch resolves the checkout from the run's projectEntryId.
+    await runsHandler({ query: {} }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.runs[0].recordPath).toBe(recordPath);
+    expect(res.body.runs[0].projectDirectory).toBe(checkout);
+  });
+
+  it('reports null for a run whose record was never written', async () => {
+    const checkout = await fs.mkdtemp(path.join(os.tmpdir(), 'routes-record-'));
+    tempDirs.push(checkout);
+    const { runsHandler } = createHarness({
+      runs: [runRecord()],
+      projects: [{ id: 'p1', path: checkout, gitlabIssueBotAccountId: 'acc-1' }],
+    });
+    const res = createResponse();
+
+    // The directory branch knows the checkout from the project lookup.
+    await runsHandler({ query: { directory: checkout } }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.runs[0].recordPath).toBeNull();
+    expect(res.body.runs[0].projectDirectory).toBeNull();
   });
 
   it('lists the sessions behind the stops and drops unusable entries', async () => {

@@ -70,10 +70,11 @@ const evidence = {
 
 async function harness({
   issueOverrides = {}, accounts: accountOverrides = {}, members, primaryRemote = 'origin',
-  resolveWorktreeSetup, worktreeSetupState, projectOverrides = {},
+  resolveWorktreeSetup, worktreeSetupState, projectOverrides = {}, writeRecord,
 } = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gitlab-dispatch-'));
   dirs.push(dir);
+  await fs.mkdir(path.join(dir, '.git', 'info'), { recursive: true });
   const ledger = createGitlabIssueLedger({ filePath: path.join(dir, 'runs.json'), now: () => NOW });
 
   const accounts = {
@@ -112,6 +113,7 @@ async function harness({
     commits: 1,
     hasDiff: true,
     worktreeDirty: false,
+    changeSummary: null,
     calls: {
       labels: [], prompts: [], interrupts: [], pushes: [], sessionCreates: 0, sessionCreate: null, createMr: null,
       closes: 0,
@@ -214,6 +216,11 @@ async function harness({
       dirty: state.worktreeDirty,
     })),
     runVerifyCommand: vi.fn(async () => ({ code: 0, stdout: '', stderr: '' })),
+    describeChanges: vi.fn(async () => state.changeSummary),
+    run: vi.fn(async (args) => {
+      if (args[0] === 'rev-parse') return { code: 0, stdout: path.join('.git', 'info', 'exclude'), stderr: '' };
+      return { code: 0, stdout: '', stderr: '' };
+    }),
   };
 
   const client = {
@@ -252,7 +259,7 @@ async function harness({
   const dispatcher = createGitlabIssueDispatcher({
     listProjects: async () => [{
       id: 'proj-1',
-      path: 'D:/repo',
+      path: dir,
       autoDispatchGitlabIssues: true,
       gitlabIssueBotAccountId: 'bot-acc',
       ...projectOverrides,
@@ -294,6 +301,7 @@ async function harness({
     worktreeSetupState,
     ledger,
     ledgerPath: path.join(dir, 'runs.json'),
+    writeRecord,
     logger: { info() {}, warn() {} },
     now: () => NOW,
     issueScanEveryTicks: 1,
@@ -301,7 +309,7 @@ async function harness({
     startupDelayMs: 3_600_000,
   });
 
-  return { dispatcher, ledger, state, workspace, authStore };
+  return { dispatcher, ledger, state, workspace, authStore, dir };
 }
 
 afterEach(async () => {
@@ -359,12 +367,12 @@ describe('GitLab issue dispatcher claim', () => {
 describe('GitLab issue dispatcher worktree setup', () => {
   it('gives the creation the project setup commands', async () => {
     const resolveWorktreeSetup = vi.fn(async () => ({ startCommand: 'bun install', untrustedSkipped: [] }));
-    const { dispatcher, workspace } = await harness({ resolveWorktreeSetup });
+    const { dispatcher, workspace, dir } = await harness({ resolveWorktreeSetup });
 
     await dispatcher.tick();
     await dispatcher.tick();
 
-    expect(resolveWorktreeSetup).toHaveBeenCalledWith(expect.objectContaining({ id: 'proj-1', path: 'D:/repo' }));
+    expect(resolveWorktreeSetup).toHaveBeenCalledWith(expect.objectContaining({ id: 'proj-1', path: dir }));
     expect(workspace.createWorktreeFor).toHaveBeenCalledWith(expect.objectContaining({ startCommand: 'bun install' }));
   });
 
@@ -1569,5 +1577,293 @@ describe('GitLab issue dispatcher feedback rounds', () => {
     await dispatcher.tick();
     expect((await ledger.list())[0]).toMatchObject({ phase: 'done', feedbackRounds: 0 });
     expect(state.notes.some((note) => note.body.includes('开始第'))).toBe(false);
+  });
+});
+
+describe('GitLab issue dispatcher delivery record', () => {
+  const changeSummary = {
+    baseRef: 'origin/main',
+    files: [{ path: 'src/login.js', status: 'modified', added: 3, removed: 1 }],
+    commits: [{ sha: 'abc1234', subject: 'fix: bound the timeout' }],
+    capturedAt: '2026-11-12T10:00:00.000Z',
+  };
+  const reviewHistoryEntry = (seq, overrides = {}) => ({
+    seq,
+    kind: 'review',
+    round: seq,
+    verdict: 'approve',
+    summary: `round ${seq}`,
+    findings: [],
+    at: new Date(NOW).toISOString(),
+    ...overrides,
+  });
+
+  it('captures the change summary when implementation produces evidence', async () => {
+    const { dispatcher, ledger, state, workspace } = await harness();
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    state.changeSummary = changeSummary;
+    await ledger.put(runEntry({
+      phase: 'implementing', sessionId: 'ses_impl', worktreePath: 'D:/wt/17', attempts: 1,
+    }));
+    state.messages = [message(evidenceJson)];
+
+    await dispatcher.tick();
+
+    const run = (await ledger.list())[0];
+    expect(run.phase).toBe('reviewing');
+    expect(run.changeSummary).toEqual(changeSummary);
+    expect(workspace.describeChanges).toHaveBeenCalledWith({ cwd: 'D:/wt/17', baseRef: 'origin/main' });
+  });
+
+  it('appends a review history entry for each review answer', async () => {
+    const { dispatcher, ledger, state } = await harness();
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    await ledger.put(runEntry({
+      phase: 'reviewing', sessionId: 'ses_rev', worktreePath: 'D:/wt/17', attempts: 0,
+      evidence, evidenceNoteId: 1,
+    }));
+    state.messages = [message(reviewChangesJson)];
+
+    await dispatcher.tick();
+    let run = (await ledger.list())[0];
+    expect(run.reviewHistory).toHaveLength(1);
+    expect(run.reviewHistory[0]).toMatchObject({
+      seq: 1, kind: 'review', verdict: 'request-changes', summary: 'timeout is not bounded',
+    });
+
+    // The rejecting review opens a fresh implement session, whose evidence is
+    // answered by a second review.
+    await dispatcher.tick();
+    state.messages = [message(evidenceJson)];
+    await dispatcher.tick();
+    await dispatcher.tick();
+    state.messages = [message(reviewApproveJson)];
+    await dispatcher.tick();
+
+    run = (await ledger.list())[0];
+    expect(run.reviewHistory).toHaveLength(2);
+    expect(run.reviewHistory[1]).toMatchObject({
+      seq: 2, kind: 'review', verdict: 'approve', summary: 'fix matches the report',
+    });
+  });
+
+  it('appends a recheck entry and keeps the first review entry', async () => {
+    const { dispatcher, ledger, state } = await harness();
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    const first = reviewHistoryEntry(1, { summary: 'fix matches the report' });
+    await ledger.put(runEntry({
+      phase: 'rechecking', sessionId: 'ses_rc', worktreePath: 'D:/wt/17', attempts: 0,
+      evidence, evidenceNoteId: 1, reviewVerdict: 'approve', reviewHistory: [first],
+    }));
+    state.messages = [message(recheckApproveJson)];
+
+    await dispatcher.tick();
+
+    const run = (await ledger.list())[0];
+    expect(run.reviewHistory).toHaveLength(2);
+    expect(run.reviewHistory[0]).toEqual(first);
+    expect(run.reviewHistory[1]).toMatchObject({
+      seq: 2, kind: 'recheck', verdict: 'approve', summary: 'the fix stands on its own',
+    });
+  });
+
+  it('keeps review history monotonic across a feedback round', async () => {
+    const wt = await fs.mkdtemp(path.join(os.tmpdir(), 'gitlab-wt-'));
+    dirs.push(wt);
+    const { dispatcher, ledger, state } = await harness();
+    state.issue.labels = ['ai-ready', 'ai-working', 'ai-review'];
+    state.mrs = [{ iid: 5, state: 'opened', web_url: `${INSTANCE}/mr/5` }];
+    await ledger.put(runEntry({
+      phase: 'mr-open', mrIid: 5, worktreePath: wt, attempts: 1,
+      evidence, evidenceNoteId: 1, projectPath: 'team/repo', reviewRounds: 2,
+      reviewHistory: [reviewHistoryEntry(1)],
+      noteWatermarks: { issue: 100, mergeRequest: 100 },
+    }));
+    state.notes.push({
+      id: 200, body: '@bot 修复: tighten the check', created_at: new Date(NOW + 2000).toISOString(),
+      author: { id: 7, username: 'sam' },
+    });
+
+    await dispatcher.tick();
+    let run = (await ledger.list())[0];
+    // A feedback round gives the review loop its budget back, but not its seq.
+    expect(run).toMatchObject({ phase: 'addressing', reviewRounds: 0 });
+
+    await dispatcher.tick();
+    state.messages = [message(evidenceJson)];
+    await dispatcher.tick();
+    await dispatcher.tick();
+    state.messages = [message(reviewApproveJson)];
+    await dispatcher.tick();
+
+    run = (await ledger.list())[0];
+    expect(run.reviewHistory).toHaveLength(2);
+    expect(run.reviewHistory[1]).toMatchObject({ seq: 2, kind: 'review' });
+  });
+
+  it('records the approver on plan approval', async () => {
+    const { dispatcher, ledger, state } = await harness({
+      issueOverrides: { description: '类型: feature\n目标分支: ``' },
+      members: [{ id: 7, access_level: 30 }, { id: 8, access_level: 30 }],
+    });
+    await dispatcher.tick();
+    await dispatcher.tick();
+    await dispatcher.tick();
+    state.messages = [message(triageValidJson)];
+    await dispatcher.tick();
+    await dispatcher.tick();
+    state.messages = [message(planJson)];
+    await dispatcher.tick();
+    expect((await ledger.list())[0].phase).toBe('waiting-approval');
+
+    state.notes.push({
+      id: 400, body: '/ai-approve', created_at: new Date(NOW + 2000).toISOString(), author: { id: 8 },
+    });
+    await dispatcher.tick();
+
+    const run = (await ledger.list())[0];
+    expect(run.approvedBy).toMatchObject({ login: 'lee', userId: 8, accountId: 'taker-acc' });
+    expect(run.approvedBy.at).toEqual(expect.any(String));
+  });
+
+  it('blocks before pushing when the record cannot be written', async () => {
+    const writeRecord = vi.fn(async () => {
+      throw new Error('disk is read-only');
+    });
+    const { dispatcher, ledger, state, workspace } = await harness({ writeRecord });
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    await ledger.put(runEntry({
+      phase: 'verifying', worktreePath: 'D:/wt/17', attempts: 1, evidenceNoteId: 1,
+      reviewVerdict: 'approve', evidence, projectPath: 'team/repo',
+    }));
+
+    await dispatcher.tick();
+
+    const run = (await ledger.list())[0];
+    expect(run).toMatchObject({
+      phase: 'blocked', blockedReason: 'record-write-failed', worktreePath: 'D:/wt/17',
+    });
+    expect(state.calls.pushes).toEqual([]);
+    // The gate blocks directly: a retry still needs the worktree.
+    expect(workspace.removeWorktreeSafely).not.toHaveBeenCalled();
+    expect(state.calls.labels).toContainEqual(['add', ['ai-blocked']]);
+    expect(state.calls.labels).toContainEqual(['remove', ['ai-working', 'ai-plan-review', 'ai-review']]);
+    expect(state.notes.some((note) => note.body.includes('交付说明写入失败')
+      && note.body.includes('自动重试'))).toBe(true);
+  });
+
+  it('returns a record-write failure to verifying when the retry succeeds', async () => {
+    const writeRecord = vi.fn(async ({ checkoutPath }) => ({
+      path: path.join(checkoutPath, '.openchamber', 'issue-records', 'team', 'repo', 'issue-17.md'),
+      written: true,
+    }));
+    const { dispatcher, ledger, state } = await harness({ writeRecord });
+    state.issue.labels = ['ai-ready', 'ai-blocked'];
+    await ledger.put(runEntry({
+      phase: 'blocked', blockedReason: 'record-write-failed', worktreePath: 'D:/wt/17',
+      attempts: 1, evidenceNoteId: 1, reviewVerdict: 'approve', evidence,
+      projectPath: 'team/repo', projectEntryId: 'proj-1',
+    }));
+
+    await dispatcher.tick();
+
+    const run = (await ledger.list())[0];
+    expect(run.phase).toBe('verifying');
+    expect(run.blockedReason).toBeNull();
+    expect(state.calls.labels).toContainEqual(['remove', ['ai-blocked']]);
+    expect(state.calls.labels).toContainEqual(['add', ['ai-working']]);
+    expect(state.notes.some((note) => note.body.includes('交付说明已写入'))).toBe(true);
+  });
+
+  it('writes a record for a run whose checkout resolves', async () => {
+    const { dispatcher, ledger, state, dir } = await harness();
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    await ledger.put(runEntry({
+      phase: 'triaging', sessionId: 'ses_triage', worktreePath: 'D:/wt/17', attempts: 0,
+      title: 'Fix login', projectPath: 'team/repo', projectEntryId: 'proj-1',
+    }));
+
+    await dispatcher.tick();
+
+    const recordPath = path.join(dir, '.openchamber', 'issue-records', 'team', 'repo', 'issue-17.md');
+    const text = await fs.readFile(recordPath, 'utf8');
+    expect(text).toContain('# Fix login (#17)');
+  });
+
+  it('stores the verify command result on success and failure', async () => {
+    const failing = await harness({ projectOverrides: { gitlabIssueVerifyCommand: 'bun run check:changed' } });
+    failing.state.issue.labels = ['ai-ready', 'ai-working'];
+    failing.workspace.runVerifyCommand.mockResolvedValueOnce({
+      code: 1, stdout: 'boom', stderr: 'type error in login.ts',
+    });
+    await failing.ledger.put(runEntry({
+      phase: 'verifying', worktreePath: 'D:/wt/17', attempts: 1, evidenceNoteId: 1,
+      reviewVerdict: 'approve', evidence,
+    }));
+
+    await failing.dispatcher.tick();
+
+    let run = (await failing.ledger.list())[0];
+    expect(run).toMatchObject({
+      phase: 'blocked', blockedReason: 'verification-failed',
+      verifyResult: { command: 'bun run check:changed', code: 1 },
+    });
+    expect(run.verifyResult.outputTail).toContain('type error in login.ts');
+
+    const green = await harness({ projectOverrides: { gitlabIssueVerifyCommand: 'bun run check:changed' } });
+    green.state.issue.labels = ['ai-ready', 'ai-working'];
+    await green.ledger.put(runEntry({
+      phase: 'verifying', worktreePath: 'D:/wt/17', attempts: 1, evidenceNoteId: 1,
+      reviewVerdict: 'approve', evidence,
+    }));
+
+    await green.dispatcher.tick();
+
+    run = (await green.ledger.list())[0];
+    expect(run.phase).toBe('mr-open');
+    expect(run.verifyResult).toMatchObject({ command: 'bun run check:changed', code: 0 });
+  });
+
+  it('keeps history bounded and truncates long feedback', async () => {
+    const reviews = await harness();
+    reviews.state.issue.labels = ['ai-ready', 'ai-working'];
+    await reviews.ledger.put(runEntry({
+      phase: 'reviewing', sessionId: 'ses_rev', worktreePath: 'D:/wt/17', attempts: 0,
+      evidence, evidenceNoteId: 1,
+      reviewHistory: Array.from({ length: 12 }, (_, index) => reviewHistoryEntry(index + 1)),
+    }));
+    reviews.state.messages = [message(reviewChangesJson)];
+
+    await reviews.dispatcher.tick();
+
+    const history = (await reviews.ledger.list())[0].reviewHistory;
+    expect(history).toHaveLength(10);
+    expect(history[history.length - 1]).toMatchObject({ seq: 13, kind: 'review' });
+
+    const feedback = await harness();
+    feedback.state.issue.labels = ['ai-ready', 'ai-working', 'ai-review'];
+    feedback.state.mrs = [{ iid: 5, state: 'opened', web_url: `${INSTANCE}/mr/5` }];
+    const longText = 'a'.repeat(2001);
+    await feedback.ledger.put(runEntry({
+      phase: 'mr-open', mrIid: 5, worktreePath: 'D:/wt/17', attempts: 1,
+      evidence, evidenceNoteId: 1, projectPath: 'team/repo',
+      noteWatermarks: { issue: 100, mergeRequest: 100 },
+      feedbackHistory: Array.from({ length: 5 }, (_, index) => ({
+        round: index + 1, items: [{ author: 'sam', text: 'x' }], at: new Date(NOW).toISOString(),
+      })),
+    }));
+    feedback.state.notes.push({
+      id: 200, body: `@bot 修复: ${longText}`, created_at: new Date(NOW + 2000).toISOString(),
+      author: { id: 7, username: 'sam' },
+    });
+
+    await feedback.dispatcher.tick();
+
+    const feedbackHistory = (await feedback.ledger.list())[0].feedbackHistory;
+    expect(feedbackHistory).toHaveLength(5);
+    for (const entry of feedbackHistory) {
+      for (const item of entry.items) expect(item.text.length).toBeLessThanOrEqual(2000);
+    }
+    expect(feedbackHistory[feedbackHistory.length - 1].items[0].text).toHaveLength(2000);
   });
 });

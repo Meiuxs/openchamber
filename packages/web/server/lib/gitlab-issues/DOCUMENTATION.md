@@ -13,6 +13,7 @@ This module turns one labeled GitLab issue into a reviewable merge request. It o
 - `workspace.ts` creates and removes worktrees, writes the commit identity, runs the project's verify command, and runs authenticated fetch and push through a one-shot credential lease.
 - `prompts.ts` builds the triage, plan, implementation, review, recheck, and feedback prompts and validates the agent's structured output.
 - `routes.ts` serves the issue-creation route and the panel's read/act routes. The act route changes GitLab labels or posts a command comment as the operator's bound account; it never writes the ledger.
+- `record.ts` renders the delivery note from a ledger entry, resolves the note's path inside the checkout, keeps it out of git, and writes it atomically.
 
 
 The GitLab labels are a mirror for humans. A label change a human makes is read back each tick; a label change the bot makes follows a ledger write.
@@ -31,6 +32,7 @@ The GitLab labels are a mirror for humans. A label change a human makes is read 
 - A failed issue list read is a skipped tick, not an empty result.
 - Every session a run opens stays on the ledger as `sessions` (`{ sessionId, stage, at }`, oldest first, at most 20), because a phase clears `sessionId` when it moves on. The runs route is its only reader.
 - A session the dispatcher creates carries `metadata.hidden: true` and `metadata.openchamber.kind: 'gitlab-automation'`, with the run's origin, project entry and issue number. The hidden-session proxy keeps it out of the main session list and event stream; the runs panel and the automation session archive reach it by ID through the ledger, using the worktree path, which the runs route exposes as `worktreePath`.
+- Every run keeps one Markdown delivery note for its issue at `<checkout>/.openchamber/issue-records/<namespace>/<repo>/issue-<iid>.md`, falling back to `<checkout>/.git/openchamber/issue-records/...` when the exclude file cannot be written. The note is a rendering of the ledger: one issue has one file reused across runs, git facts are captured only while the worktree exists (at evidence, before block cleanup, and before the verifying push), and the file is never staged, committed, pushed, or hidden by a tracked `.gitignore`. Only `.openchamber/issue-records/` is appended once to `.git/info/exclude`; the rest of `.openchamber/` stays visible to `git status`.
 
 ## Decisions
 
@@ -126,9 +128,11 @@ The first contract said "findings is empty for approve", which forced a reviewer
 
 The agent's `verification` entries are self-reported by the session that wrote the change, and a report is not a gate. When a project sets `gitlabIssueVerifyCommand`, `verifying` runs that command in the worktree through `workspace.runVerifyCommand` and blocks the push on any non-zero exit or timeout, with the output tail in the blocked comment. The command comes from project settings an operator wrote — the same trust level as the worktree setup commands — so a shell is allowed, but the exit code decides, never the output's text.
 
+The command's stdout and stderr are capped while it runs because a failing pipeline can be arbitrarily loud, and only the tail reaches the issue comment. The cap bounds retained memory without changing the pass or fail decision.
+
 ### Why an insufficient-info block reclaims on a new comment
 
-The blocked comment asks the reporter for detail, and a person answers in the issue thread, not by editing the description. The triage prompt therefore carries the issue's recent human comments as untrusted data, and a blocked run checks for any new non-bot comment from the triggerer or a Developer: found, it clears its verdict and reclaims through `claimed`, so the pipeline re-runs with the thread in front of it; missing, it stays blocked and the manual reset path is unchanged. Without the comments in the prompt, the resume would re-block on the same description it just read.
+The blocked comment asks the reporter for detail, and a person answers in the issue thread, not by editing the description. The triage prompt therefore carries the issue's recent human comments as untrusted data, and a blocked run checks for any new non-bot comment from the triggerer or a Developer: found, it clears its verdict and reclaims through `claimed`, so the pipeline re-runs with the thread in front of it; missing, it stays blocked and the manual reset path is unchanged. Without the comments in the prompt, the resume would re-block on the same description it just read. A failed note or member read skips that tick's resume, and the manual reset path still works.
 
 ### Why a project can defer the not-an-issue close
 
@@ -142,13 +146,17 @@ A revision loop that repeats itself is visible on the second `request-changes` r
 
 Findings come from a session that itself read untrusted issue text, so they can carry injected instructions. The revision prompt keeps them inside `<review-findings untrusted="true">` and the parser only accepts `{ file, line?, severity, note }` objects with string fields, the same treatment the issue body gets.
 
+### Why impact is required with an approval
+
+An approval is what makes a change mergeable. The impact report is taken from that review: it names the modules, the business weight of a mistake, compatibility, rollback, and what a tester has to cover. A request-changes round has no merge to describe, and the recheck pass is a second opinion on the verdict instead of a second impact report.
+
 ### Why a label-event read failure blocks instead of retrying
 
 An instance without `resource_label_events` would leave every `ai-ready` issue in a permanent claim-retry loop with no comment on the issue explaining it. The run is blocked once with `label-events-unavailable` and a comment, so the GitLab side says what is wrong and the reset path the comment names works.
 
 ### Why preparing and the working phases share the timeout
 
-A run that never moves holds the project slot and one of the three global slots, whether it is stuck in a session or in the worktree setup. Before the timeout covered planning and reviewing, three hung plans stalled every project until a human removed a label. `preparing` joined for the same reason: a setup command that never reports ready is a hung run even though no session exists. Triage and addressing run under the same budget. The timeout is the only automatic exit from a stuck run that is not a crash.
+A run that never moves holds the project slot and one of the three global slots, whether it is stuck in a session or in the worktree setup. Before the timeout covered planning and reviewing, three hung plans stalled every project until a human removed a label. `preparing` joined for the same reason: a setup command that never reports ready is a hung run even though no session exists. Triage and addressing run under the same budget. The verify command gets a ten-minute bound of its own: a server-side check that hangs must not hold the run's slot. The timeout is the only automatic exit from a stuck run that is not a crash.
 
 ### Why a session that ends without an answer blocks the run
 
@@ -269,6 +277,22 @@ The verdict is already written in the comment, so leaving the close to a human w
 ### Why a wrong not-an-issue verdict needs the ledger row removed
 
 Reopening the issue is not enough to make the automation look at it again: `claim()` skips any issue that already has a ledger entry, so the reopened issue stays ignored even after `ai-ready` is re-added. A person who disagrees with the verdict reopens the issue, deletes that `done` row from `<data dir>/gitlab-issue-runs.json`, and adds `ai-ready`; the next scan claims it as a new run.
+
+### Why the server writes the delivery note and not the agent
+
+The agent already returns structured fields for each phase, and the server validates them, posts them as issue comments, and stores them in the ledger. Rendering the note from the ledger gives the same content on every pass, covers read-only phases such as triage and planning that cannot write files at all, and survives a lost session. An agent-written note would depend on prompt compliance, and a note written in the worktree would leave the worktree dirty, which the cleanup rule keeps forever.
+
+### Why only `issue-records/` is excluded
+
+`.openchamber/` also holds tracked files the app and server write for the project (`project.json`, `plans/`, `notes-todos.json`, `workflows/`). Excluding the whole directory would hide new notes and workflows from `git status` and make them look lost. Only the generated `issue-records/` subtree is ignored, appended once to `.git/info/exclude`, which is local to the clone and never committed. When that file cannot be read or written, the note moves to `<checkout>/.git/openchamber/issue-records/...`; git never reports that path either, so the no-commit promise holds without blocking a push on a read-only `.git`.
+
+### Why the note path is derived instead of stored
+
+The path is derived from the checkout resolved through `projectEntryId` and from `projectPath` on the run, never persisted in the ledger. A stored absolute path would go stale when the project folder moves. A computed path offered without an existence check would link to a file that was never written, so the runs route checks the primary path and the `.git` fallback with `fs.access` and reports `recordPath` and `projectDirectory` only when one exists. The renderer and the route share one path helper so the two cannot disagree.
+
+### Why `record-write-failed` retries in place
+
+`verifying` blocks the push when the note cannot be written, because the note is the handoff record for the change about to leave the machine. The failure is usually a permission or a missing path that a person fixes without touching the issue, so `handleBlocked` retries the same write on every tick and returns the run to `verifying` on success; `blocked -> verifying` is the only transition this adds. The blocked run keeps its worktree — it uses the ordinary `block` call, not the cleaning `blockWithComment` — so a retry still has something to push. It also holds no dispatch slot, so one broken path cannot starve other projects. Removing `ai-blocked` and keeping `ai-ready` still deletes the entry and starts over. Everywhere else the note is best-effort: a write failure is logged with `warn` and does not change the run.
 
 ## Implementation notes
 

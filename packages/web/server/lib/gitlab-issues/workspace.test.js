@@ -198,4 +198,45 @@ describe('GitLab issue workspace', () => {
     expect(error.message).not.toContain('oauth2');
     expect(error.message).toContain('[redacted]');
   });
+
+  it('describes the diff and commits against the merge base', async () => {
+    const { spawnImpl, calls } = fakeSpawn([
+      {
+        when: (args) => args[0] === 'diff' && args.includes('--numstat'),
+        stdout: '3\t1\tsrc/a.ts\n-\t-\tassets/logo.png\n',
+      },
+      {
+        when: (args) => args[0] === 'diff' && args.includes('--name-status'),
+        stdout: 'M\tsrc/a.ts\nA\tassets/logo.png\nD\tsrc/old.ts\n',
+      },
+      {
+        when: (args) => args[0] === 'log',
+        stdout: 'abc1234\tfix: guard the retry\ndef5678\tchore: naming\n',
+      },
+    ]);
+    const workspace = createGitlabIssueWorkspace({ spawnImpl, credentialBroker: broker() });
+    const summary = await workspace.describeChanges({ cwd: 'D:/repo', baseRef: 'origin/main' });
+    expect(summary).toMatchObject({
+      baseRef: 'origin/main',
+      files: [
+        { path: 'assets/logo.png', status: 'added', added: null, removed: null },
+        { path: 'src/a.ts', status: 'modified', added: 3, removed: 1 },
+        { path: 'src/old.ts', status: 'deleted', added: null, removed: null },
+      ],
+      commits: [
+        { sha: 'abc1234', subject: 'fix: guard the retry' },
+        { sha: 'def5678', subject: 'chore: naming' },
+      ],
+    });
+    const diffCall = calls.find((call) => call.args.includes('--numstat'));
+    expect(diffCall.args.join(' ')).toContain('origin/main...HEAD');
+  });
+
+  it('returns null when git cannot describe the change', async () => {
+    const { spawnImpl } = fakeSpawn([
+      { when: (args) => args[0] === 'diff' && args.includes('--numstat'), stderr: 'bad revision', code: 128 },
+    ]);
+    const workspace = createGitlabIssueWorkspace({ spawnImpl, credentialBroker: broker() });
+    await expect(workspace.describeChanges({ cwd: 'D:/repo', baseRef: 'origin/main' })).resolves.toBeNull();
+  });
 });

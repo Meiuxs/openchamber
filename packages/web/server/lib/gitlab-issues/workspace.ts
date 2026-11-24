@@ -4,6 +4,7 @@ import { createWorktree as defaultCreateWorktree, removeWorktree as defaultRemov
 import type { BootstrapStore, WorktreeCreateInput, WorktreeServerOptions, WorktreeRemovalInput } from '../git/service-contracts.js';
 import type { createGitCredentialBroker } from '../git/credential-broker.js';
 import { isValidGitRefName } from './gitlab.js';
+import type { ChangeSummary, ChangeSummaryFile } from './ledger.js';
 
 type CredentialEndpoint = { protocol: string; host: string; port: number; path: string };
 
@@ -144,8 +145,57 @@ export function createGitlabIssueWorkspace({
     return result.stdout.trim().length > 0;
   };
 
+  const parseNumstat = (text: string): Map<string, { added: number | null; removed: number | null }> => {
+    const counts = new Map<string, { added: number | null; removed: number | null }>();
+    for (const line of text.split('\n')) {
+      const [added, removed, ...rest] = line.split('\t');
+      const file = rest.join('\t');
+      if (!file) continue;
+      counts.set(file, {
+        added: added === '-' ? null : Number.parseInt(added ?? '', 10) || 0,
+        removed: removed === '-' ? null : Number.parseInt(removed ?? '', 10) || 0,
+      });
+    }
+    return counts;
+  };
+
+  const parseNameStatus = (text: string): ChangeSummaryFile[] => {
+    const files: ChangeSummaryFile[] = [];
+    for (const line of text.split('\n')) {
+      const [code, first, second] = line.split('\t');
+      if (!code || !first) continue;
+      const status = code.startsWith('A') ? 'added'
+        : code.startsWith('D') ? 'deleted'
+          : code.startsWith('R') ? 'renamed' : 'modified';
+      files.push({ path: (second ?? first).trim(), status, added: null, removed: null });
+    }
+    return files;
+  };
+
+  const describeChanges = async ({ cwd, baseRef }: { cwd: string; baseRef: string }): Promise<ChangeSummary | null> => {
+    try {
+      const [numstat, nameStatus, log] = await Promise.all([
+        run(['diff', '--numstat', `${baseRef}...HEAD`], { cwd }),
+        run(['diff', '--name-status', `${baseRef}...HEAD`], { cwd }),
+        run(['log', '--format=%h%x09%s', `${baseRef}..HEAD`], { cwd }),
+      ]);
+      const counts = parseNumstat(numstat.stdout);
+      const files = parseNameStatus(nameStatus.stdout)
+        .map((file) => ({ ...file, ...(counts.get(file.path) ?? {}) }))
+        .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+      const commits = log.stdout.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
+        const [sha, ...subject] = line.split('\t');
+        return { sha: sha ?? '', subject: subject.join('\t') };
+      });
+      return { baseRef, files, commits, capturedAt: new Date().toISOString() };
+    } catch {
+      return null;
+    }
+  };
+
   return {
     run,
+    describeChanges,
     async remoteUrl({ cwd, remote }: { cwd: string; remote: string }) {
       const result = await run(['remote', 'get-url', remote], { cwd });
       return result.stdout.trim();
@@ -218,12 +268,6 @@ export function createGitlabIssueWorkspace({
       if (exitCode === 1) return true;
       throw new WorkspaceError('git-failed', 'Could not compare the branch against the target');
     },
-    /**
-     * Runs the project's own check command in the worktree before the server
-     * pushes. The command comes from project settings an operator wrote, the
-     * same trust level as the worktree setup commands, so a shell is allowed;
-     * the exit code decides, never the output.
-     */
     async runVerifyCommand({ cwd, command, timeoutMs }: { cwd: string; command: string; timeoutMs: number }) {
       const trimmed = String(command ?? '').trim();
       if (!trimmed) return { code: 0, stdout: '', stderr: '' };
@@ -232,8 +276,6 @@ export function createGitlabIssueWorkspace({
         let stdout = '';
         let stderr = '';
         let settled = false;
-        // A failing pipeline can be arbitrarily loud; cap what is kept in memory
-        // because only the tail ever reaches the issue comment.
         const cap = 200_000;
         child.stdout?.on('data', (chunk: Buffer | string) => {
           if (stdout.length < cap) stdout += chunk.toString();

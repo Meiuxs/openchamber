@@ -15,6 +15,7 @@ import {
 } from './gitlab.js';
 import type { GitlabIssueApi } from './gitlab.js';
 import type { RunEntry } from './ledger.js';
+import { issueUrlOf, mrUrlOf, recordExists, recordLocationFor } from './record.js';
 
 const ISSUE_KINDS = new Set(['bug', 'feature']);
 const MAX_TITLE_LENGTH = 255;
@@ -101,13 +102,6 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
     return projects.find((project) => canonicalDirectory(project?.path) === wanted) ?? null;
   };
 
-  /**
-   * A project whose folder is not a Git repository cannot be bound to GitLab,
-   * and the binding service says so by rejecting the read. That is an answer
-   * about the project, not a failure to answer: treated like a folder with no
-   * GitLab binding, so a panel asking about it gets "not GitLab" instead of a
-   * server error it could only show as broken.
-   */
   const readBindingOrNull = async (path: string): Promise<BindingRead | null> => {
     try {
       return await bindingService.get(path);
@@ -241,13 +235,6 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
     return { instance: provider.instance, projectPath: parsed.projectPath };
   };
 
-  const issueUrlOf = (run: RunEntry) => (isString(run.projectPath) && Number.isInteger(run.iid)
-    ? `${run.origin}/${run.projectPath}/issues/${run.iid}`
-    : null);
-  const mrUrlOf = (run: RunEntry) => (isString(run.projectPath) && Number.isInteger(run.mrIid)
-    ? `${run.origin}/${run.projectPath}/merge_requests/${run.mrIid}`
-    : null);
-
   const runViewKey = (run: RunEntry) => `${run.origin}|${run.projectId}|${run.iid}`;
 
   const ISSUE_STATE_TTL_MS = 60_000;
@@ -297,8 +284,19 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
     return states;
   };
 
-  const toRunView = async (run: RunEntry, issueState: IssueState | null) => {
+  const recordPathOf = async (run: RunEntry, projectDirectory: string | null) => {
+    if (!projectDirectory) return null;
+    const location = recordLocationFor({
+      checkoutPath: projectDirectory,
+      projectPath: run.projectPath ?? '',
+      iid: run.iid,
+    });
+    return recordExists(location).catch(() => null);
+  };
+
+  const toRunView = async (run: RunEntry, issueState: IssueState | null, projectDirectory: string | null) => {
     const holdsSession = ACTIVE_PHASE_SET.has(run.phase) && isString(run.sessionId);
+    const recordPath = await recordPathOf(run, projectDirectory);
     return {
       key: `${run.origin}|${run.projectId}|${run.iid}`,
       origin: run.origin,
@@ -316,6 +314,8 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
       mrIid: run.mrIid ?? null,
       issueUrl: issueUrlOf(run),
       mrUrl: mrUrlOf(run),
+      recordPath: recordPath ?? null,
+      projectDirectory: recordPath ? projectDirectory : null,
       attempts: run.attempts ?? 0,
       reviewRounds: run.reviewRounds ?? 0,
       feedbackRounds: run.feedbackRounds ?? 0,
@@ -373,7 +373,7 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
             status: !config.botAccountId ? 'missing' : account ? 'valid' : 'invalid',
             accountId: config.botAccountId || null,
           },
-          runs: await Promise.all(scoped.map((run) => toRunView(run, states.get(runViewKey(run)) ?? null))),
+          runs: await Promise.all(scoped.map((run) => toRunView(run, states.get(runViewKey(run)) ?? null, project.path))),
         });
       }
       const enabled = (await readProjects()).filter((project) => resolveProjectConfig(project).enabled);
@@ -381,7 +381,11 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
       const scoped = runs.filter((run) => (includeDone || run.phase !== 'done') && byEntryId.has(String(run.projectEntryId)));
       const states = await issueStatesOf(scoped);
       return res.json({
-        runs: await Promise.all(scoped.map((run) => toRunView(run, states.get(runViewKey(run)) ?? null))),
+        runs: await Promise.all(scoped.map((run) => toRunView(
+          run,
+          states.get(runViewKey(run)) ?? null,
+          byEntryId.get(String(run.projectEntryId))?.path ?? null,
+        ))),
       });
     } catch (error) {
       logger.warn?.('[gitlab-issues] runs read failed:', errorMessage(error));
@@ -411,9 +415,6 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
       if (action === 'take' && run.blockedReason !== 'missing-credential') {
         return res.status(409).json({ error: 'phase-mismatch', phase: run.phase });
       }
-      // The acting account may be the project's bot account: a person can share
-      // one GitLab account with the automation, because the dispatcher tags its
-      // own notes with BOT_NOTE_MARKER instead of relying on author identity.
       const accounts = await authStore.listAccounts(run.origin);
       const acting = accounts.find((entry) => entry?.credentialId === accountId && entry?.status === 'valid');
       if (!acting) return res.status(409).json({ error: 'account-unbound' });

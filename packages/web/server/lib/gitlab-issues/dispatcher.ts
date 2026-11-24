@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { parseGitLabRemoteUrl } from '../gitlab/repo.js';
 import { isRecord, isString } from '../shared/guards.js';
 import { parseModelRef } from '../shared/model-ref.js';
@@ -11,25 +12,31 @@ import type { createGitCredentialResolver, createHttpsCredentialReference } from
 import type { createOpenCodeClient } from '../openchamber-sessions/opencode-client.js';
 import type { BootstrapStore } from '../git/service-contracts.js';
 import {
-  BLOCKED_REASONS, PHASES, canTransition, isActivePhase,
+  BLOCKED_REASONS, FEEDBACK_MAX_ROUNDS, FEEDBACK_MIN_ACCESS_LEVEL, PHASES, canTransition, isActivePhase,
 } from './machine.js';
 import {
-  TemplateError, assistantText, buildIssueBranch, findAccountForUser, isBareBotMention, isBotNoteBody, labelNamesOf,
-  matchReusableBranch, parseFeedbackCommand, parseIssueTemplate, resolveAccount, resolveProjectConfig,
+  TemplateError, assistantText, buildIssueBranch, findAccountForUser, isBotNoteBody, labelNamesOf,
+  matchReusableBranch, parseIssueTemplate, resolveAccount, resolveProjectConfig,
 } from './gitlab.js';
 import type { GitlabIssueApi } from './gitlab.js';
 import { withBotNoteMarker } from './bot-notes.js';
 import { createGitlabIssueLedger, ledgerKey } from './ledger.js';
-import type { GitlabIssueLedger, RunEntry, RunEvent, RunSession, NoteWatermarks } from './ledger.js';
+import type {
+  GitlabIssueLedger, RunEntry, RunEvent, RunSession, ChangeSummary,
+  VerifyResult, ReviewHistoryEntry, FeedbackHistoryEntry,
+} from './ledger.js';
 import {
   AgentOutputError, buildFeedbackPrompt, buildImplementPrompt, buildPlanPrompt, buildReviewPrompt,
   buildTriagePrompt,
-  formatBareMentionComment, formatBlockedComment, formatEvidenceComment, formatFeedbackAckComment,
+  formatBlockedComment, formatEvidenceComment,
   formatFeedbackPushComment, formatFindingLine, formatMrComment, formatOscillationComment,
-  formatPlanComment, formatRecheckComment, formatReviewComment, formatTriageComment,
+  formatPlanComment, formatRecheckComment, formatRecordWriteComment, formatReviewComment, formatTriageComment,
   parseAgentOutput, sessionStageLabel,
 } from './prompts.js';
 import type { EvidenceResult, Finding, FeedbackLine } from './prompts.js';
+import { recordLocationFor, writeRunRecord } from './record.js';
+import { createFeedbackFlow } from './feedback-flow.js';
+import { buildMrDescription } from './mr-description.js';
 import type { IssueCredential } from './workspace.js';
 
 const BUSY_LABELS = ['ai-working', 'ai-plan-review', 'ai-review', 'ai-blocked', 'ai-done'];
@@ -39,12 +46,6 @@ const DEFAULT_TICK_INTERVAL_MS = 10_000;
 const DEFAULT_LEASE_MS = 5 * 60 * 1000;
 const MAX_ATTEMPTS = 2;
 const REVIEW_MAX_REVISIONS = 3;
-const FEEDBACK_MAX_ROUNDS = 5;
-const FEEDBACK_MIN_ACCESS_LEVEL = 30;
-/**
- * The verify command is the server's own gate, so it gets a bound no agent
- * phase can stretch: a check that hangs must not hold the run's slot.
- */
 const VERIFY_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
 const SLOT_PHASES: readonly string[] = Object.freeze([
   PHASES.CLAIMED, PHASES.TRIAGING, PHASES.PLANNING, PHASES.WAITING_APPROVAL,
@@ -77,7 +78,10 @@ const responseStatus = <Value>(error: Value) => {
   return errorFields(cause?.response)?.status;
 };
 const unauthorized = <Value>(error: Value) => responseStatus(error) === 401 || errorFields(error)?.status === 401;
-const errorName = <Value>(error: Value) => errorFields(error)?.name;
+const errorName = <Value>(error: Value): string | undefined => {
+  const name = errorFields(error)?.name;
+  return isString(name) ? name : undefined;
+};
 const errorCode = <Value>(error: Value) => errorFields(error)?.code;
 const errorMessage = <Value>(error: Value) => {
   const message = errorFields(error)?.message;
@@ -162,6 +166,9 @@ export interface DispatcherDependencies {
   contextTtlMs?: number | undefined;
   ledger?: GitlabIssueLedger | undefined;
   ledgerPath?: string | undefined;
+  writeRecord?: ((input: {
+    run: RunEntry; checkoutPath: string; excludePath: string | null;
+  }) => Promise<{ path: string; written: boolean }>) | undefined;
 }
 
 interface CredentialRequestLike {
@@ -192,9 +199,10 @@ interface CreateGitlabIssueWorkspaceLike {
   removeWorktreeSafely(input: { repoPath: string; worktreePath: string | null | undefined }): Promise<{ removed: boolean; dirty: boolean }>;
   run(args: string[], options?: { cwd?: string | undefined }): Promise<WorkspaceCommandResult>;
   runVerifyCommand(input: { cwd: string; command: string; timeoutMs: number }): Promise<WorkspaceCommandResult>;
+  describeChanges(input: { cwd: string; baseRef: string }): Promise<ChangeSummary | null>;
 }
 
-interface DispatchContext {
+export interface DispatchContext {
   project: SettingsProject;
   config: ProjectConfig;
   instance: string;
@@ -214,21 +222,12 @@ type SessionResult =
   | { status: 'failed' }
   | { status: 'idle'; text: string; completedAt: number };
 
-interface FeedbackScanItem {
-  channel: string;
-  noteId: number;
-  userId: number;
-  author: string;
-  text: string;
-}
-
 const isJsonRecord = (value: unknown): value is JsonObject => isRecord(value);
 const isInteger = (value: unknown): value is number => Number.isInteger(value);
 const asId = (value: JsonValue | undefined): string | number => (isString(value) || isInteger(value) ? value : 0);
 const asIid = (value: JsonValue | undefined): number => (isInteger(value) ? value : 0);
 const asText = (value: JsonValue | null | undefined) => (isString(value) ? value : '');
 
-/** The human thread an issue carries, newest kept, bot and system notes left out. */
 const MAX_TRIAGE_COMMENTS = 20;
 const readIssueComments = (notes: JsonObject[]): FeedbackLine[] => (Array.isArray(notes) ? notes : [])
   .filter((note) => isJsonRecord(note) && isInteger(note.id) && note.system !== true
@@ -270,6 +269,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     leaseMs = DEFAULT_LEASE_MS,
     contextTtlMs = 60_000,
     ledger = createGitlabIssueLedger({ filePath: dependencies.ledgerPath, now }),
+    writeRecord = writeRunRecord,
   } = dependencies;
 
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -301,6 +301,60 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     ...(Array.isArray(run.sessions) ? run.sessions : []),
     session,
   ].slice(-MAX_RUN_SESSIONS);
+
+  const REVIEW_HISTORY_MAX = 10;
+  const FEEDBACK_HISTORY_MAX = 5;
+  const FEEDBACK_ITEM_COUNT_MAX = 50;
+  const FEEDBACK_ITEM_MAX = 2000;
+  const VERIFY_OUTPUT_TAIL = 4000;
+
+  const appendReviewHistory = (run: RunEntry, entry: Omit<ReviewHistoryEntry, 'seq'>): ReviewHistoryEntry[] => {
+    const history: ReviewHistoryEntry[] = Array.isArray(run.reviewHistory) ? run.reviewHistory : [];
+    const lastSeq = history.reduce((max, item) => Math.max(max, item.seq), 0);
+    return [...history, { ...entry, seq: lastSeq + 1 }].slice(-REVIEW_HISTORY_MAX);
+  };
+
+  const appendFeedbackHistory = (run: RunEntry, entry: FeedbackHistoryEntry): FeedbackHistoryEntry[] => {
+    const history: FeedbackHistoryEntry[] = Array.isArray(run.feedbackHistory) ? run.feedbackHistory : [];
+    const items = entry.items.slice(0, FEEDBACK_ITEM_COUNT_MAX).map((item) => ({
+      author: item.author,
+      text: item.text.slice(0, FEEDBACK_ITEM_MAX),
+    }));
+    return [...history, { ...entry, items }].slice(-FEEDBACK_HISTORY_MAX);
+  };
+
+  const captureChanges = async (run: RunEntry, context: DispatchContext): Promise<Partial<Pick<RunEntry, 'changeSummary'>>> => {
+    if (!run.worktreePath) return {};
+    const baseRef = `${context.primaryRemote}/${run.targetBranch ?? ''}`;
+    const summary = await workspace.describeChanges({ cwd: run.worktreePath, baseRef })
+      .catch(() => null);
+    return summary ? { changeSummary: summary } : {};
+  };
+
+  const excludePathFor = async (checkoutPath: string): Promise<string | null> => {
+    try {
+      const result = await workspace.run(['rev-parse', '--git-path', 'info/exclude'], { cwd: checkoutPath });
+      if (result.code !== 0) return null;
+      const answer = String(result.stdout ?? '').trim();
+      if (!answer) return null;
+      return path.isAbsolute(answer) ? answer : path.join(checkoutPath, answer);
+    } catch {
+      return null;
+    }
+  };
+
+  const writeRecordFor = async (run: RunEntry, checkoutPath: string) => {
+    const excludePath = await excludePathFor(checkoutPath);
+    return writeRecord({ run, checkoutPath, excludePath });
+  };
+
+  const writeRecordBestEffort = async (run: RunEntry, checkoutPath: string) => {
+    try {
+      await writeRecordFor(run, checkoutPath);
+    } catch (error) {
+      warn(`[gitlab-issues] delivery record write failed for #${run.iid}:`, error);
+    }
+  };
 
   const transition = async (run: RunEntry, to: string, patch: Partial<RunEntry> = {}) => {
     if (!canTransition(run.phase, to)) throw new Error(`Illegal transition ${run.phase} -> ${to}`);
@@ -357,12 +411,13 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
   };
 
   const blockWithComment = async (run: RunEntry, context: DispatchContext, reason: string, detail: string, patch: Partial<RunEntry> = {}) => {
+    const changes = await captureChanges(run, context);
     const retained = await cleanupWorktree(
       run,
       context,
       `工作区有未提交改动，已保留：\`${run.worktreePath}\``,
     );
-    const next = await block(run, reason, detail, { ...patch, worktreePath: retained });
+    const next = await block(run, reason, detail, { ...changes, ...patch, worktreePath: retained });
     await context.api.addLabels(run.projectId, run.iid, ['ai-blocked'])
       .catch((error) => warn(`[gitlab-issues] ai-blocked label failed for #${run.iid}:`, error));
     await context.api
@@ -373,11 +428,28 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     return next;
   };
 
-  const failRun = async (run: RunEntry, context: DispatchContext, reason: string, detail: string) => {
+  const feedbackFlow = createFeedbackFlow({
+    ledger,
+    keyOf,
+    appendFeedbackHistory,
+    transition,
+    blockWithComment,
+    errorName,
+    warn,
+    isoNow,
+  });
+
+  const failRun = async (
+    run: RunEntry,
+    context: DispatchContext,
+    reason: string,
+    detail: string,
+    patch: Partial<RunEntry> = {},
+  ) => {
     const repeated = Boolean(run.lastError) && run.lastError === detail;
     const exhausted = (run.attempts ?? 0) >= MAX_ATTEMPTS;
     const nextReason = repeated || exhausted ? BLOCKED_REASONS.REPEATED_ERROR : reason;
-    return blockWithComment(run, context, nextReason, detail, { attempts: run.attempts ?? 0 });
+    return blockWithComment(run, context, nextReason, detail, { attempts: run.attempts ?? 0, ...patch });
   };
 
   const markBotUnauthorized = async (context: DispatchContext) => {
@@ -614,14 +686,12 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     }
     const client = sessionClient(run);
     const issue = await context.api.getIssue(run.projectId, run.iid);
-    // The triage verdict weighs the issue thread too: a report blocked for
-    // missing detail answers in the comments, not by editing the description.
     const triageComments = stage === 'triage'
       ? await context.api.listNotes(run.projectId, run.iid ?? 0)
         .then(readIssueComments)
         .catch((error) => {
           warn(`[gitlab-issues] comment read failed for #${run.iid}:`, error);
-          return null as FeedbackLine[] | null;
+          return null;
         })
       : null;
     const actor = await resolveAccount(authStore, run.origin, run.actorAccountId);
@@ -632,8 +702,6 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     const payload: JsonObject = {
       title,
       location: { directory: run.worktreePath },
-      // Automation sessions stay out of the main session list; the runs page
-      // and the automation archive open them by ID from the ledger.
       metadata: {
         hidden: true,
         openchamber: {
@@ -659,8 +727,6 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
         model.variant = variant;
       }
     }
-    // The review passes may run as a dedicated agent persona; without one they
-    // fall back to the project's default agent like every other stage.
     const stageAgent = (stage === 'review' || stage === 'recheck') && context.config.reviewAgent
       ? context.config.reviewAgent
       : context.project.defaultAgent ?? '';
@@ -720,8 +786,6 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
           projectPath: run.worktreePath ?? '',
           actorLogin: asText(actor.user.login),
           baseRef: `${context.primaryRemote}/${run.targetBranch}`,
-          // Blind by design: the recheck reads the diff without the implementer's
-          // report so an approval cannot lean on the author's own reasoning.
           evidence: null,
           feedbackItems: null,
           secondOpinion: true,
@@ -956,8 +1020,6 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
 
   const closeAsNotAnIssue = async (run: RunEntry, context: DispatchContext, triage: { verdict: string }, noteId: number) => {
     if (context.config.autoCloseNotAnIssue === false) {
-      // Closing is the one action the verdict takes that a human cannot cheaply
-      // undo, so a project can ask for a person to confirm it first.
       return blockWithComment(
         run,
         context,
@@ -1108,6 +1170,12 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       approvalNoteId: command.noteId,
       actorUserId: command.userId,
       actorAccountId: approver.credentialId,
+      approvedBy: {
+        login: asText(approver.user.login),
+        userId: command.userId,
+        accountId: approver.credentialId,
+        at: isoNow(),
+      },
     });
     await context.api.removeLabels(run.projectId, run.iid ?? 0, ['ai-plan-review'])
       .catch((error) => warn(`[gitlab-issues] ai-plan-review label failed for #${run.iid}:`, error));
@@ -1116,12 +1184,6 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     return next;
   };
 
-  /**
-   * An `insufficient-info` block asked the issue for detail; a new human
-   * comment is that detail arriving. The run reclaims itself instead of
-   * waiting for a manual label reset, because the claim gate already ensures
-   * the triggerer is a Developer, the same bar the feedback commands use.
-   */
   const resumeOnNewInfo = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | null> => {
     let notes: JsonObject[];
     let members: Map<number, number>;
@@ -1130,7 +1192,6 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       members = new Map((await context.api.listMembers(run.projectId))
         .map((member): [number, number] => [Number(member?.id), Number(member?.access_level)]));
     } catch {
-      // A failed read skips this tick's resume; the manual reset path still works.
       return null;
     }
     const watermark = run.triageNoteId ?? 0;
@@ -1160,6 +1221,21 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
   };
 
   const handleBlocked = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | void> => {
+    if (run.blockedReason === BLOCKED_REASONS.RECORD_WRITE_FAILED) {
+      try {
+        await writeRecordFor(run, context.project.path);
+      } catch {
+        return;
+      }
+      const next = await transition(run, PHASES.VERIFYING, { blockedReason: null });
+      await context.api.removeLabels(run.projectId, run.iid ?? 0, ['ai-blocked'])
+        .catch((error) => warn(`[gitlab-issues] ai-blocked label failed for #${run.iid}:`, error));
+      await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-working'])
+        .catch((error) => warn(`[gitlab-issues] ai-working label failed for #${run.iid}:`, error));
+      await context.api.postNote(run.projectId, run.iid ?? 0, '交付说明已写入，继续验证与推送。')
+        .catch((error) => warn(`[gitlab-issues] record retry note failed for #${run.iid}:`, error));
+      return next;
+    }
     if (run.blockedReason === BLOCKED_REASONS.MISSING_CREDENTIAL) {
       const command = await context.api.latestCommand(run.projectId, run.iid ?? 0, {
         sinceIso: run.since,
@@ -1213,22 +1289,17 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, error.message);
     }
     const noteId = await context.api.postNote(run.projectId, run.iid ?? 0, formatEvidenceComment(evidence));
+    const changes = await captureChanges(run, context);
     return transition(run, PHASES.REVIEWING, {
-      evidenceNoteId: noteId, evidence, sessionId: null, attempts: 0, reviewFindings: null,
+      evidenceNoteId: noteId, evidence, sessionId: null, attempts: 0, reviewFindings: null, ...changes,
     });
   };
 
-  /** Findings this round that a previous round already named: the loop a person must see early. */
   const recurringFindings = (run: RunEntry, current: Finding[]) => {
     const previous = Array.isArray(run.reviewFindings) ? run.reviewFindings : [];
     return current.filter((finding) => previous.some((entry) => entry.file === finding.file));
   };
 
-  /**
-   * Posted from the second request-changes round on, for findings a previous
-   * round already named: an oscillation is visible long before the round cap
-   * blocks the run, and a person reading the issue should see it then.
-   */
   const postOscillationNote = async (
     run: RunEntry,
     context: DispatchContext,
@@ -1268,6 +1339,14 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       ...(Array.isArray(run.reviewFindings) ? run.reviewFindings : []),
       ...(review.verdict === 'request-changes' ? review.findings : []),
     ];
+    const reviewHistory = appendReviewHistory(run, {
+      kind: 'review',
+      round: rounds,
+      verdict: review.verdict,
+      summary: review.summary,
+      findings: review.findings,
+      at: isoNow(),
+    });
     const recheckNext = context.config.secondReview && !run.rechecked;
     const noteId = await context.api.postNote(
       run.projectId,
@@ -1282,6 +1361,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
           reviewImpact: review.impact ?? null,
           sessionId: null,
           feedbackItems: null,
+          reviewHistory,
         });
       }
       return transition(run, PHASES.VERIFYING, {
@@ -1290,6 +1370,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
         reviewImpact: review.impact ?? null,
         sessionId: null,
         feedbackItems: null,
+        reviewHistory,
       });
     }
     await postOscillationNote(run, context, rounds, review.findings);
@@ -1306,6 +1387,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
           reviewFindings: findings,
           reviewImpact: null,
           sessionId: null,
+          reviewHistory,
         },
       );
     }
@@ -1317,6 +1399,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       reviewImpact: null,
       sessionId: null,
       attempts: 0,
+      reviewHistory,
     });
   };
 
@@ -1345,16 +1428,29 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
         recheckNoteId: noteId,
         rechecked: true,
         sessionId: null,
+        reviewHistory: appendReviewHistory(run, {
+          kind: 'recheck',
+          round: run.reviewRounds ?? 0,
+          verdict: 'approve',
+          summary: recheck.summary,
+          findings: recheck.findings,
+          at: isoNow(),
+        }),
       });
     }
-    // A recheck that rejects feeds the normal revision loop. `rechecked` stays
-    // set so the next approval pushes without a second recheck of its own: the
-    // recheck budget is one pass per run, bounded like every other loop here.
     const rounds = (run.reviewRounds ?? 0) + 1;
     const findings: Finding[] = [
       ...(Array.isArray(run.reviewFindings) ? run.reviewFindings : []),
       ...recheck.findings,
     ];
+    const reviewHistory = appendReviewHistory(run, {
+      kind: 'recheck',
+      round: rounds,
+      verdict: 'request-changes',
+      summary: recheck.summary,
+      findings: recheck.findings,
+      at: isoNow(),
+    });
     await postOscillationNote(run, context, rounds, recheck.findings);
     if (rounds > REVIEW_MAX_REVISIONS) {
       return blockWithComment(
@@ -1372,6 +1468,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
           reviewFindings: findings,
           reviewImpact: null,
           sessionId: null,
+          reviewHistory,
         },
       );
     }
@@ -1386,131 +1483,8 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       reviewImpact: null,
       sessionId: null,
       attempts: 0,
+      reviewHistory,
     });
-  };
-
-  const scanFeedback = async (run: RunEntry, context: DispatchContext) => {
-    const [issueNotes, mrNotes] = await Promise.all([
-      context.api.listNotes(run.projectId, run.iid ?? 0),
-      context.api.listMergeRequestNotes(run.projectId, run.mrIid ?? 0),
-    ]);
-    const newestId = (notes: JsonObject[]) => notes.reduce((max, note) => (
-      isInteger(note?.id) ? Math.max(max, note.id) : max), 0);
-    const marks = run.noteWatermarks ?? null;
-    if (!marks) {
-      return {
-        // SAFETY: empty arrays are valid empty results of these element types.
-        items: [] as FeedbackScanItem[],
-        // SAFETY: empty arrays are valid empty results of these element types.
-        mentions: [] as { channel: string; iid: number }[],
-        watermarks: { issue: newestId(issueNotes), mergeRequest: newestId(mrNotes) },
-        changed: false,
-      };
-    }
-    const channels = [
-      { name: 'issue', iid: run.iid ?? 0, notes: issueNotes },
-      { name: 'mergeRequest', iid: run.mrIid ?? 0, notes: mrNotes },
-    ];
-    const accessLevels = new Map((await context.api.listMembers(run.projectId))
-      .map((member): [number, number] => [Number(member?.id), Number(member?.access_level)]));
-    const items: FeedbackScanItem[] = [];
-    const mentions: { channel: string; iid: number }[] = [];
-    const nextWatermarks: NoteWatermarks = { ...marks };
-    for (const channel of channels) {
-      // SAFETY: channels only contains the two literal names that index NoteWatermarks.
-      const since = Number(marks[channel.name as keyof NoteWatermarks] ?? 0);
-      const fresh = channel.notes.filter((note) => isInteger(note?.id) && note.id > since);
-      if (!fresh.length) continue;
-      for (const note of fresh) {
-        if (note.system || isBotNoteBody(asText(note.body))) continue;
-        const author = isJsonRecord(note.author) ? note.author : null;
-        if ((accessLevels.get(Number(author?.id)) ?? 0) < FEEDBACK_MIN_ACCESS_LEVEL) continue;
-        const command = parseFeedbackCommand(asText(note.body), context.botUsername);
-        if (command) {
-          items.push({
-            channel: channel.name,
-            noteId: asIid(note.id),
-            userId: Number(author?.id ?? 0),
-            author: isString(author?.username) ? author.username : asText(author?.username),
-            text: command.text ?? '',
-          });
-        } else if (isBareBotMention(asText(note.body), context.botUsername)) {
-          mentions.push({ channel: channel.name, iid: channel.iid });
-        }
-      }
-      // SAFETY: channels only contains the two literal names that index NoteWatermarks.
-      nextWatermarks[channel.name as keyof NoteWatermarks] = newestId(fresh);
-    }
-    return {
-      items,
-      mentions,
-      watermarks: nextWatermarks,
-      changed: nextWatermarks.issue !== marks.issue || nextWatermarks.mergeRequest !== marks.mergeRequest,
-    };
-  };
-
-  const postFeedbackReply = (context: DispatchContext, run: RunEntry, channel: string, iid: number, body: string) => (channel === 'issue'
-    ? context.api.postNote(run.projectId, iid, body)
-    : context.api.postMergeRequestNote(run.projectId, iid, body)
-  ).catch((error) => warn(`[gitlab-issues] feedback reply failed for #${run.iid}:`, error));
-
-  const handleFeedbackScan = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | false> => {
-    let scan;
-    try {
-      scan = await scanFeedback(run, context);
-    } catch (error) {
-      if (errorName(error) !== 'GitlabListOverflowError') throw error;
-      return blockWithComment(run, context, BLOCKED_REASONS.NOTES_LIMIT,
-        '评论数量超出自动化单次读取上限，反馈无法继续解析，请人工处理后续修改。');
-    }
-    for (const mention of scan.mentions) {
-      await postFeedbackReply(
-        context, run, mention.channel, mention.iid,
-        formatBareMentionComment(context.botUsername),
-      );
-    }
-    if (scan.items.length) {
-      const nextRounds = (run.feedbackRounds ?? 0) + 1;
-      if (nextRounds > FEEDBACK_MAX_ROUNDS) {
-        return blockWithComment(
-          run,
-          context,
-          BLOCKED_REASONS.FEEDBACK_LIMIT,
-          `反馈修复已达上限（${FEEDBACK_MAX_ROUNDS} 轮）。`,
-          { noteWatermarks: scan.watermarks },
-        );
-      }
-      const byChannel: { channel: string; iid: number; items: FeedbackScanItem[] }[] = [];
-      for (const item of scan.items) {
-        const last = byChannel[byChannel.length - 1];
-        if (last && last.channel === item.channel) last.items.push(item);
-        else byChannel.push({ channel: item.channel, iid: item.channel === 'issue' ? run.iid ?? 0 : run.mrIid ?? 0, items: [item] });
-      }
-      for (const group of byChannel) {
-        await postFeedbackReply(
-          context, run, group.channel, group.iid,
-          formatFeedbackAckComment({ items: group.items, round: nextRounds, maxRounds: FEEDBACK_MAX_ROUNDS }),
-        );
-      }
-      const last = scan.items[scan.items.length - 1];
-      const next = await transition(run, PHASES.ADDRESSING, {
-        feedbackRounds: nextRounds,
-        lastFeedbackActor: last?.userId ?? null,
-        feedbackItems: scan.items.map(({ author, text }): FeedbackLine => ({ author, text })),
-        noteWatermarks: scan.watermarks,
-        sessionId: null,
-        attempts: 0,
-        reviewRounds: 0,
-        reviewImpact: null,
-      });
-      await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-working'])
-        .catch((error) => warn(`[gitlab-issues] ai-working label failed for #${run.iid}:`, error));
-      return next;
-    }
-    if (scan.changed || !run.noteWatermarks) {
-      await ledger.update(keyOf(run), { noteWatermarks: scan.watermarks });
-    }
-    return false;
   };
 
   const handleAddressing = async (run: RunEntry, context: DispatchContext): Promise<RunEntry | false> => {
@@ -1544,36 +1518,11 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, error.message);
     }
     const noteId = await context.api.postNote(run.projectId, run.iid ?? 0, formatEvidenceComment(evidence));
+    const changes = await captureChanges(run, context);
     return transition(run, PHASES.REVIEWING, {
-      evidenceNoteId: noteId, evidence, sessionId: null, attempts: 0, reviewFindings: null,
+      evidenceNoteId: noteId, evidence, sessionId: null, attempts: 0, reviewFindings: null, ...changes,
     });
   };
-
-  const buildMrDescription = (run: RunEntry) => [
-    '## 关联 issue',
-    '',
-    `Closes #${run.iid}`,
-    '',
-    '## 根因',
-    '',
-    run.evidence?.rootCause ?? '',
-    '',
-    '## 改动',
-    '',
-    run.evidence?.changes ?? '',
-    '',
-    '## 验证命令与结果',
-    '',
-    ...(run.evidence?.verification ?? []).map((entry) => `- \`${entry.command}\`：${entry.result}`),
-    '',
-    '## 风险与回滚',
-    '',
-    run.evidence?.risks ?? '',
-    '',
-    '## 生成阶段',
-    '',
-    `${run.kind} 自动化`,
-  ].join('\n');
 
   const handleVerifying = async (run: RunEntry, context: DispatchContext): Promise<RunEntry> => {
     if (run.reviewVerdict !== 'approve') {
@@ -1608,14 +1557,14 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     if (!run.evidenceNoteId) {
       return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED, 'Evidence note is missing');
     }
+    let recordRun: RunEntry = run;
     if (context.config.verifyCommand) {
-      // The agent's own verification is self-reported; a configured command is
-      // the server's independent gate, run in the worktree right before push.
+      const verifyCommand = context.config.verifyCommand;
       let verified: WorkspaceCommandResult;
       try {
         verified = await workspace.runVerifyCommand({
           cwd: run.worktreePath ?? '',
-          command: context.config.verifyCommand,
+          command: verifyCommand,
           timeoutMs: VERIFY_COMMAND_TIMEOUT_MS,
         });
       } catch (error) {
@@ -1624,11 +1573,42 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
         }
         throw error;
       }
+      const outputTail = `${verified.stdout}\n${verified.stderr}`.trim().slice(-VERIFY_OUTPUT_TAIL);
+      const verifyResult: VerifyResult = {
+        command: verifyCommand,
+        code: verified.code ?? null,
+        outputTail,
+        at: isoNow(),
+      };
       if (verified.code !== 0) {
-        const tail = `${verified.stdout}\n${verified.stderr}`.trim().slice(-2000);
         return failRun(run, context, BLOCKED_REASONS.VERIFICATION_FAILED,
-          `服务端验证命令 \`${context.config.verifyCommand}\` 未通过（退出码 ${verified.code ?? 'null'}）：\n\`\`\`\n${tail || '(无输出)'}\n\`\`\``);
+          `服务端验证命令 \`${verifyCommand}\` 未通过（退出码 ${verified.code ?? 'null'}）：\n\`\`\`\n${outputTail.slice(-2000) || '(无输出)'}\n\`\`\``,
+          { verifyResult });
       }
+      recordRun = await ledger.update(keyOf(run), { verifyResult });
+    }
+
+    const changePatch = await captureChanges(recordRun, context);
+    if (changePatch.changeSummary) {
+      recordRun = await ledger.update(keyOf(run), changePatch);
+    }
+    try {
+      await writeRecordFor(recordRun, context.project.path);
+    } catch (error) {
+      warn(`[gitlab-issues] delivery record gate failed for #${run.iid}:`, error);
+      const location = recordLocationFor({
+        checkoutPath: context.project.path,
+        projectPath: recordRun.projectPath ?? '',
+        iid: recordRun.iid,
+      });
+      await context.api.postNote(run.projectId, run.iid ?? 0, formatRecordWriteComment(location.primary))
+        .catch((noteError) => warn(`[gitlab-issues] record failure note failed for #${run.iid}:`, noteError));
+      const blocked = await block(run, BLOCKED_REASONS.RECORD_WRITE_FAILED, `交付说明写入失败：${location.primary}`, changePatch);
+      await context.api.addLabels(run.projectId, run.iid ?? 0, ['ai-blocked'])
+        .catch((labelError) => warn(`[gitlab-issues] ai-blocked label failed for #${run.iid}:`, labelError));
+      await context.api.removeLabels(run.projectId, run.iid ?? 0, ['ai-working', 'ai-plan-review', 'ai-review'])
+        .catch((labelError) => warn(`[gitlab-issues] working label clear failed for #${run.iid}:`, labelError));
+      return blocked;
     }
 
     const pushCredential = await credentialFor(context, actor.account);
@@ -1743,7 +1723,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
         since: isoNow(),
       });
     }
-    return handleFeedbackScan(run, context);
+    return feedbackFlow.handleFeedbackScan(run, context);
   };
 
   const cancelledByHuman = (run: RunEntry, issue: JsonObject) => {
@@ -1907,6 +1887,18 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
         : byEntryId.get(String(run.projectEntryId)))
         ?? contexts.get(`${run.origin}|${run.projectId}`);
 
+      const checkoutPaths = new Map<string, string>();
+      for (const { project } of projects) checkoutPaths.set(String(project.id), project.path);
+      const writeRecords = async () => {
+        for (const run of await ledger.list()) {
+          if (stopped) return;
+          if (run.projectEntryId === null || run.projectEntryId === undefined) continue;
+          const checkoutPath = checkoutPaths.get(String(run.projectEntryId));
+          if (!checkoutPath) continue;
+          await writeRecordBestEffort(run, checkoutPath);
+        }
+      };
+
       let runs = await ledger.list();
       if (!recovered) {
         recovered = true;
@@ -1924,6 +1916,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
             return warn(`[gitlab-issues] run ${run.iid} failed:`, error);
           });
       }
+      await writeRecords();
 
       if (tickCount % issueScanEveryTicks !== 0) return;
       let dispatched = 0;
@@ -1946,6 +1939,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
           }
         }
       }
+      await writeRecords();
     } catch (error) {
       warn('[gitlab-issues] tick failed:', error);
     } finally {

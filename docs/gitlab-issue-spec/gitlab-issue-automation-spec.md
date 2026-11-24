@@ -114,7 +114,17 @@
 - issue 已被人手动关闭的，照常加 `ai-done` 并清理。
 - 清理前先查 `git status --porcelain`：工作区脏时跳过删除，评论路径，台账保留 worktreePath。现有 `removeWorktree` 会强删脏工作区，必须先做这个检查。进入 `blocked` 时同样走这套清理。
 
-### 4.5 评论反馈修复
+### 4.5 交付说明
+
+每个 GitLab issue 对应一份 Markdown 交付说明，跨多次运行复用同一文件，供评审和交接使用。台账是唯一事实来源，服务端每一轮 tick 都从台账重新渲染并写回该文件，不依赖 agent 写文件，也不改动 issue 评论、MR 正文或标签。
+
+- 位置：`<checkout>/.openchamber/issue-records/<namespace>/<repo>/issue-<iid>.md`。`<checkout>` 是认领该 run 的设置项对应的项目目录，`<namespace>/<repo>` 是 run 上已存的 GitLab `projectPath`。同一 checkout 服务两个 GitLab 项目时文件不冲突；文件按 issue 号命名，标题修改不会移动文件；人工重置后的重跑复用同一文件。
+- 不入库：只把 `.openchamber/issue-records/` 追加一次到 `.git/info/exclude`，该文件属于本地 clone，不会被提交。不排除整个 `.openchamber/`，因为 `project.json`、`plans/`、`notes-todos.json`、`workflows/` 等受版本控制的文件也在其中。exclude 文件不可写时，说明改写到 `<checkout>/.git/openchamber/issue-records/...`，该路径同样不出现在 `git status` 中，也不阻塞推送。说明从不 stage、commit 或 push，也不修改仓库的 `.gitignore`。
+- 内容：小节标题为中文，与自动化发的 issue 评论一致；包含交付摘要（判定、方案、证据）、变更文件、提交、验证、审核（含历次审核与复核）、反馈修复、运行时间线和未完成与阻塞，没有数据的段落省略。页头使用 `since` 和最近事件时间，不使用每轮都会变化的 `updatedAt`。issue 标题、审核发现和反馈文本按普通文本转义或放入围栏块，避免伪造标题、表格或提前关闭围栏。脚注说明该文件由自动化生成、不随提交。
+- 采集点：`workspace.describeChanges` 在 worktree 仍存在时执行 `git diff --numstat base...HEAD`、`git diff --name-status base...HEAD` 和 `git log base..HEAD`，采集变更文件与提交。采集发生在实现或反馈会话产出证据后、阻塞清理 worktree 前，以及 `verifying` 推送前。台账新增的 `changeSummary`、`verifyResult`、`approvedBy`、`reviewHistory`、`feedbackHistory` 都是可选字段，旧记录照常读取和渲染。
+- 写入与闸门：`verifying` 在请求推送凭据前严格写入说明；写失败或取不到 checkout 路径时，run 以 `record-write-failed` 阻塞，保留 worktree，不执行推送。该阻塞原因每轮原地重试：成功则移除 `ai-blocked`、加 `ai-working` 并回到 `verifying`，失败则继续阻塞且不重复评论；人工重置路径不变。其他阶段的写入是尽力而为，失败只记 warn，不改变 run。
+
+### 4.6 评论反馈修复
 
 MR 打开后，人可以在 issue 或 MR 里评论 `@<bot 用户名> 修复`（或 `fix`）触发新一轮修复，修完回到 `mr-open` 继续等人评审。完整设计见第 12 节。
 

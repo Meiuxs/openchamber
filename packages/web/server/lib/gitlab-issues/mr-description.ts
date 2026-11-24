@@ -1,0 +1,27 @@
+import type { RunEntry } from './ledger.js';
+
+export const buildMrDescription = (run: RunEntry) => [
+  '## 关联 issue',
+  '',
+  `Closes #${run.iid}`,
+  '',
+  '## 根因',
+  '',
+  run.evidence?.rootCause ?? '',
+  '',
+  '## 改动',
+  '',
+  run.evidence?.changes ?? '',
+  '',
+  '## 验证命令与结果',
+  '',
+  ...(run.evidence?.verification ?? []).map((entry) => `- \`${entry.command}\`：${entry.result}`),
+  '',
+  '## 风险与回滚',
+  '',
+  run.evidence?.risks ?? '',
+  '',
+  '## 生成阶段',
+  '',
+  `${run.kind} 自动化`,
+].join('\n');

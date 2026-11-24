@@ -14,6 +14,9 @@ export const PHASES = Object.freeze({
   DONE: 'done',
 });
 
+export const FEEDBACK_MAX_ROUNDS = 5;
+export const FEEDBACK_MIN_ACCESS_LEVEL = 30;
+
 export const BLOCKED_REASONS = Object.freeze({
   INVALID_TEMPLATE: 'invalid-template',
   MISSING_CREDENTIAL: 'missing-credential',
@@ -45,14 +48,10 @@ const TRANSITIONS = Object.freeze({
   [PHASES.PREPARING]: [PHASES.TRIAGING, PHASES.BLOCKED],
   [PHASES.IMPLEMENTING]: [PHASES.REVIEWING, PHASES.BLOCKED],
   [PHASES.REVIEWING]: [PHASES.IMPLEMENTING, PHASES.RECHECKING, PHASES.VERIFYING, PHASES.BLOCKED],
-  // The recheck session only decides whether an approval stands; its own
-  // request-changes feeds the normal revision loop.
   [PHASES.RECHECKING]: [PHASES.VERIFYING, PHASES.IMPLEMENTING, PHASES.BLOCKED],
   [PHASES.VERIFYING]: [PHASES.MR_OPEN, PHASES.BLOCKED],
   [PHASES.MR_OPEN]: [PHASES.ADDRESSING, PHASES.DONE, PHASES.BLOCKED],
   [PHASES.ADDRESSING]: [PHASES.REVIEWING, PHASES.BLOCKED],
-  // A blocked run may retry verifying in place: the delivery-record gate keeps
-  // the worktree, so a successful write resumes the push without a reclaim.
   [PHASES.BLOCKED]: [PHASES.CLAIMED, PHASES.VERIFYING],
   [PHASES.DONE]: [],
 });
