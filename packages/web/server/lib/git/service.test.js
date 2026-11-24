@@ -1196,6 +1196,30 @@ describe.runIf(canRunGit())('diffs for status paths that are not plain files', (
 // ---------------------------------------------------------------------------
 
 describe('getStatus', () => {
+  it('drops the cached status when a working-tree-only change is reverted', async () => {
+    if (!canRunGit()) return;
+
+    const repo = createTempDir();
+    runGit(repo, ['init', '-b', 'main']);
+    runGit(repo, ['config', 'user.email', 'test@example.com']);
+    runGit(repo, ['config', 'user.name', 'Test User']);
+    fs.writeFileSync(path.join(repo, 'tracked.txt'), 'one\n');
+    runGit(repo, ['add', 'tracked.txt']);
+    runGit(repo, ['commit', '-m', 'Initial commit']);
+
+    // An untracked file is removed with `git clean`, which never writes the
+    // index or HEAD: only an explicit invalidation can drop the cached entry.
+    fs.writeFileSync(path.join(repo, 'untracked.txt'), 'two\n');
+    const before = await getStatus(repo, { cache: true });
+    expect(before.files).toContainEqual(expect.objectContaining({ path: 'untracked.txt', index: '?' }));
+
+    await revertFile(repo, 'untracked.txt', { scope: 'working' });
+
+    const after = await getStatus(repo, { cache: true });
+    expect(after.files).toEqual([]);
+    expect(after.isClean).toBe(true);
+  });
+
   it('serves a cached status to batch callers until the repository changes', async () => {
     if (!canRunGit()) return;
 

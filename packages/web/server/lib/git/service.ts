@@ -561,7 +561,12 @@ const withGitIndexMutationQueue = async <Result>(directory: string, task: () => 
   gitIndexMutationQueues.set(key, tail);
 
   try {
-    return await current;
+    const result = await current;
+    // A write through this queue can change the working tree without touching
+    // .git/index (clean, hunk reversal), which the status signature cannot see.
+    invalidateStatusCache(key);
+    invalidateStatusCache(directory);
+    return result;
   } finally {
     if (gitIndexMutationQueues.get(key) === tail) {
       gitIndexMutationQueues.delete(key);

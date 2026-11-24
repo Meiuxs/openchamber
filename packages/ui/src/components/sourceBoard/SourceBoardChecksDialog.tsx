@@ -50,7 +50,7 @@ export const SourceBoardChecksDialog: React.FC<{
         if (open) load();
     }, [load, open]);
 
-    useVisibilityInterval(load, RUNNING_REFRESH_MS, { enabled: open && running });
+    useVisibilityInterval(load, RUNNING_REFRESH_MS, { enabled: open && running, immediate: false });
 
     const formatTimestamp = React.useCallback((value?: string) => {
         if (!value) return '';

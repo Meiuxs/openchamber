@@ -1,9 +1,8 @@
 import React from 'react';
+import { isCapacitorApp } from '@/lib/platform';
+import { combineVisibility, createNativeAppVisibility, type VisibilitySignal } from '@/lib/appVisibility';
 
-export type VisibilitySignal = {
-  isVisible: () => boolean;
-  subscribe: (listener: () => void) => () => void;
-};
+export type { VisibilitySignal } from '@/lib/appVisibility';
 
 export type VisibilityIntervalOptions = {
   enabled?: boolean;
@@ -21,11 +20,21 @@ const documentVisibility: VisibilitySignal = {
   },
 };
 
+// A Capacitor WebView keeps `visibilityState` at "visible" when the app goes to
+// the background, so the native app state has to pause polling there as well.
+const defaultVisibility: VisibilitySignal = combineVisibility(
+  documentVisibility,
+  createNativeAppVisibility({
+    isNativeApp: isCapacitorApp,
+    loadAppState: () => import('@capacitor/app').then(({ App }) => App),
+  }),
+);
+
 /**
  * Runs `callback` on an interval only while the page is visible, and fires it
  * once when visibility returns so stale data is refreshed before the next tick.
- * Pass a `visibility` signal to cover runtimes where `visibilitychange` is
- * unreliable (for example a Capacitor WebView).
+ * Pass a `visibility` signal to override the default (page visibility combined
+ * with the native app state on Capacitor).
  */
 export const useVisibilityInterval = (
   callback: () => void,
@@ -35,7 +44,7 @@ export const useVisibilityInterval = (
   const { enabled = true, immediate = true, runWhenHidden = false, visibility } = options;
   const callbackRef = React.useRef(callback);
   callbackRef.current = callback;
-  const signal = React.useMemo(() => visibility ?? documentVisibility, [visibility]);
+  const signal = React.useMemo(() => visibility ?? defaultVisibility, [visibility]);
 
   React.useEffect(() => {
     if (!enabled || !(intervalMs > 0)) return undefined;

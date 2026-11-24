@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { useSessionUIStore } from '@/sync/session-ui-store';
+import { useVisibilityInterval } from '@/hooks/useVisibilityInterval';
 import { useViewportStore } from '@/sync/viewport-store';
 import { useSessions, useDirectorySync } from '@/sync/sync-context';
 import { MEMORY_LIMITS } from '@/stores/types/sessionTypes';
@@ -225,17 +226,18 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ onClose }) => {
     };
   }, [streamSnapshot.entries]);
 
-  React.useEffect(() => {
-    const refresh = () => {
-      setStreamSnapshot(getStreamPerfSnapshot());
-      setVsCodeStreamSnapshot(getVsCodeStreamPerfSnapshot());
-      setRequestsSnapshot(getRequestsInFlightSnapshot());
-    };
-
-    refresh();
-    const intervalId = window.setInterval(refresh, 500);
-    return () => window.clearInterval(intervalId);
+  const refresh = React.useCallback(() => {
+    setStreamSnapshot(getStreamPerfSnapshot());
+    setVsCodeStreamSnapshot(getVsCodeStreamPerfSnapshot());
+    setRequestsSnapshot(getRequestsInFlightSnapshot());
   }, []);
+
+  React.useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  // Polls perf snapshots; paused while the page (or the native app) is hidden.
+  useVisibilityInterval(refresh, 500, { immediate: false });
 
   React.useEffect(() => {
     if (copyState === 'idle') {
