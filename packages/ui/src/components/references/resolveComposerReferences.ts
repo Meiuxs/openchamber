@@ -20,6 +20,12 @@ export type ReferenceResolveDeps = {
     sourceControl: Pick<SourceControlAPI, 'issueGet' | 'issueComments' | 'changeRequestContext' | 'referenceDetail'>;
     context: SourceControlReadContext | null;
     /**
+     * The read contexts of repositories found under a session directory that is
+     * not itself a repository. A link reads through the first of these on its
+     * own provider and instance, so a subdirectory's issue still attaches.
+     */
+    contexts?: readonly SourceControlReadContext[];
+    /**
      * A tracker item with its comments, by tracker, the tracker's id and the
      * container it was listed under (identifiers restart per container).
      */
@@ -185,10 +191,23 @@ export type ReferenceLinkTarget =
     | ({ source: 'repository-url' } & RepositoryUrlResolver)
     | { source: 'tracker'; provider: string; identifier: string };
 
+const sameReadLocation = (context: SourceControlReadContext, target: { provider: string; instance: string }): boolean => (
+    context.provider === target.provider && context.instance === target.instance
+);
+
+/** The session's own repository when the link lives there, else a repository found under it. */
+const readContextFor = (
+    target: { provider: string; instance: string },
+    deps: ReferenceResolveDeps,
+): SourceControlReadContext | null => {
+    if (deps.context && sameReadLocation(deps.context, target)) return deps.context;
+    return deps.contexts?.find((candidate) => sameReadLocation(candidate, target)) ?? null;
+};
+
 export async function resolveReferenceLink(target: ReferenceLinkTarget, deps: ReferenceResolveDeps): Promise<ComposerReference | null> {
     if (target.source === 'tracker') return readTrackerItem(deps, target.provider, target.identifier);
-    const { context } = deps;
-    if (!context || context.provider !== target.provider || context.instance !== target.instance) {
+    const context = readContextFor(target, deps);
+    if (!context) {
         throw new Error('The repository is not available here');
     }
     if (target.source === 'repository-url') {

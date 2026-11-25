@@ -124,6 +124,41 @@ describe('resolveReferenceLink', () => {
         const deps = { sourceControl: { issueGet: unexpected, issueComments: unexpected, changeRequestContext: unexpected, referenceDetail: unexpected }, context, readTrackerDetail: unexpected, trackerName: () => '' };
         await expect(resolveReferenceLink({ ...issueLink, provider: 'gitlab', instance: 'gitlab.com' }, deps)).rejects.toThrow('The repository is not available here');
     });
+
+    test('reads a link through a repository found under a directory that is not one', async () => {
+        const reads: Array<{ linked: boolean; directory: string }> = [];
+        const nested: SourceControlReadContext = { ...context, directory: '/work/lib' };
+        const sourceControl: Pick<SourceControlAPI, 'issueGet' | 'issueComments' | 'changeRequestContext' | 'referenceDetail'> = {
+            issueGet: async (through, number) => {
+                reads.push({ linked: through.linked === true, directory: through.directory });
+                return {
+                    provider: 'github', instance: 'github.com', id: 'I_9', number, title: 'Crash', url: 'https://github.com/other/lib/issues/9', state: 'open',
+                    project: { provider: 'github', instance: 'github.com', id: 'other/lib', owner: 'other', name: 'lib', url: 'https://github.com/other/lib' },
+                    author: { provider: 'github', instance: 'github.com', id: '1', username: 'reporter' },
+                };
+            },
+            issueComments: async () => [],
+            changeRequestContext: unexpected,
+            referenceDetail: unexpected,
+        };
+        const reference = await resolveReferenceLink(issueLink, {
+            sourceControl, context: null, contexts: [nested], readTrackerDetail: unexpected, trackerName: () => '',
+        });
+        expect(reads).toEqual([{ linked: false, directory: '/work/lib' }]);
+        expect(reference).toMatchObject({ kind: 'repository-issue', number: 9, title: 'Crash' });
+    });
+
+    test('does not borrow a repository under the directory that sits on another instance', async () => {
+        const nested: SourceControlReadContext = { ...context, directory: '/work/lib', instance: 'ghe.example.com' };
+        const deps = {
+            sourceControl: { issueGet: unexpected, issueComments: unexpected, changeRequestContext: unexpected, referenceDetail: unexpected },
+            context: null,
+            contexts: [nested],
+            readTrackerDetail: unexpected,
+            trackerName: () => '',
+        };
+        await expect(resolveReferenceLink(issueLink, deps)).rejects.toThrow('The repository is not available here');
+    });
 });
 
 test('a known native provider wins over an extension resolver on the same origin', () => {

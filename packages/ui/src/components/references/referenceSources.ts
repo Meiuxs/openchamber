@@ -30,6 +30,9 @@ import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { normalizeProjectPath, resolveProjectForSessionDirectory } from '@/lib/projectResolution';
 import { useSpaceProjectDirectory } from '@/lib/spaces/spaces-store';
+import { discoversNestedRepos } from '@/lib/nestedRepositories';
+import { useDirectoryStore } from '@/stores/useDirectoryStore';
+import { useGitStore, useNestedRepos } from '@/stores/useGitStore';
 import {
     rememberedRepositoryProvider,
     rememberRepositoryProvider,
@@ -167,6 +170,29 @@ export function useRepositoryReadContext(directory: string | null): SourceContro
     const providersPending = useProvidersPending();
     if (providersPending) return null;
     return pickReadContext(binding, hostPending, descriptors);
+}
+
+const NO_NESTED_DIRECTORIES: readonly string[] = [];
+/** A pasted link asks for these, so a wide root is capped instead of read in full. */
+const NESTED_REPOSITORY_LIMIT = 12;
+
+/**
+ * The repositories under a directory that is not one itself, discovered by the
+ * same scan the Git view uses. Nothing is scanned until `enabled`, which the
+ * composer sets only once its own directory turned out to have no repository.
+ */
+export function useNestedRepositoryDirectories(root: string | null, enabled: boolean): readonly string[] {
+    const homeDirectory = useDirectoryStore((state) => state.homeDirectory);
+    const ensureNestedRepos = useGitStore((state) => state.ensureNestedRepos);
+    const searches = enabled && root !== null && discoversNestedRepos(root, homeDirectory);
+    const repositories = useNestedRepos(searches ? root : null);
+    React.useEffect(() => {
+        if (searches && root && repositories === undefined) void ensureNestedRepos(root);
+    }, [ensureNestedRepos, repositories, root, searches]);
+    return React.useMemo(
+        () => (searches && Array.isArray(repositories) ? repositories.slice(0, NESTED_REPOSITORY_LIMIT) : NO_NESTED_DIRECTORIES),
+        [repositories, searches],
+    );
 }
 
 export function useRepositoryReferenceProvider(directory: string | null): SourceControlProvider | null {
