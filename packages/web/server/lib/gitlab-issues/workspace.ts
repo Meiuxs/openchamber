@@ -200,7 +200,12 @@ export function createGitlabIssueWorkspace({
       const result = await run(['remote', 'get-url', remote], { cwd });
       return result.stdout.trim();
     },
-    async fetchBranch({ cwd, remote, branch, credential }: { cwd: string; remote: string; branch: string; credential: IssueCredential }) {
+    async fetchBranch({ cwd, remote, branch, credential, sshCommand }: {
+      cwd: string; remote: string; branch: string;
+      credential?: IssueCredential | undefined; sshCommand?: string | null | undefined;
+    }) {
+      const sshArgs = sshCommand ? ['-c', `core.sshCommand=${sshCommand}`] : [];
+      if (!credential) return run(['fetch', '--no-tags', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`], { cwd, gitConfigArgs: sshArgs });
       return withLease({
         credential,
         operation: (lease) => run(
@@ -303,18 +308,26 @@ export function createGitlabIssueWorkspace({
         });
       });
     },
-    async pushBranch({ cwd, remote, branch, credential }: { cwd: string; remote: string; branch: string; credential: IssueCredential }) {
+    async pushBranch({ cwd, remote, branch, credential, sshCommand }: {
+      cwd: string; remote: string; branch: string;
+      credential?: IssueCredential | undefined; sshCommand?: string | null | undefined;
+    }) {
       if (!isValidGitRefName(branch)) {
         throw new WorkspaceError('invalid-branch', `Refusing to push invalid branch name: ${branch}`);
       }
       try {
-        await withLease({
-          credential,
-          operation: (lease) => run(
-            ['push', '--no-verify', remote, `HEAD:refs/heads/${branch}`],
-            { cwd, ...lease },
-          ),
-        });
+        if (credential) {
+          await withLease({
+            credential,
+            operation: (lease) => run(
+              ['push', '--no-verify', remote, `HEAD:refs/heads/${branch}`],
+              { cwd, ...lease },
+            ),
+          });
+        } else {
+          const sshArgs = sshCommand ? ['-c', `core.sshCommand=${sshCommand}`] : [];
+          await run(['push', '--no-verify', remote, `HEAD:refs/heads/${branch}`], { cwd, gitConfigArgs: sshArgs });
+        }
       } catch (error) {
         throw new WorkspaceError('push-rejected', error instanceof Error ? error.message : String(error));
       }

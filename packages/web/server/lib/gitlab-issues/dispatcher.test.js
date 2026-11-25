@@ -71,6 +71,7 @@ const evidence = {
 async function harness({
   issueOverrides = {}, accounts: accountOverrides = {}, members, primaryRemote = 'origin',
   resolveWorktreeSetup, worktreeSetupState, projectOverrides = {}, writeRecord,
+  remoteUrl = `${INSTANCE}/team/repo.git`, bindingRemotes = [], resolveSshCommand,
 } = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gitlab-dispatch-'));
   dirs.push(dir);
@@ -256,6 +257,13 @@ async function harness({
     markAccountInvalid: vi.fn(async () => true),
   };
 
+  const credentialResolver = {
+    resolve: vi.fn(async () => ({
+      username: 'oauth2', password: 'secret',
+      allowedEndpoint: { protocol: 'https', host: 'gitlab.example.com', path: 'team/repo' },
+    })),
+  };
+
   const dispatcher = createGitlabIssueDispatcher({
     listProjects: async () => [{
       id: 'proj-1',
@@ -278,25 +286,21 @@ async function harness({
             accountId: 'bot-acc',
             primaryRemote,
             readiness: 'ready',
-            endpoint: { displayUrl: `${INSTANCE}/team/repo.git`, fingerprint: 'fp-1' },
+            endpoint: { displayUrl: remoteUrl, fingerprint: 'fp-1' },
           }],
-          remotes: [],
+          remotes: bindingRemotes,
         },
         repository: {
-          remotes: [{ name: primaryRemote, fetch: { displayUrl: `${INSTANCE}/team/repo.git` } }],
+          remotes: [{ name: primaryRemote, fetch: { displayUrl: remoteUrl } }],
         },
       }),
     },
     apiFactory: apiFor,
     workspace,
     clientFactory: () => client,
-    credentialResolver: {
-      resolve: async () => ({
-        username: 'oauth2', password: 'secret',
-        allowedEndpoint: { protocol: 'https', host: 'gitlab.example.com', path: 'team/repo' },
-      }),
-    },
+    credentialResolver,
     createHttpsCredentialReference: () => 'ocgit:v2:https:gitlab:ref',
+    resolveSshCommand,
     resolveWorktreeSetup,
     worktreeSetupState,
     ledger,
@@ -309,7 +313,7 @@ async function harness({
     startupDelayMs: 3_600_000,
   });
 
-  return { dispatcher, ledger, state, workspace, authStore, dir };
+  return { dispatcher, ledger, state, workspace, authStore, dir, credentialResolver };
 }
 
 afterEach(async () => {
@@ -396,8 +400,40 @@ describe('GitLab issue dispatcher worktree setup', () => {
     expect(state.calls.sessionCreates).toBe(1);
   });
 
-  it('blocks the run when the worktree setup failed', async () => {
-    const { dispatcher, ledger } = await harness({ worktreeSetupState: vi.fn(async () => 'failed') });
+  it('fetches over the managed SSH key when the primary remote is SSH', async () => {
+    const resolveSshCommand = vi.fn(async () => 'ssh -i key');
+    const {
+      dispatcher, ledger, workspace, state, credentialResolver,
+    } = await harness({
+      remoteUrl: 'git@gitlab.example.com:team/repo.git',
+      bindingRemotes: [{ name: 'origin', mode: 'managed', readiness: 'ready', credentialId: 'ocgit:v2:ssh:key1' }],
+      resolveSshCommand,
+    });
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    await ledger.put(runEntry({ phase: 'claimed', attempts: 1 }));
+
+    await dispatcher.tick();
+
+    expect(resolveSshCommand).toHaveBeenCalledWith('ocgit:v2:ssh:key1');
+    expect(workspace.fetchBranch).toHaveBeenCalledWith(expect.objectContaining({ sshCommand: 'ssh -i key' }));
+    expect(workspace.fetchBranch.mock.calls[0][0].credential).toBeUndefined();
+    expect(credentialResolver.resolve).not.toHaveBeenCalled();
+  });
+
+  it('leaves an SSH remote without a managed key to the system SSH config', async () => {
+    const {
+      dispatcher, ledger, workspace, state, credentialResolver,
+    } = await harness({ remoteUrl: 'git@gitlab.example.com:team/repo.git' });
+    state.issue.labels = ['ai-ready', 'ai-working'];
+    await ledger.put(runEntry({ phase: 'claimed', attempts: 1 }));
+
+    await dispatcher.tick();
+
+    expect(workspace.fetchBranch).toHaveBeenCalledWith(expect.objectContaining({ sshCommand: null }));
+    expect(credentialResolver.resolve).not.toHaveBeenCalled();
+  });
+
+  it('blocks the run when the worktree setup failed', async () => {    const { dispatcher, ledger } = await harness({ worktreeSetupState: vi.fn(async () => 'failed') });
 
     await dispatcher.tick();
     await dispatcher.tick();

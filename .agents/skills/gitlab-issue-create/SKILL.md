@@ -10,6 +10,11 @@ description: Use when creating a GitLab issue that OpenChamber's GitLab issue au
 - An agent or scheduled job is asked to file a bug or feature issue for a repo whose OpenChamber project has GitLab issue automation enabled.
 - The issue needs the `类型:` and `目标分支:` header the dispatcher parses.
 
+The checkout may keep an HTTPS or an SSH remote (`git@host:group/repo.git`,
+`ssh://host/group/repo.git`); `--instance` is always the web/REST URL, so
+derive `https://<host>` from an SSH remote and pass the real instance when the
+SSH host is an alias or the ports differ.
+
 Not for: GitHub issues, editing existing issues, or merge request work (use `gitlab-mr-auto-fix`).
 
 ## Two trigger modes

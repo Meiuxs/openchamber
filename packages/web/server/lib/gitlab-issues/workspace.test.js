@@ -59,6 +59,33 @@ describe('GitLab issue workspace', () => {
     expect(pushCall.options.shell).toBe(false);
   });
 
+  it('pushes over SSH without a credential lease and applies the key command', async () => {
+    const { spawnImpl, calls } = fakeSpawn([
+      { when: (args) => args.includes('push'), stdout: '' },
+      { when: (args) => args.includes('rev-parse'), stdout: 'abc123\n' },
+    ]);
+    const credentialBroker = broker();
+    const workspace = createGitlabIssueWorkspace({ spawnImpl, credentialBroker });
+    await workspace.pushBranch({
+      cwd: 'D:/repo', remote: 'origin', branch: 'openchamber/issue-1-x', sshCommand: 'ssh -i key',
+    });
+    expect(credentialBroker.issue).not.toHaveBeenCalled();
+    const pushCall = calls.find((call) => call.args.includes('push'));
+    expect(pushCall.args.slice(0, 3)).toEqual(['-c', 'core.sshCommand=ssh -i key', 'push']);
+  });
+
+  it('fetches over system SSH when no credential and no managed key are given', async () => {
+    const { spawnImpl, calls } = fakeSpawn([
+      { when: (args) => args.includes('fetch'), stdout: '' },
+    ]);
+    const credentialBroker = broker();
+    const workspace = createGitlabIssueWorkspace({ spawnImpl, credentialBroker });
+    await workspace.fetchBranch({ cwd: 'D:/repo', remote: 'origin', branch: 'main' });
+    expect(credentialBroker.issue).not.toHaveBeenCalled();
+    expect(calls[0].args).toContain('fetch');
+    expect(calls[0].args).toContain('+refs/heads/main:refs/remotes/origin/main');
+  });
+
   it('refuses an invalid branch name before spawning git', async () => {
     const { spawnImpl, calls } = fakeSpawn([]);
     const workspace = createGitlabIssueWorkspace({ spawnImpl, credentialBroker: broker() });

@@ -171,6 +171,22 @@ describe('GitLab issue create route', () => {
     );
   });
 
+  it('parses the project from an SCP-style SSH remote', async () => {
+    const { handler, createIssue } = createHarness({
+      binding: { remoteUrl: 'git@gitlab.example.com:group/repo.git' },
+    });
+    const res = createResponse();
+
+    await handler({ body: validBody }, res);
+
+    expect(res.statusCode).toBe(201);
+    expect(createIssue).toHaveBeenCalledWith(
+      'group/repo',
+      'Preview breaks on wide tables',
+      expect.stringContaining('类型: bug'),
+    );
+  });
+
   it('uses the default branch when no target branch is given', async () => {
     const { handler, createIssue } = createHarness();
     const res = createResponse();

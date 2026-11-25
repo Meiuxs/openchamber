@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseGitLabRemoteUrl } from '../gitlab/repo.js';
+import { normalizeGitLabInstance } from '../gitlab/instance.js';
+import { sshRemoteUrlsReaching } from '../git/ssh-host-alias.js';
 import { isRecord, isString } from '../shared/guards.js';
 import { parseModelRef } from '../shared/model-ref.js';
 import type { JsonObject, JsonValue } from '../shared/json-values.js';
@@ -93,18 +95,31 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 const isLoopbackHost = (hostname: string) => LOOPBACK_HOSTS.has(hostname) || hostname.startsWith('127.');
 
 const endpointForRemote = (rawUrl: string | null | undefined) => {
+  const value = String(rawUrl ?? '').trim();
+  if (!value) return null;
+  const scp = value.includes('://') ? null : value.match(/^(?:[^@\s]+@)?([^:/\s]+):(?!\/)(.+)$/);
+  if (scp?.[1]) return { protocol: 'ssh' as const, host: scp[1].toLowerCase(), port: 22, path: '' };
   let url: URL;
   try {
-    url = new URL(String(rawUrl ?? ''));
+    url = new URL(value);
   } catch {
     return null;
+  }
+  if (url.protocol === 'ssh:' || url.protocol === 'git+ssh:') {
+    if (!url.hostname) return null;
+    return {
+      protocol: 'ssh' as const,
+      host: url.hostname.toLowerCase(),
+      port: Number(url.port) || 22,
+      path: url.pathname,
+    };
   }
   if (url.username || url.password) return null;
   const plainHttpAllowed = url.protocol === 'http:' && isLoopbackHost(url.hostname);
   if (url.protocol !== 'https:' && !plainHttpAllowed) return null;
   const secure = url.protocol === 'https:';
   return {
-    protocol: secure ? 'https' : 'http',
+    protocol: secure ? 'https' as const : 'http' as const,
     host: url.hostname,
     port: Number(url.port) || (secure ? 443 : 80),
     path: url.pathname,
@@ -148,6 +163,7 @@ export interface DispatcherDependencies {
   clientFactory: (input: { directory: string }) => OpencodeClient;
   credentialResolver: CredentialResolver;
   createHttpsCredentialReference: typeof createHttpsCredentialReference;
+  resolveSshCommand?: ((credentialId: string) => Promise<string | null>) | undefined;
   worktreeBootstrapStore?: BootstrapStore | null | undefined;
   resolveWorktreeSetup?: ((project: SettingsProject) => Promise<{ startCommand: string }>) | null | undefined;
   worktreeSetupState?: ((input: { directory: string; bootstrapStore: BootstrapStore | null }) => Promise<'ready' | 'pending' | 'failed'>) | null | undefined;
@@ -186,7 +202,10 @@ interface WorkspaceCommandResult {
 }
 
 interface CreateGitlabIssueWorkspaceLike {
-  fetchBranch(input: { cwd: string; remote: string; branch: string; credential: IssueCredential }): Promise<WorkspaceCommandResult>;
+  fetchBranch(input: {
+    cwd: string; remote: string; branch: string;
+    credential?: IssueCredential | undefined; sshCommand?: string | null | undefined;
+  }): Promise<WorkspaceCommandResult>;
   localBranchExists(input: { cwd: string; branch: string }): Promise<boolean>;
   createWorktreeFor(input: {
     repoPath: string; branch: string; worktreeName: string; startRef?: string | undefined;
@@ -195,7 +214,10 @@ interface CreateGitlabIssueWorkspaceLike {
   configureIdentity(input: { cwd: string; name: string; email: string }): Promise<void>;
   commitCountSince(input: { cwd: string; baseRef: string }): Promise<number>;
   hasDiffSince(input: { cwd: string; baseRef: string }): Promise<boolean>;
-  pushBranch(input: { cwd: string; remote: string; branch: string; credential: IssueCredential }): Promise<{ branch: string; sha: string }>;
+  pushBranch(input: {
+    cwd: string; remote: string; branch: string;
+    credential?: IssueCredential | undefined; sshCommand?: string | null | undefined;
+  }): Promise<{ branch: string; sha: string }>;
   removeWorktreeSafely(input: { repoPath: string; worktreePath: string | null | undefined }): Promise<{ removed: boolean; dirty: boolean }>;
   run(args: string[], options?: { cwd?: string | undefined }): Promise<WorkspaceCommandResult>;
   runVerifyCommand(input: { cwd: string; command: string; timeoutMs: number }): Promise<WorkspaceCommandResult>;
@@ -209,6 +231,7 @@ export interface DispatchContext {
   primaryRemote: string;
   remoteUrl: string;
   endpoint: Endpoint | null;
+  sshCommand: string | null;
   projectPath: string;
   projectId: string | number;
   defaultBranch: string | null;
@@ -252,6 +275,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     clientFactory,
     credentialResolver,
     createHttpsCredentialReference,
+    resolveSshCommand = null,
     worktreeBootstrapStore = null,
     resolveWorktreeSetup = null,
     worktreeSetupState = null,
@@ -472,8 +496,18 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     const primaryRemote = provider.primaryRemote;
     const remote = (bindingRead.repository?.remotes ?? []).find((entry) => entry?.name === primaryRemote);
     const remoteUrl = asText(remote?.fetch?.displayUrl ?? provider.endpoint?.displayUrl ?? '');
-    const parsed = parseGitLabRemoteUrl(remoteUrl, provider.instance);
+    const sshHosts = await sshRemoteUrlsReaching(
+      (bindingRead.repository?.remotes ?? []).flatMap((entry) => [entry?.push?.displayUrl, entry?.fetch?.displayUrl]),
+      new URL(normalizeGitLabInstance(provider.instance)).hostname.toLowerCase(),
+    );
+    const parsed = parseGitLabRemoteUrl(remoteUrl, provider.instance, sshHosts);
     if (!parsed) return null;
+    const endpoint = endpointForRemote(remoteUrl);
+    const grant = (binding.remotes ?? []).find((entry) => entry?.name === primaryRemote
+      && entry.readiness === 'ready' && entry.mode === 'managed' && isString(entry.credentialId));
+    const sshCommand = endpoint?.protocol === 'ssh' && grant?.credentialId && resolveSshCommand
+      ? await resolveSshCommand(grant.credentialId).catch(() => null)
+      : null;
     const botAccount = await resolveAccount(authStore, provider.instance, config.botAccountId);
     if (!botAccount) {
       logger.warn?.(`[gitlab-issues] bot account unusable for project ${project.id}`);
@@ -498,7 +532,8 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       instance: provider.instance,
       primaryRemote,
       remoteUrl,
-      endpoint: endpointForRemote(remoteUrl),
+      endpoint,
+      sshCommand,
       projectPath: parsed.projectPath,
       projectId: asId(projectInfo.id),
       defaultBranch: isString(projectInfo.default_branch) ? projectInfo.default_branch : null,
@@ -534,6 +569,14 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     // SAFETY: the managed reference above always resolves to an HTTPS credential.
     return resolved as IssueCredential;
   };
+
+  type Transport = { credential: IssueCredential } | { sshCommand: string | null };
+
+  const transportFor = async (context: DispatchContext, account: AuthCredential): Promise<Transport> => (
+    context.endpoint?.protocol === 'ssh'
+      ? { sshCommand: context.sshCommand }
+      : { credential: await credentialFor(context, account) }
+  );
 
   const sessionClient = (run: RunEntry): ClientLike => {
     // SAFETY: OpenCode client replies are JSON-shaped; only ids and text records are read here.
@@ -585,7 +628,7 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
     if (!context.endpoint) {
       return blockWithComment(
         run, context, BLOCKED_REASONS.MISSING_CREDENTIAL,
-        '主远端不是 HTTPS 地址，无法使用一次性凭据租约推送。',
+        '主远端不是可用的 HTTPS 或 SSH 地址，无法拉取或推送。',
       );
     }
     const actor = await resolveAccount(authStore, run.origin, run.actorAccountId);
@@ -619,14 +662,12 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       );
       const base = existing ?? run.targetBranch;
       if (base !== run.targetBranch) {
-        const botCredential = await credentialFor(context, context.botAccount);
         await workspace.fetchBranch({
-          cwd: context.project.path, remote: context.primaryRemote, branch: base ?? '', credential: botCredential,
+          cwd: context.project.path, remote: context.primaryRemote, branch: base ?? '', ...await transportFor(context, context.botAccount),
         });
       }
-      const botCredential = await credentialFor(context, context.botAccount);
       await workspace.fetchBranch({
-        cwd: context.project.path, remote: context.primaryRemote, branch: run.targetBranch ?? '', credential: botCredential,
+        cwd: context.project.path, remote: context.primaryRemote, branch: run.targetBranch ?? '', ...await transportFor(context, context.botAccount),
       });
 
       const branchExists = await workspace.localBranchExists({
@@ -1611,14 +1652,14 @@ export function createGitlabIssueDispatcher(dependencies: DispatcherDependencies
       return blocked;
     }
 
-    const pushCredential = await credentialFor(context, actor.account);
+    const pushTransport = await transportFor(context, actor.account);
     let pushed: { branch: string; sha: string };
     try {
       pushed = await workspace.pushBranch({
         cwd: run.worktreePath ?? '',
         remote: context.primaryRemote,
         branch: run.branch ?? '',
-        credential: pushCredential,
+        ...pushTransport,
       });
     } catch (error) {
       if (errorName(error) === 'WorkspaceError') {

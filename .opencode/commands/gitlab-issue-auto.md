@@ -11,10 +11,12 @@ intended triggerer. Follow `.agents/skills/gitlab-issue-create/SKILL.md`; this
 command only fixes the defaults it should run with.
 
 1. **Target repository.** Read `git remote -v` and use the remote that points
-   at the internal GitLab instance — the one named `gitlab`, else `origin` when
-   its URL is an `http(s)` GitLab URL. Derive `--instance` and `--project`
-   (`namespace/repo`) from it. If no remote is a GitLab instance, ask before
-   sending anything.
+   at the internal GitLab instance — the one named `gitlab`, else `origin`.
+   Accept HTTPS (`https://host/group/repo.git`), SCP (`git@host:group/repo.git`)
+   and `ssh://[user@]host[:port]/group/repo.git`; strip a trailing `.git`.
+   For SSH the REST instance is `https://<host>`; when the SSH host is an alias
+   or its port differs from the web host, use the real `--instance` URL instead
+   of guessing. If no remote is a GitLab instance, ask before sending anything.
 2. **Kind and title.** `--kind bug` unless the description asks for new or
    changed behavior, then `--kind feature`. The title is one line, without a
    leading `#` or a trailing period.

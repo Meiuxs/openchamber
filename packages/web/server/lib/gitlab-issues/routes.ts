@@ -1,4 +1,6 @@
 import { parseGitLabRemoteUrl } from '../gitlab/repo.js';
+import { normalizeGitLabInstance } from '../gitlab/instance.js';
+import { sshRemoteUrlsReaching } from '../git/ssh-host-alias.js';
 import { isValidGitRefName } from '../shared/git-ref.js';
 import { isPlainObject, isRecord, isString } from '../shared/guards.js';
 import type { JsonObject, JsonValue } from '../shared/json-values.js';
@@ -122,7 +124,11 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
       entry?.name === provider.primaryRemote
     ));
     const remoteUrl = asText(remote?.fetch?.displayUrl ?? provider.endpoint?.displayUrl ?? '');
-    const parsed = parseGitLabRemoteUrl(remoteUrl, provider.instance);
+    const sshHosts = await sshRemoteUrlsReaching(
+      (bindingRead?.repository?.remotes ?? []).flatMap((entry) => [entry?.push?.displayUrl, entry?.fetch?.displayUrl]),
+      new URL(normalizeGitLabInstance(provider.instance)).hostname.toLowerCase(),
+    );
+    const parsed = parseGitLabRemoteUrl(remoteUrl, provider.instance, sshHosts);
     if (!parsed) return { error: 'not-gitlab-project' };
     if (!config.botAccountId) return { error: 'bot-account-missing' };
     const account = await resolveAccount(authStore, provider.instance, config.botAccountId);
@@ -230,7 +236,11 @@ export const registerGitlabIssueRoutes = (app: Application, dependencies: Gitlab
       entry?.name === provider.primaryRemote
     ));
     const remoteUrl = asText(remote?.fetch?.displayUrl ?? provider.endpoint?.displayUrl ?? '');
-    const parsed = parseGitLabRemoteUrl(remoteUrl, provider.instance);
+    const sshHosts = await sshRemoteUrlsReaching(
+      (bindingRead?.repository?.remotes ?? []).flatMap((entry) => [entry?.push?.displayUrl, entry?.fetch?.displayUrl]),
+      new URL(normalizeGitLabInstance(provider.instance)).hostname.toLowerCase(),
+    );
+    const parsed = parseGitLabRemoteUrl(remoteUrl, provider.instance, sshHosts);
     if (!parsed) return null;
     return { instance: provider.instance, projectPath: parsed.projectPath };
   };

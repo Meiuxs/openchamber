@@ -819,6 +819,13 @@ export const createFeatureRoutesRuntime = (dependencies: FeatureRuntimeDependenc
       bindingService: walkthroughBindingService,
       credentialResolver: gitCredentialResolver,
       createHttpsCredentialReference,
+      resolveSshCommand: async (credentialId) => {
+        let reference: ReturnType<typeof parseGitCredentialReference> | null = null;
+        try { reference = parseGitCredentialReference(credentialId); } catch { return null; }
+        if (!reference || reference.transport !== 'ssh') return null;
+        const key = await sshCredentialStore.lookup(reference.keyId);
+        return key?.privateKeyPath ? managedSshCommand(key.privateKeyPath) : null;
+      },
       worktreeBootstrapStore,
       resolveWorktreeSetup: async (project) => worktreeSetupOf(
         await projectConfigRuntime.readProjectSetup(project.id),

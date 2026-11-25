@@ -10,7 +10,7 @@ This module turns one labeled GitLab issue into a reviewable merge request. It o
 - `ledger.ts` is the authoritative phase store at `<data dir>/gitlab-issue-runs.json`, keyed by `origin|projectId|iid`.
 - `machine.ts` declares the phases and the only legal transitions.
 - `gitlab.ts` parses the issue template, builds branch names, resolves accounts, resolves the project's automation config, and wraps the GitBeaker calls the dispatcher uses.
-- `workspace.ts` creates and removes worktrees, writes the commit identity, runs the project's verify command, and runs authenticated fetch and push through a one-shot credential lease.
+- `workspace.ts` creates and removes worktrees, writes the commit identity, runs the project's verify command, and runs fetch and push over HTTPS through a one-shot credential lease or over SSH with the binding's managed key, falling back to the machine's SSH configuration.
 - `prompts.ts` builds the triage, plan, implementation, review, recheck, and feedback prompts and validates the agent's structured output.
 - `routes.ts` serves the issue-creation route and the panel's read/act routes. The act route changes GitLab labels or posts a command comment as the operator's bound account; it never writes the ledger.
 - `record.ts` renders the delivery note from a ledger entry, resolves the note's path inside the checkout, keeps it out of git, and writes it atomically.
@@ -25,7 +25,7 @@ The GitLab labels are a mirror for humans. A label change a human makes is read 
 - One claim per project per tick and three globally. The issue list is read every third tick, at most three pages of 100; active runs are checked every tick.
 - The agent never pushes. The server pushes only after the branch prefix, a non-empty tree diff against the target, the evidence note, an approving review — plus, while the project keeps the second review on, an approving blind recheck — and, when a verify command is configured, that command's own green exit all validate.
 - A worktree is created with the project's own setup commands (`setup-worktree`: shared ones the project trusted, plus personal ones) and its session starts only after that setup reports `setup-ready`. A failed setup blocks the run with the reason; a slow one leaves the run in `preparing` and the next tick asks again.
-- Push and merge-request creation use the triggerer's credential. Fetch and comments use the bot credential. Neither token enters the prompt, a log line, a commit, or the merge request body.
+- Push and merge-request creation use the triggerer's credential. Fetch and comments use the bot credential. Neither token enters the prompt, a log line, a commit, or the merge request body. An SSH remote uses neither token for git transport: the build account's SSH key, or the managed key selected in the binding, carries fetch and push.
 - The server never force-pushes and never writes to the default or a protected branch.
 - Issue text is untrusted. The prompt keeps it inside `<issue-content untrusted="true">`, and every structured field is validated before it reaches a comment or a merge request.
 - A dirty worktree is never deleted. The path is commented and kept in the ledger.
@@ -207,6 +207,12 @@ The spec enumerates the reasons for blocked runs but has no value for a missing 
 GitLab 12.7 answers 400 to an issue update whose body carries only `add_labels` or `remove_labels`; it accepts those parameters from 12.10 on. The dispatcher reads the issue, computes the resulting set, and sends `labels`, which every version accepts. The read costs one request per label change and removes the version split entirely.
 
 The read and the write are two requests, so a label a person adds or removes between them is overwritten by the set the bot computed. The window is one request and cannot be closed without atomic add support. A human's `ai-blocked` lost this way is not seen by the cancellation check until the person acts again; the ledger stays the authority for the automation's own moves.
+
+### Why an SSH primary remote is supported
+
+The project binding already accepts SSH remotes and can carry a managed SSH key, so the automation reads the same grants rather than requiring every project to mirror an HTTPS remote. The remote URL may be SCP (`git@host:group/repo.git`) or `ssh://` (with or without a port), and the project path is parsed from it the same way. A sub-path deployment (`https://host/gitlab`) strips the instance prefix from either form when the path repeats it, matching the HTTPS rule. Host aliases from `~/.ssh/config` count when they resolve to the instance hostname.
+
+Git transport differs by protocol. HTTPS keeps the one-shot credential lease: the bot credential for fetch, the triggerer's for push. SSH has no token lease to issue — `credentialFor` would build an HTTPS reference the broker refuses — so the run passes `core.sshCommand` from the binding's managed key when a ready managed grant names one, and otherwise runs git with the account's own SSH configuration. The commit identity is still the triggerer's; only the transport key changes. A remote that is neither HTTPS nor SSH keeps blocking with `missing-credential`, and the note names both accepted forms.
 
 ### Why a loopback remote may be plain HTTP
 

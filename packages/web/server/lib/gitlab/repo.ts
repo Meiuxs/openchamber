@@ -59,11 +59,16 @@ export function parseGitLabRemoteUrl(raw: string | null | undefined, instance: s
   const projectPathOf = (pathname: string) => (instancePath
     ? (pathname.startsWith(`${instancePath}/`) ? normalizeProjectPath(pathname.slice(instancePath.length)) : null)
     : normalizeProjectPath(pathname));
+  const sshProjectPathOf = (pathname: string) => {
+    const rooted = pathname.startsWith('/') ? pathname : `/${pathname}`;
+    const stripped = instancePath && rooted.startsWith(`${instancePath}/`) ? rooted.slice(instancePath.length) : rooted;
+    return normalizeProjectPath(stripped);
+  };
 
   const scpMatch = matchScpRemote(value);
   if (scpMatch) {
     if (scpMatch.host.toLowerCase() !== expectedHostname && !reachesInstance) return null;
-    const projectPath = normalizeProjectPath(scpMatch.path);
+    const projectPath = sshProjectPathOf(scpMatch.path);
     return projectPath ? { projectPath, url: `${origin}/${projectPath}` } : null;
   }
 
@@ -81,7 +86,7 @@ export function parseGitLabRemoteUrl(raw: string | null | undefined, instance: s
     : url.hostname.toLowerCase() === expectedHostname || reachesInstance;
   if (!hostMatches || (isWebRemote && (url.username || url.password))) return null;
   if (url.search || url.hash) return null;
-  const projectPath = isWebRemote ? projectPathOf(url.pathname) : normalizeProjectPath(url.pathname);
+  const projectPath = isWebRemote ? projectPathOf(url.pathname) : sshProjectPathOf(url.pathname);
   return projectPath ? { projectPath, url: `${origin}/${projectPath}` } : null;
 }
 
