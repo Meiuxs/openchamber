@@ -14,7 +14,21 @@ Object.assign(globalThis, {
   requestAnimationFrame: browser.requestAnimationFrame.bind(browser),
   cancelAnimationFrame: browser.cancelAnimationFrame.bind(browser), IS_REACT_ACT_ENVIRONMENT: true,
 });
-const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json({ home: '/test' }));
+const projects = [{ id: 'demo', path: '/test' }];
+// Startup saves the home directory to settings, and the page follows the projects in the answer.
+let answerStartupSave!: () => void;
+const startupSaveHeld = new Promise<void>((resolve) => { answerStartupSave = resolve; });
+const startupSaved = new Promise<void>((resolve) => {
+  browser.addEventListener('openchamber:settings-synced', () => resolve(), { once: true });
+});
+const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(Object.assign(
+  async (input: string | URL | Request) => {
+    if (!String(input instanceof Request ? input.url : input).includes('/api/config/settings')) return Response.json({ home: '/test' });
+    await startupSaveHeld;
+    return Response.json({ projects, activeProjectId: 'demo' });
+  },
+  { preconnect: () => undefined },
+));
 const { act } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { I18nProvider } = await import('@/lib/i18n');
@@ -27,7 +41,18 @@ const initialProjectSelection = {
   projects: useProjectsStore.getState().projects,
   activeProjectId: useProjectsStore.getState().activeProjectId,
 };
-const policies = spyOn(opencodeClient, 'getIntegrationPolicies').mockResolvedValue([]);
+let reads: Promise<unknown>[] = [];
+const answer = <T,>(read: Promise<T>): Promise<T> => {
+  reads.push(read);
+  return read;
+};
+const turn = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+/** Lets the page act on every policy and integration read it has started. */
+const settle = async () => {
+  await act(async () => { await Promise.all(reads); });
+  for (let left = 3; left > 0; left -= 1) await turn();
+};
+const policies = spyOn(opencodeClient, 'getIntegrationPolicies').mockImplementation(() => answer(Promise.resolve([])));
 const listMcp = spyOn(opencodeClient, 'listMcpServers');
 const connect = spyOn(useMcpStore.getState(), 'connect').mockResolvedValue(undefined);
 
@@ -41,7 +66,7 @@ const oauthIntegration: IntegrationInfo = {
 const sdk = opencodeClient.getSdkClient();
 const scoped = spyOn(opencodeClient, 'getScopedSdkClient').mockImplementation(() => sdk);
 let integrations: IntegrationInfo[] = [];
-const list = spyOn(sdk.integration, 'list').mockImplementation(async () => ({ location: { directory: '/test' }, data: integrations }));
+const list = spyOn(sdk.integration, 'list').mockImplementation(() => answer(Promise.resolve({ location: { directory: '/test' }, data: integrations })));
 
 let root: ReturnType<typeof createRoot> | null = null;
 afterAll(async () => {
@@ -69,6 +94,7 @@ const renderServer = async (
 ): Promise<string[]> => {
   // Leaving the page clears the selection, so the previous page goes first.
   await act(async () => root?.unmount());
+  reads = [];
   connect.mockReset();
   connect.mockResolvedValue(undefined);
   listMcp.mockReset();
@@ -81,7 +107,7 @@ const renderServer = async (
   root = createRoot(container);
   const page = root;
   await act(async () => {
-    useProjectsStore.setState({ projects: [{ id: 'demo', path: '/test' }], activeProjectId: 'demo' });
+    useProjectsStore.setState({ projects, activeProjectId: 'demo' });
     useMcpStore.setState({ refresh: async () => {}, getStatusForDirectory: () => statuses });
     useMcpConfigStore.setState({
       selectedMcpName: 'docs',
@@ -90,7 +116,7 @@ const renderServer = async (
     });
     page.render(<I18nProvider><McpPage /></I18nProvider>);
   });
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  await settle();
   return [...container.querySelectorAll('button')].map((button) => button.textContent?.trim() ?? '');
 };
 
@@ -124,6 +150,11 @@ const savedOAuthIntegration: IntegrationInfo = {
 const staleStatuses: ServerStatus[] = [failed, { status: 'needs_auth', error: 'Authorization required' }];
 for (const status of staleStatuses) {
   test(`retries a stale ${status.status} runtime once when another OpenCode process has saved OAuth`, async () => {
+    // The startup settings save lands on the open page before the reconnect can start.
+    policies.mockImplementationOnce(() => {
+      answerStartupSave();
+      return answer(startupSaved.then(() => []));
+    });
     await renderServer(savedOAuthIntegration, status);
     expect(connect.mock.calls).toEqual([['docs', '/test']]);
   });

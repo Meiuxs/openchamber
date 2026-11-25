@@ -27,6 +27,9 @@ const json = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } })
 const noContent = () => new Response(null, { status: 204 })
 const agentList = (...ids: string[]) => json({ data: ids.map((id) => ({ id })) })
+const activatedPlugins = () => json({ location: {}, data: [{ source: { type: "builtin" }, features: {}, state: { status: "active" } }] })
+// OpenCode 2.4 lists a location's plugins once they activated; reads wait on that list, which answers here unless a test sets another.
+let pluginList: (request: CapturedRequest) => Response = activatedPlugins
 
 const runtimeFetchMock = mock<RuntimeFetch>(async (input, init) => {
   const url = input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url, "http://runtime.test")
@@ -36,6 +39,7 @@ const runtimeFetchMock = mock<RuntimeFetch>(async (input, init) => {
     headers: new Headers(init?.headers),
     body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
   }
+  if (url.pathname === "/api/plugin") return pluginList(request)
   requests.push(request)
   const next = responses.shift()
   const resolved = typeof next === "function" ? await next(request) : next
@@ -106,6 +110,7 @@ beforeEach(() => {
   requests.length = 0
   responses.length = 0
   runtimeKey = "test-runtime"
+  pluginList = activatedPlugins
   opencodeClient.setDirectory(undefined)
   opencodeClient.clearConfigCache()
 })
@@ -1082,6 +1087,24 @@ describe("providers of an isolated space", () => {
       expect(provider?.headers.get("x-opencode-directory")).toBe(encodeURIComponent("/repo/app"))
     } finally {
       useSpacesStore.getState().applyMarks([])
+    }
+  })
+
+  test("of a stopped space come with the host's models, since its own server cannot answer", async () => {
+    const space = "/spaces/a1b2c3d4e5f6/app"
+    useSpacesStore.getState().applyJourney([{
+      id: "a1b2c3d4e5f6", name: "One", placeId: "docker", machine: null, projectDirectory: "/repo/app", projectFolder: { path: "/repo/app", found: true },
+      directory: space, state: "exited", stoppedIdle: false, step: null, failure: null, network: { mode: "allowlist", domains: [] },
+      grants: [], access: null, needsAccess: [], accessFailures: [], damage: null, setup: null,
+    }], useSpacesStore.getState().progressRevision)
+    try {
+      responses.push(providerAnswer, providerAnswer, providerAnswer)
+      const before = requests.length
+      const catalog = await opencodeClient.getProvidersForConfig(space)
+      expect(catalog.models?.map((model: { modelID: string }) => model.modelID)).toEqual(["q"])
+      expect(new Set(requests.slice(before).map((request) => request.headers.get("x-opencode-directory")))).toEqual(new Set([encodeURIComponent("/repo/app")]))
+    } finally {
+      useSpacesStore.getState().resetForRuntimeSwitch()
     }
   })
 

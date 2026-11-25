@@ -72,6 +72,7 @@ import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
+import { integrateConflictI18n } from './integrate-conflict.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { subagentsI18n } from './subagents.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
@@ -279,6 +280,7 @@ export const dict: Record<I18nKey, string> = {
   ...markdownOutlineI18n['zh-TW'],
   ...markdownGithubI18n['zh-TW'],
   ...autocompleteScopeI18n['zh-TW'],
+  ...integrateConflictI18n['zh-TW'],
   ...workflowsI18n['zh-TW'],
   ...subagentsI18n['zh-TW'],
   ...sessionReferencesI18n['zh-TW'],
@@ -1641,6 +1643,7 @@ export const dict: Record<I18nKey, string> = {
   'walkthrough.blocked.emptyDiff.description': '此範圍目前沒有變更。',
   'walkthrough.blocked.contextTooSmall.title': '目前模型無法容納這份差異',
   'walkthrough.blocked.contextTooSmall.description': '{model} 大約可容納 {available} 千字元，而這份差異約需 {required} 千字元。我們不會截斷內容，請改選上下文更大的模型。',
+  'walkthrough.blocked.contextTooSmall.descriptionRefused': '這份差異過長，遭到 {model} 拒絕。請選擇上下文更大的模型，或縮小審閱範圍。',
   'walkthrough.blocked.structuredOutput.title': '此模型不支援結構化輸出',
   'walkthrough.blocked.structuredOutput.description': '{model} 不支援導讀所需的結構化回應。',
   'walkthrough.blocked.chooseModel': '選擇小模型',
@@ -2425,6 +2428,9 @@ export const dict: Record<I18nKey, string> = {
   'session.githubPrPicker.empty.noPullRequestsFound': '找不到 Pull Request',
   'session.githubPrPicker.loading.pullRequests': '正在載入 Pull Request...',
   'session.githubPrPicker.actions.loadMore': '載入更多',
+  'session.githubPrPicker.filter.group.repository': '儲存庫',
+  'session.githubPrPicker.filter.group.author': '作者',
+  'session.githubPrPicker.filter.clearAll': '清除篩選',
   'session.newWorktree.title': '新增 Worktree',
   'session.newWorktree.mode.newBranch': '新分支',
   'session.newWorktree.mode.existingBranch': '現有分支',

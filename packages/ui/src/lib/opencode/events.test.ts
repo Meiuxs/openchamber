@@ -184,7 +184,7 @@ describe("translateWireEvent", () => {
     })
     expect(events[0]).toEqual({
       type: "message.updated",
-      properties: { info: { id: "msg_u", sessionID: "ses_1", role: "user", time: { created: 1000 }, metadata: { source: "chat" } } },
+      properties: { info: { id: "msg_u", sessionID: "ses_1", role: "user", time: { created: 1000 }, metadata: { source: "chat" }, pending: true } },
     })
     expect(events[1]).toMatchObject({
       type: "message.parts.replaced",
@@ -205,7 +205,7 @@ describe("translateWireEvent", () => {
     })
     expect(events[0]).toEqual({
       type: "message.updated",
-      properties: { info: { id: "msg_u", sessionID: "ses_1", role: "user", time: { created: 1000 }, skills: [{ id: "demo", name: "Demo" }] } },
+      properties: { info: { id: "msg_u", sessionID: "ses_1", role: "user", time: { created: 1000 }, skills: [{ id: "demo", name: "Demo" }], pending: true } },
     })
   })
 

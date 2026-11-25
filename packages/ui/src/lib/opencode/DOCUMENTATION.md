@@ -117,6 +117,8 @@ generic rendering.
   states. Text and reasoning ordinals count separately by kind, and tool parts
   use call IDs. A text item followed by another content item is sealed even
   while its message remains open, keeping its final line visible after reload.
+- Inbox projection marks user and synthetic rows pending until a delivery event
+  or a history read confirms them. An enqueue echo does not prove delivery.
 - Local interrupted message and tool closures yield to later server completions.
   A stopped or failed turn and a bare status update carry different evidence;
   question replies veto recovery, while cancellation needs tool-specific evidence.
@@ -176,8 +178,11 @@ generic rendering.
 
 ### Catalogs and tool input
 
-- Integration snapshots belong to the runtime and are provisional when Settings
-  opens. Credential writes and credential events trigger replacement reads;
+- Integration snapshots belong to the runtime and the directory they were read
+  for (the Providers page reads for the project selected in Settings), and are
+  provisional when Settings opens. A read first waits for that location's
+  plugins (`requireLocationPlugins`), because a location OpenCode has not opened
+  yet lists no integrations until they load. Credential writes and credential events trigger replacement reads;
   earlier reads cannot overwrite later ones. A failed web-search-provider read
   keeps integrations visible rather than filtering out possible model providers.
 - Plugin inventories throw on failed reads. Checks retain the last outdated

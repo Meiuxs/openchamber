@@ -20,7 +20,7 @@ This module provides Git repository operations for the web server runtime, inclu
   - `worktree-creation.js`: worktree creation with the server's authority checks, including the change-request pipeline (resolve, exact account, managed head transfer, contributor remote and provenance). `POST /api/git/worktrees` and the session service (`session.create` with `pullRequest`) both create through it; `registerGitRoutes` returns its `createWorktree` for that.
   - `contributor-remote.js`: the `forkRemoteName` rule shared by change-request source construction and contributor transfer. It preserves the `pr-<owner>` normalization and `pr-head` fallback.
   - `credential-resolver.js` and `credential-broker.js`: resolve opaque managed credential references and provide one-operation Git authentication without returning secrets to clients. The resolver takes `readTransportCredential` and `describeProvider` from the source-control provider registry, never a provider's store: an HTTPS reference resolves through its provider's neutral transport credential (`secret`, `user`, identity, status), the endpoint must sit on the descriptor's instance origin (only the default instances when the descriptor's `managedHttpsInstances` is `default-only`, as GitHub's is), and the Git username follows the descriptor's `httpsUsername` (`x-access-token` for GitHub, `oauth2` for GitLab, or the account login). A reference naming a provider id this build does not know parses, because references are persisted, and fails closed with `Managed provider account is unavailable` before any lookup or spawn.
-   - `ssh-host-alias.js`: reads the server user's SSH configuration with `ssh -G`, passing the remote's explicit user through `-l` so `Match user` evaluates the same destination as Git. It answers whether a remote's host reaches an instance's host name, so a remote written with an alias (`forgejo:owner/repo.git`) can be matched to the origin it reaches. Answers are cached for a minute by lowercase host and case-sensitive user; the configuration is only read for hosts that are not already the instance's own. Resolver instances can select an isolated SSH configuration with `configFile`; the server singleton uses the server user's normal configuration.
+   - `ssh-host-alias.js`: reads the server user's SSH configuration with `ssh -G`, passing the remote's explicit user through `-l` so `Match user` evaluates the same destination as Git. It answers whether a remote's host reaches an instance's host name (`sshHostReaches`, `sshRemoteUrlsReaching` for a list of remote addresses) and which host an alias names (`sshHostNameOf`), so a remote written with an alias (`forgejo:owner/repo.git`, `git@gh-work:owner/repo.git`) can be matched to the origin it reaches. Answers are cached for a minute by lowercase host and case-sensitive user; the configuration is only read for hosts that are not already the instance's own. Resolver instances can select an isolated SSH configuration with `configFile`; the server singleton uses the server user's normal configuration.
   - `redaction.js`: bounded Git output and error redaction.
   - `helper-launch.js`: how Git reaches this module's helper scripts through `sh`, telling Electron to run as Node inside the command itself.
   - `repository-credential-runtime.js` and `repository-credential-helper.js`: the credential helper a repository's own `.git/config` names, so `git push` from any shell acts as the identity the repository was given.
@@ -255,7 +255,7 @@ An identity is one repository's complete answer: signature, provider account (`a
 - `getDiff(directory, { path, staged, contextLines, previousPath })`: Get diff output for files or entire working tree with full Git blob identities. Untracked symbolic links are represented as link entries without following their targets. `previousPath` names a rename's source; see the pathspec note below.
 - `getPathDiff(directory, { path, staged, contextLines, previousPath })`: `getDiff` for one path, returning `{ diff, submodule }`. `submodule` is `null` for ordinary paths. For a gitlink it is `{ headCommit, indexCommit, worktreeCommit, hasTrackedChanges, hasUntrackedFiles, hasConflict }`, because a submodule that only gained untracked files shows as modified in status while its patch is empty. `worktreeCommit` is `null` when the submodule is not checked out. An unmerged gitlink has no single index commit, so it reports `hasConflict: true` with `indexCommit: null`. Exposed as `GET /api/git/diff`.
 - `getPathDiffs(directory, { paths, staged, contextLines, concurrency })`: `getPathDiff` for many paths of one side, resolving the repository once and running a bounded number of reads at a time. Returns one entry per input path in order, `{ path, diff, submodule }` or `{ path, error, code }` with `code` one of the path error codes below or `null`; one failed path never fails the others. Exposed as `POST /api/git/diffs` (body `{ paths, staged, context }`, at most 1000 paths per request), which the Changes find bar uses to read a working-tree changeset in one request.
-- Paths come from an earlier status listing and can stop resolving. Per-path operations reject with `error.code`: `path_not_found` when the path is absent from the working tree, index, and HEAD (for example, a file removed after the listing), `nested_repository` when the path is a directory holding its own `.git` that is not a submodule (status lists it as `dir/`), and `untracked_directory` when the path is a directory status kept as one `dir/` entry because it holds more untracked files than the expansion bound. `GET /api/git/diff` and `GET /api/git/file-diff` answer these with 404, 422 and 422 and a `{ error, code }` body instead of 500. Entry existence is read from `ls-files --stage` and `ls-tree` modes, not `cat-file -e`: a gitlink's commit is not in the parent's object store, and simple-git reports that silent exit 1 as success.
+- Paths come from an earlier status listing and can stop resolving. Per-path operations reject with `error.code`: `path_not_found` when the path is absent from the working tree, index, and HEAD (for example, a file removed after the listing), `nested_repository` when the path is a directory holding its own `.git` that is not a submodule (status lists it as `dir/`), and `untracked_directory` when the path is a directory status kept as one `dir/` entry because it holds more untracked files than the expansion bound. Staging and committing take such a `dir/` entry as it is (`git add -- dir/`; a commit selection expands it to the status files under it), so Stage all and Commit work on a directory the listing never expanded, unless it holds another repository (`nested_repository`, which `git add` would take as a gitlink); diff reads still reject it. `GET /api/git/diff` and `GET /api/git/file-diff` answer these with 404, 422 and 422 and a `{ error, code }` body instead of 500. Entry existence is read from `ls-files --stage` and `ls-tree` modes, not `cat-file -e`: a gitlink's commit is not in the parent's object store, and simple-git reports that silent exit 1 as success.
 - `GET /api/git/diff`, `GET /api/git/file-diff`, and `POST /api/git/diffs` answer a non-repository directory with HTTP 409 and `{ code: 'not_repository', error: 'This directory is not a Git repository.' }`, without warnings or errors in the server log. This applies both to plain folders and repositories whose `.git` disappeared. Request validation still runs first; unrelated Git failures remain 500. The HTTP adapter rejects these reads with the server message, which existing desktop/web and mobile diff error views display. A failed batch has no successful per-path entries.
 
 - `getRangeDiff(directory, { base, head, path, contextLines, includeWorkingTree, previousPath })`: Compare the merge base of the exact selected refs with `head`. With `includeWorkingTree: true`, compare with the checked-out branch's current files instead, including committed, staged, unstaged, and untracked work in one net diff. This mode rejects a head that is not the checked-out branch. Exposed as `GET /api/git/range-diff`; omit `path` for the whole comparison.
@@ -283,6 +283,7 @@ A stale status row can outlive its repository. Returning empty contents would re
 - `getBranches(directory, { remote })`: Get local branches and remote branches. The default answers from local refs alone, as `git branch -a` does. `remote: 'live'` (route `?remote=live`) also asks each remote with `ls-remote --heads`, described under the branch list below, and runs only when the person asks for it. On a detached HEAD, git's `(HEAD detached at <ref>)` line is left out of `all` and `branches`: listed under the tag or commit name, it looked like a branch, and picking it checked out the same ref again. `current` still carries that name.
 - `isExistingBranchAvailableLocally(directory, existingBranch)`: Whether an `existing`-mode checkout would resolve the branch without fetching, matching the exact `refs/heads/` and `refs/remotes/` refs that checkout uses. `getBranches` cannot answer this: its `all` list spells a local branch named `remotes/origin/x` the same as the tracking ref `origin/x`.
 - Commit integration is local-only: it may fast-forward to an existing local upstream ref, but never fetches implicitly. Refresh remote-tracking refs through an explicit planned Fetch operation before integration when current remote state is required.
+- Commit integration cherry-picks in a detached temporary worktree and moves the target branch once, at the end, only if it is still at the commit the integration started from. It never claims a branch, resets a checkout, or removes a worktree it did not create. A conflict, or a publish that is refused while continuing, keeps the temporary worktree: the resolved commits exist only there until `continueIntegrate` publishes them or `abortIntegrate` drops them. `isIntegrateInProgress` therefore stays true after a pick is committed.
 - Ordinary worktree validation and creation from a remote branch that has no local remote-tracking ref fetch that single branch first (`git fetch <remote> +refs/heads/<branch>:refs/remotes/<remote>/<branch>`), because the branch list offers never-fetched remote branches. A failed fetch reports `Remote branch not found`. Upstream setup is local-only. Contributor worktrees retain their dedicated managed transfer and checkout-hydration operations and never take this fetch.
 - `getUnpushedBranchCounts(directory, branchNames)`: Count commits ahead of each locally known upstream for up to five supplied local branches. This reads local refs only and omits branches without an upstream.
 - `createBranch(directory, branchName, options)`: Create and checkout a new branch.
@@ -290,6 +291,30 @@ A stale status row can outlive its repository. Returning empty contents would re
 - `deleteBranch(directory, branch, options)`: Delete a branch (supports force flag). Scheduled cleanup uses `ifExists: true` so recovery after a completed branch deletion succeeds; only a confirmed missing ref is ignored, while operational Git failures still throw.
 - `renameBranch(directory, oldName, newName)`: Rename a branch and preserve upstream tracking.
 - `getRemotes(directory)`: Get list of configured remotes.
+
+#### Why integration publishes through the checkout that holds the target
+
+The default target is normally checked out in the main checkout, so refusing a held branch would refuse the common case, and moving the ref with `update-ref` would leave that checkout's index and files behind. `git merge --ff-only` run in the holder moves ref, index and files together and refuses to overwrite local work; ignored files and autostash are covered by explicit flags, which also beat `branch.<name>.mergeOptions`. A branch no checkout uses moves with a local `git fetch . <commit>:refs/heads/<target>`, which accepts only a fast-forward and refuses a branch under rebase or bisect; `git branch --force` would overwrite a tip that arrived meanwhile. A branch held by two checkouts is refused, because only one of them could follow. A symbolic branch is refused too: its ref moves another branch, whose checkout would not be found.
+
+Whether publishing worked is read from the branch tip, because a failing post-merge hook fails a merge that landed. Git writes the holder's files before the ref, so a locked ref stops it partway; the message then says so, and a second run finishes it.
+
+#### Why the temporary checkout is marked in Git's own folder and still listed
+
+`integrate-checkouts.ts` writes `openchamber-integrate` into the checkout's Git administration folder, and `getWorktrees` (and the VS Code listing) reports such a checkout with `integrateCheckout: true`. A match on the name or location would also hide a worktree the user made there. A list of paths in the data folder would outlive the checkout and hide a later worktree at the same path; Git deletes the file together with the checkout. The path counts as marked while the checkout is being created, so no listing sees it bare. Callers that resolve a path to its checkout (file access, session naming) need the row, so it is flagged and clients leave it out.
+
+The file is also the conflict itself: everything Continue and Abort need, so any client restores it (`POST /api/git/integrate/conflicts`) and the browser keeps nothing. A row is hidden exactly when that list offers its conflict. A record that does not parse, a missing checkout or repository folder, or a run that died before its first conflict leaves the row visible, because nothing else in the app could remove the checkout then. A disk that does not answer is none of those: the row stays hidden, the list offers the conflict with the reason as its message, Continue and Abort refuse, and the file stays. A list that could not be read fails instead of answering empty, and the next status read that finds everything reachable announces a worktree change so clients read it again. A running pick counts while its process lives, for at most ten minutes. When Git refuses to remove the checkout, the file goes and the row appears.
+
+#### Why Continue and Abort trust the record and not the client
+
+Several clients can show one conflict. Start, Continue and Abort run under one lock file in the common Git folder, which also covers a second server on the machine; a client that finds it held is told so. The client sends the checkout and the revision it saw. A checkout without a record is `gone`, and an older revision gets the current state back without acting, so a stale Abort cannot drop picks another client continued. Every stop of Continue raises the revision.
+
+#### Why the server moves the sessions before it removes the checkout
+
+A session on a deleted folder is listed nowhere, so Abort and Continue may not depend on the client that asked: it can close, switch servers or lose the connection. `integrate-sessions.ts` stops each session inside the checkout, archived and child ones included, moves it to the project and reads the list again until none is left; OpenCode only queues a move for a running session. The outcome is written into the record (`finish`) first, so nothing of it is decided twice: while a session does not stop or OpenCode is away, the checkout and its card stay, Continue tries again, and the server retries by itself. The outcome `publishing` with its result commit is written before the branch moves, so a server that died there knows whether it did. A restart continues from the record at startup for every registered project, and on the next listing of a repository's worktrees. Files an agent wrote after the publish keep the checkout, as an ordinary worktree. A disk that does not answer is not an answer: before each round the checkout and the repository must be reachable and the destination known, or no session is stopped or moved, nothing is removed and the record waits. Offline projects rank with the others, recognized by the checkouts Git records for the repository, and the move waits when one of them is the destination; an offline project of another repository holds nothing up. One more pass after the removal catches a session created in between. Moving on the client was replaced for this reason.
+
+#### Why Continue reads its progress from the temporary worktree
+
+The resolving agent is told to run `cherry-pick --continue` itself, so the record can be behind and a moved HEAD does not say which commit was picked. `findUnpickedCommits` matches every planned commit against the commits made since `pickBase` by author, author time and subject, then by authorship alone for a rewritten subject: cherry-pick keeps authorship, and a commit made for another reason does not carry it. A commit with no match is picked again, so an aborted pick cannot be reported as success. Continue itself skips a pick that resolved to nothing and records it in `skippedCommits`. A skip made by hand leaves exactly what an abort leaves (no reflog entry, the same HEAD), so it is picked again too and the message says how to leave the commit out. Every stop returns the updated state, and the UI keeps the panel through plan reloads, because it is the only way to finish or abort.
 
 #### Why a stale parent moves up to the nearest stack layer
 
@@ -652,13 +677,51 @@ and the create result names it in `branchBackup`, which the UI shows in a toast.
 A failed attempt puts a moved branch back on its old tip. The head transfer
 fetches with a forced refspec, so a force-pushed head replaces the stale
 remote-tracking ref instead of failing as non-fast-forward. Failed creation removes
-a remote added by that attempt. An existing remote is reused only when its endpoint
-is byte-for-byte equal; a different endpoint returns `CONTRIBUTOR_REMOTE_COLLISION`
+a remote added by that attempt. An existing remote is reused only when its effective
+fetch URL (`git remote get-url`) is the requested URL, or what Git's `insteadOf` rules make of it
+(read through a remote given only as `-c remote.<probe>.url`, which contacts nobody); a different endpoint returns `CONTRIBUTOR_REMOTE_COLLISION`
 and no `remote set-url` command runs. OpenChamber
 serializes worktree remote provisioning per repository and remote name so concurrent
 creation attempts cannot overwrite each other's rollback. If upstream fetch fails during
 bootstrap, tracking is left unset rather than writing `branch.*.remote` /
 `branch.*.merge` for a ref that was never fetched. Contributor-fork creation always leaves tracking unset.
+
+#### Why the fork remote is part of the planned authority
+
+Hydration validates the binding and the config revision read before creation,
+and creation itself adds `pr-<owner>`, which moves that revision. So the binding
+is read with the planned remote (`getRepositoryRemoteUrls`): Git lists the remotes with
+`-c remote.<name>.url=<url>`, so `insteadOf`, `pushInsteadOf` and a configured push URL are
+in the planned fingerprints exactly as they will be once the remote exists. The
+alternative, accepting a config change found at hydration, would have to guess
+which differences are the attempt's own. Any other remote change after planning still
+refuses a transfer.
+
+Fork creations that add a remote run one at a time per repository up to the point the
+worktree is attached (`planned-remotes.ts`), and each records the exact step it made, from the
+revision before to its planned one. A hydration refused as stale runs again only along
+steps recorded after its own pin, each starting at exactly the revision it held, so two first-time forks at
+once both finish while a remote anyone else adds breaks the chain and stays refused. Session-route and
+session-move checkouts follow the same steps, so a fork created during their download does not fail them. Hydrating
+one at a time was rejected: a create would wait for another checkout's whole download. A checkout that needs no transfer never fails on it:
+`hydrateBoundCheckout` reports a stale parent source only when the
+inspection finds something to fetch. Any transfer found later still validates the pinned authority.
+
+#### Why a second create resumes a failed checkout
+
+A failed setup keeps its worktree, because the person can repair it in place
+(**Download again**) and may have put files there. Creating the worktree from the same
+change request again resumes that checkout (`resumeFailedChangeRequestWorktree`)
+when its recorded setup failed, nothing is running for it, its tracked files are in place, its HEAD is the requested head, and its
+contributor provenance is this change request's (or absent for a same-repository
+head). Anything else stays `Branch is already checked out`. A resume never populates, so edits survive; a checkout with no index is refused.
+A same-repository head also needs a failure recorded before the setup commands (phase
+`directory-created`, outcome known) and after this checkout's Git directory was made, so commands never run twice or in a
+checkout that replaced the failed one. Fork checkouts are tied by provenance and run no setup commands. Before the record turns `git-ready` the
+folder's OpenCode locations are evicted, as for any repair. Removing the failed
+checkout was rejected: it would delete the repair path and the person's files.
+Validation marks `branch_in_use` with `setupFailed` for such a checkout, so the
+New worktree picker lets the change request be chosen again.
 
 The agent tool's `session.create` with `pullRequest: <number>` makes the same
 worktree without a client: `feature-routes-runtime.js` builds the change-request
@@ -997,7 +1060,7 @@ A supplied log base retains the local ref whenever it resolves, so a stale or di
 
 ### Why an SSH host alias is resolved through `ssh -G` and not compared as written
 
-Gitea and Forgejo accept an SSH alias only when its effective `HostName` directly equals the instance's hostname. `HostKeyAlias` and a shared resolved address do not establish which Git service the remote names, so neither grants a match. `ssh -G` handles `Include`, `Match` and `Host *` rules without opening an SSH connection; parsing the config file directly would miss those rules. Completed answers, including failures, expire after one minute, concurrent callers share a pending read, and the cache holds at most 256 hosts. HTTPS remotes and SSH hosts already equal to the instance's hostname require no lookup. The remote endpoint keeps its original alias. GitHub and GitLab retain exact-host matching because their repository readers do not resolve these aliases.
+Every provider accepts an SSH alias only when its effective `HostName` directly equals the instance's hostname (GitHub: a trusted GitHub host). `HostKeyAlias` and a shared resolved address do not establish which Git service the remote names, so neither grants a match. `ssh -G` handles `Include`, `Match` and `Host *` rules without opening an SSH connection; parsing the config file directly would miss those rules. Completed answers, including failures, expire after one minute, concurrent callers share a pending read, and the cache holds at most 256 hosts. HTTPS remotes and SSH hosts already equal to the instance's hostname require no lookup. The remote endpoint keeps its original alias. The binding check and each provider's repository reader (Gitea and Forgejo, GitLab, GitHub) resolve aliases the same way, so a remote the binding accepts is one its reader can read. Binding reads and the repository context resolve every SCP remote's host to publish `sshHostName`, so an SSH configuration whose `Match exec` runs a slow command delays those reads by that command, at most the five-second timeout and once a minute per host; skipping hosts that look direct was rejected because an alias may carry any name, `github.com` included.
 
 ## Response Contracts
 

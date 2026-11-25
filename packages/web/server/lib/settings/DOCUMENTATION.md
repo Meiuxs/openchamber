@@ -7,6 +7,7 @@ This module owns OpenChamber's settings persistence: the instance and profile fi
 ## Invariants
 
 - Settings callers that regenerate persisted identity use the strict reader: only ENOENT means first run. Corrupt JSON, non-object content, and I/O errors throw so a transient read failure cannot replace pairing keys and orphan devices.
+- Feature switches that rewrite `settings.json` outside the save queue (GitHub's gh switches, Linear's session comments) read it with `settings-update-read.ts`: only ENOENT means an empty document, and any other failure rejects the change before anything is written, so a locked or torn file is never replaced by the one changed key.
 - Settings writes replace complete files atomically because Electron and SSH readers can treat a partial JSON read as an empty document and then overwrite the user's settings. Only directories created by the write receive tightened permissions; existing administrator permissions and ACLs remain intact.
 - Project validation preserves entries after permission or transient filesystem failures. Project context reconciliation merges lists by identity across ID changes because a directory move cannot merge two existing `context.json` files; version-1 string conversion stays owned by `project-context`, and the destination wins when both values remain strings.
 - Project-folder migration also checks raw names that the filesystem can hold because older IDs can still have data there. Orphan recovery uses a unique setup-command match against an otherwise empty canonical project; an orphan's folder is named by its actual raw filename.
@@ -15,7 +16,7 @@ This module owns OpenChamber's settings persistence: the instance and profile fi
 - A missing model-variant entry means the client never sent a selection; explicit null means Default. A variant without its model is discarded, and an empty dreaming-model selection remains a choice of the default model. Model IDs can contain slashes after the provider separator.
 - Sidebar-order saves from older clients preserve omitted built-in sections beside their stored neighbours (`settings-sidebar.ts`, which validates every sidebar section, pin list and Pages field). Page ids in `sidebarPageOrder` and `sidebarHiddenPages` run to 128 characters, since an extension page is `guest:` plus an extension id of up to 64. The generated settings registry remains authoritative for writable keys; its JSON snapshot is loaded with `createRequire` because the server runs plain ESM across Node versions with differing import-attribute support.
 - A formatted response supplies a default only for a setting the user has not stored. In enterprise mode `dictationEnabled` defaults to false; an explicit choice passes through unchanged.
-- `settings-file-state.ts` keeps independent last-valid snapshots of `settings.json` and v1 `preferences.json`. Malformed documents, invalid recognized values and missing-after-valid files retain their previous snapshot and pause writes to that source. Initial absence permits preference seeding. Atomic app publications acknowledge their exact source document. While either file is unreadable, reading settings serves the last valid snapshot with migrations applied in memory and writes nothing; the migration is written on the first read after a valid replacement.
+- `settings-file-state.ts` keeps independent last-valid snapshots of `settings.json` and v1 `preferences.json`. Malformed documents and invalid recognized values retain their previous snapshot and pause writes to that source: a save that needs the file fails and names it, and nothing overwrites it. A file that went missing after a valid read retains its snapshot, and the next save restores it from there. Initial absence permits preference seeding. Atomic app publications acknowledge their exact source document. While either file is unreadable, reading settings serves the last valid snapshot with migrations applied in memory and writes nothing; the migration is written on the first read after a valid replacement.
 
 ## Decisions
 
@@ -25,8 +26,35 @@ Both files share the signal, settle and safety-check mechanism used by themes.
 Semantic changes emit `openchamber:settings-changed` with only `source` and
 recognized `changedKeys` through the authenticated control stream.
 Native-shell-owned fields stay outside UI validation and notification.
-Ordinary saves refuse pending external edits until reconciliation.
 Failed delivery remains retryable; shutdown suppresses pending announcements.
+
+### Why a save takes in an outside edit and is not refused
+
+Saves used to answer an error until the watcher had reconciled an edit made
+outside, about two seconds. `settings-exclusive-save.ts` now reconciles first,
+in the save's own queue turn, then applies the user's change to the result: the
+user's keys win, every other outside key stays. When a file changes during the
+write, the save starts over from a new snapshot, five times at most. An edit a
+save took in is announced from there (`subscribeTakenInSettings`), because the
+watcher no longer finds it pending. A mixed save with a broken
+`preferences.json` writes its instance keys, then fails and names the profile
+keys it did not save. The exception is an outside profile edit still pending in
+`settings.json`: writing that file would mark the edit as seen and lose it, so
+the whole save fails and nothing is written.
+
+Saves, reconciliation and migration writes hold `settings.json.lock`
+(`source-control/file-lock.ts`), so two OpenChamber servers on one data
+directory do not overwrite each other. A program that does not take the lock
+can still replace a file in the instant between a save's last check and its
+rename; that edit is lost, as no file system offers compare and rename.
+
+### Why a migrating read writes through the save queue
+
+`settings-migrated-reader.ts` owns this. A read that migrates used to write on its own. A save overlapping it then failed
+the revision check, and the user's change answered 500. The migration now takes
+a queue turn and is recomputed there. A read made while the queue is busy serves
+the migrated values and leaves the write to a later read: that read can come
+from inside the running save, which would wait on itself.
 
 ### Why legacy profile edits are reconciled before notification
 
@@ -175,6 +203,7 @@ The `allowedInsecureGitOrigins` setting is one origin per line, as typed in Sett
   - `normalizeDirectoryPath(value)`
   - `normalizePathForPersistence(value)`
   - `normalizeSettingsPaths(input)`
+  - `listSettingsPaths(input)`: every path in a settings document, spelled the way `canonicalPathOf` is asked for it
   - `normalizeTunnelBootstrapTtlMs(value)`
   - `normalizeTunnelSessionTtlMs(value)`
   - `normalizeManagedRemoteTunnelHostname(value)`
@@ -187,4 +216,8 @@ The `allowedInsecureGitOrigins` setting is one origin per line, as typed in Sett
   - `sanitizeSkillCatalogs(input)`
   - `sanitizeProjects(input)`
 
-Persistence path normalization (`normalizePathForPersistence` / `normalizeSettingsPaths` / `sanitizeProjects`, reached via the `readSettingsFromDiskMigrated` migration and `persistSettings`) resolves symlinks with `realpathSync` and, on case-insensitive filesystems (`win32`, `darwin`), also recovers the on-disk casing of each path component via `readdirSync` (exact-name match preferred so case-sensitive volumes are never rewritten). `realpathSync` alone does not report on-disk casing on these volumes, so without the readdir step a project stored with the wrong case would never match the real-case `directory` opencode reports for its sessions (issue #1913). A corrected path is flagged `changed` and written back to `settings.json`. A path `realpathSync` cannot resolve (missing, no permission) is kept exactly as stored, so case recovery can never swap in a different existing sibling. On macOS only `/` separates components; a backslash is a legal name character. Every settings read runs `sanitizeProjects` three times, so one pass over the project list reads each directory at most once: projects share their ancestors, and reading `/`, `/Users` and the rest again per project made a 71-project settings read about 1,280 synchronous readdirs (#6084). The listings live only for that one synchronous pass, so a later read always sees the disk as it is; a longer-lived cache would need invalidation on a case rename and was not needed once a pass reads each folder once.
+### Why canonical paths are looked up before a settings read and not during it
+
+`canonical-paths.ts` resolves symbolic links (the JavaScript `fs.realpath`, which keeps a Windows drive letter where the native one answers the UNC path) and, on `win32` and `darwin`, recovers the on-disk casing of each component by listing its ancestors, so a project stored in the wrong case still matches the directory OpenCode reports (#1913). An exact name wins, so case-sensitive volumes are never rewritten; a path that cannot be resolved stays as stored; a backslash is a legal name character on macOS. `readMigratedSettings`, `persistResolvedSettings` and `registerSessionProject` call `refresh` for every path in the document, then the synchronous normalizers read the answers through `canonicalPathOf`. The normalizers used to call `realpathSync` and `readdirSync` themselves, which froze the whole desktop app for the length of an SMB timeout on every settings read while a project's share was offline (#2096).
+
+A refresh asks `../directory-reachability` first and never touches an unreachable path: its last canonical form, or the stored one, stays in use. It waits at most half a second; a later answer is used by the next read. Lookups run one at a time, so a share that dies mid-lookup holds one pool thread. One refresh lists each shared ancestor once (#6084), and nothing is cached between refreshes except the answers, which every reachable refresh replaces. Project validation likewise keeps an unreachable project: only a folder known to be gone is dropped.

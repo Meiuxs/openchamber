@@ -1731,6 +1731,7 @@ describe('getStatus', () => {
     const invocations = path.join(createTempDir(), 'invocations');
     const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
     fs.writeFileSync(path.join(wrapperDirectory, 'git'), `#!/bin/sh
+if [ "$1" = -C ]; then cd "$2" || exit 128; shift 2; fi
 echo "$*" >> "${invocations}"
 exec "${realGit}" "$@"
 `);
@@ -3317,6 +3318,7 @@ describe('createWorktree', () => {
     const wrapper = path.join(createTempDir(), 'git-de');
     fs.writeFileSync(wrapper, [
       '#!/bin/sh',
+      'if [ "$1" = -C ]; then cd "$2" || exit 128; shift 2; fi',
       `if [ "$1" = worktree ] && [ "$2" = add ]; then echo '${germanDiagnostic}' >&2; exit 128; fi`,
       'exec git "$@"',
       '',
@@ -3374,6 +3376,7 @@ describe('createWorktree', () => {
     const wrapper = path.join(createTempDir(), 'git-occupy');
     fs.writeFileSync(wrapper, [
       '#!/bin/sh',
+      'if [ "$1" = -C ]; then cd "$2" || exit 128; shift 2; fi',
       'if [ "$1" = worktree ] && [ "$2" = add ]; then',
       '  seen=""; for arg in "$@"; do',
       '    if [ "$seen" = name ]; then seen=dir; continue; fi',
@@ -4158,6 +4161,7 @@ describe('createWorktree from a forked GitHub PR', () => {
         const wrapper = path.join(wrapperDirectory, 'git');
         const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
         fs.writeFileSync(wrapper, `#!/bin/sh
+if [ "$1" = -C ]; then cd "$2" || exit 128; shift 2; fi
 if [ "$1" = "remote" ] && [ "$2" = "set-url" ]; then : > "$SET_URL_MARKER"; fi
 exec "$REAL_GIT" "$@"
 `);
@@ -4305,6 +4309,7 @@ exec "$REAL_GIT" "$@"
       const wrapper = path.join(wrapperDirectory, 'git');
       const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
       fs.writeFileSync(wrapper, `#!/bin/sh
+if [ "$1" = -C ]; then cd "$2" || exit 128; shift 2; fi
 if [ "$1" = "worktree" ] && [ "$2" = "add" ] && [ ! -e "$RACE_MARKER" ]; then
   : > "$RACE_MARKER"
   "$REAL_GIT" -C "$RACE_REPOSITORY" update-ref "$RACE_REF" "$RACE_REVISION" || exit $?
@@ -7031,6 +7036,7 @@ describe.runIf(canRunGit())('getRepositoryRemoteUrls', () => {
       const invocations = path.join(wrapperDirectory, 'invocations');
       const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
       fs.writeFileSync(path.join(wrapperDirectory, 'git'), `#!/bin/sh
+if [ "$1" = -C ]; then cd "$2" || exit 128; shift 2; fi
 echo "$*" >> "${invocations}"
 if [ "$1" = remote ] && [ "$2" = -v ]; then exit 2; fi
 ${configFailure ? 'if [ "$1" = config ]; then exit 2; fi' : ''}
@@ -8069,7 +8075,48 @@ describe('getStatus untracked directories', () => {
       expect(httpStatus).toBe(422);
       expect(body).toEqual({ code: 'untracked_directory', error: 'Path is a directory of untracked files: node_modules/' });
     }
+
+    await stageFiles(repo, ['node_modules/']);
+    const staged = (await getStatus(repo)).files.filter((file) => file.path.startsWith('node_modules/'));
+    expect(staged).toHaveLength(1001);
+    expect(staged.every((file) => file.index === 'A')).toBe(true);
   });
+
+  it('commits a staged directory of more than a thousand new files picked by its earlier one entry', async () => {
+    if (!canRunGit()) return;
+
+    const repo = createCommittedRepo();
+    writeFiles(path.join(repo, 'bulk'), 1001);
+    fs.writeFileSync(path.join(repo, 'loose.txt'), 'loose\n');
+    await stageFiles(repo, ['bulk/', 'loose.txt']);
+
+    await commit(repo, 'Add bulk files', { files: ['bulk/'], stageFiles: [] });
+    expect((await getStatus(repo)).files.map((file) => [file.path, file.index])).toEqual([['loose.txt', 'A']]);
+  });
+
+  it('stages the file of a subfolder when the repository root has a new directory of the same name', async () => {
+    if (!canRunGit()) return;
+
+    const repo = fs.realpathSync(createCommittedRepo());
+    writeFiles(path.join(repo, 'bulk'), 2);
+    fs.mkdirSync(path.join(repo, 'project'));
+    fs.writeFileSync(path.join(repo, 'project', 'bulk'), 'file\n');
+
+    await stageFiles(path.join(repo, 'project'), ['bulk']);
+    expect((await getStatus(repo)).files.filter((file) => file.index === 'A').map((file) => file.path)).toEqual(['project/bulk']);
+  });
+
+  it('refuses to stage a directory of new files that holds another repository', async () => {
+    if (!canRunGit()) return;
+
+    const repo = createCommittedRepo();
+    writeFiles(path.join(repo, 'bulk'), 1001);
+    runGit(path.join(repo, 'bulk'), ['init', '-b', 'main', 'child']);
+
+    await expect(stageFiles(repo, ['bulk/'])).rejects.toMatchObject({ code: 'nested_repository' });
+    expect((await getStatus(repo)).files.map((file) => file.path)).toEqual(['bulk/']);
+  });
+
 });
 
 describe('git environment through simple-git', () => {

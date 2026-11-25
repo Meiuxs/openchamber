@@ -19,7 +19,7 @@ import type {
     SourceControlReadContext,
 } from '@/lib/api/types';
 import { getRuntimeKey } from '@/lib/runtime-switch';
-import { defaultSourceControlIdentities, resolveSourceControlIdentity } from '@/lib/source-control/identity';
+import { defaultSourceControlIdentities, gitRemoteOf, resolveSourceControlIdentity } from '@/lib/source-control/identity';
 import { unknownProviderDescriptor, type SourceControlProviderDescriptor } from '@/lib/source-control/providers/descriptor';
 import { useSourceControlProvider, useSourceControlProviderRegistry, useSourceControlProviders } from '@/lib/source-control/providers/registry';
 import { useRepositoryUrlMatcher } from '@/lib/source-control/repositoryUrlMatcher';
@@ -56,9 +56,9 @@ import { createListCache, createValueCache, useCachedList, useCachedValue, useRe
 import type { TrackerReferenceFilter } from './referencePickerItems';
 import { joinProjectPath } from '@/lib/source-control/projectPath';
 
-const repositoryLists = createListCache<RepositoryReference>();
-const repositoryAcrossLists = createListCache<AcrossReference>();
-const trackerLists = createListCache<TrackerItemSummary>();
+const repositoryLists = createListCache<RepositoryReference>((reference) => reference.url);
+const repositoryAcrossLists = createListCache<AcrossReference>((reference) => `${reference.directory}\n${reference.url}`);
+const trackerLists = createListCache<TrackerItemSummary>((item) => item.id);
 const trackerDetails = createValueCache<TrackerItem>();
 const repositoryDetails = createValueCache<RepositoryReferenceDetail>();
 
@@ -89,10 +89,7 @@ function repositoryHostsOf(
     for (const provider of read.binding?.providers ?? []) add({ provider: provider.provider, instance: provider.instance });
     const identities = [...knownIdentities, ...defaultIdentities];
     for (const remote of read.repository.remotes) {
-        const identity = resolveSourceControlIdentity(
-            { name: remote.name, fetchUrl: remote.fetch.displayUrl, pushUrl: remote.push.displayUrl },
-            identities,
-        );
+        const identity = resolveSourceControlIdentity(gitRemoteOf(remote), identities);
         if (identity) add(identity);
     }
     return [...found.values()];

@@ -72,6 +72,7 @@ import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
+import { integrateConflictI18n } from './integrate-conflict.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { subagentsI18n } from './subagents.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
@@ -289,6 +290,7 @@ export const dict: Record<I18nKey, string> = {
   ...markdownOutlineI18n['uk'],
   ...markdownGithubI18n['uk'],
   ...autocompleteScopeI18n['uk'],
+  ...integrateConflictI18n['uk'],
   ...workflowsI18n['uk'],
   ...subagentsI18n['uk'],
   ...sessionReferencesI18n['uk'],
@@ -1612,6 +1614,7 @@ export const dict: Record<I18nKey, string> = {
   "walkthrough.blocked.emptyDiff.description": "У цій області поки що немає змін.",
   "walkthrough.blocked.contextTooSmall.title": "Цей diff завеликий для поточної моделі",
   "walkthrough.blocked.contextTooSmall.description": "{model} вміщає близько {available} тис. символів, а цьому diff потрібно близько {required} тис. Нічого не обрізається — оберіть модель із більшим контекстом.",
+  "walkthrough.blocked.contextTooSmall.descriptionRefused": "{model} відхилила цей diff, бо він задовгий. Оберіть модель із більшим контекстом або вужчу область огляду.",
   "walkthrough.blocked.structuredOutput.title": "Ця модель не вміє structured output",
   "walkthrough.blocked.structuredOutput.description": "{model} не підтримує структуровані відповіді, потрібні для розбору.",
   "walkthrough.blocked.chooseModel": "Оберіть small model",
@@ -2416,6 +2419,9 @@ export const dict: Record<I18nKey, string> = {
   "session.githubPrPicker.empty.noPullRequestsFound": "PR не знайдено",
   "session.githubPrPicker.loading.pullRequests": "Завантаження PR...",
   "session.githubPrPicker.actions.loadMore": "Завантажити ще",
+  "session.githubPrPicker.filter.group.repository": "Репозиторій",
+  "session.githubPrPicker.filter.group.author": "Автор",
+  "session.githubPrPicker.filter.clearAll": "Очистити фільтри",
   "session.newWorktree.title": "Нове worktree",
   "session.newWorktree.mode.newBranch": "Нова гілка",
   "session.newWorktree.mode.existingBranch": "Наявна гілка",

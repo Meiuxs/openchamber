@@ -28,7 +28,7 @@ import { IDLE_PULL_STATUS, readyValue, useReferenceBrowser } from '@/components/
 import { ReferencePreview } from '@/components/references/ReferencePreview';
 import type { ReferenceCommentActions } from '@/components/references/ReferenceComments';
 import {
-    canChangeDiscussionState,
+    canChangeReferenceState,
     DEFAULT_REPOSITORY_FILTER,
     REPOSITORY_KIND_ICONS,
     referenceNumberLabel,
@@ -80,7 +80,7 @@ import { SourceBoardReply } from './SourceBoardReply';
 import { SourceBoardAcrossNote } from './SourceBoardAcrossNote';
 import { SourceBoardChecksDialog } from './SourceBoardChecksDialog';
 import { SourceBoardGitlabRun } from './SourceBoardGitlabRun';
-import { SourceBoardAssignee, SourceBoardBlockers, SourceBoardLabels, SourceBoardReviewers } from './SourceBoardMetaEditors';
+import { SourceBoardAssignee, SourceBoardAssignees, SourceBoardBlockers, SourceBoardLabels, SourceBoardReviewers } from './SourceBoardMetaEditors';
 import { SourceBoardContainerPicker, SourceBoardProjectPicker, SourceBoardRepositoryPicker } from './SourceBoardPickers';
 import { TrackerIssueDialog } from './TrackerIssueDialog';
 import { choiceForFocus, resolveBoardTab, shouldRememberAll, useBoardRepository, useLinkRepository } from './boardRepository';
@@ -667,13 +667,18 @@ const SourceBoardBody: React.FC<{
     const previewPullStatus = previewItem?.source === 'repository' && previewItem.reference.kind === 'pull'
         ? readyValue(browser.pullStatusOf(previewItem.reference, previewItem.directory))
         : null;
+    const { refreshRepositoryDetail, list: { retry: retryList } } = browser;
+    const refreshRepositoryItem = React.useCallback(
+        () => Promise.all([refreshRepositoryDetail(), retryList()]).then(() => undefined),
+        [refreshRepositoryDetail, retryList],
+    );
     const actions = previewItem ? (
         <SourceBoardActions
             item={previewItem}
             project={actionProject}
             context={readContext}
             onStartWorktree={(target, selection) => setWorktreeRequest({ project: target, selection })}
-            onChanged={browser.list.retry}
+            onChanged={refreshRepositoryItem}
             startIn={startIn}
             onLeave={onLeave}
             worktreeAvailable={!readsNestedRepository && !previewLinked}
@@ -718,15 +723,6 @@ const SourceBoardBody: React.FC<{
     const previewDiscussion = previewItem?.source === 'repository' && previewItem.reference.kind === 'discussion' && browser.repositoryDetail.status === 'ready'
         ? browser.repositoryDetail.value.discussion
         : undefined;
-
-    // After a change to an issue or PR: its detail and the list read again.
-    const { refreshRepositoryDetail, list: { retry: retryList } } = browser;
-    const refreshRepositoryItem = React.useCallback(
-        () => Promise.all([refreshRepositoryDetail(), retryList()]).then(() => undefined),
-        [refreshRepositoryDetail, retryList],
-    );
-    // An edit of the previewed item's title and description: the host's own
-    // edit, then the item and the list read again.
     const writableReference = previewItem?.source === 'repository' && context ? { context, reference: previewItem.reference } : null;
     const saveText = writableReference ? async (input: { title: string; body: string }) => {
         await updateRepositoryItemText(sourceControl, writableReference.context, writableReference.reference, input);
@@ -922,9 +918,9 @@ const SourceBoardBody: React.FC<{
             onSaveText={saveText}
             threadActions={threadActions}
             commentActions={commentActions}
-            stateMenu={previewItem?.source === 'repository' && previewItem.reference.state !== 'merged' && context
-                && (previewItem.reference.kind !== 'discussion' || canChangeDiscussionState(previewItem.reference, previewDiscussion)) ? (
-                <SourceBoardStateMenuItems item={previewItem} context={context} onChanged={refreshRepositoryItem} />
+            stateMenu={previewItem?.source === 'repository' && context
+                && canChangeReferenceState(previewItem.reference, readyValue(browser.repositoryDetail)) ? (
+                <SourceBoardStateMenuItems item={previewItem} context={context} writeAccess={readyValue(browser.repositoryDetail)?.writeAccess} onChanged={refreshRepositoryItem} />
             ) : undefined}
             commentAttachments={previewItem?.source === 'repository'
                 ? { onAttach: attachments.attachComment, onAttachAll: attachments.attachComments }
@@ -938,6 +934,7 @@ const SourceBoardBody: React.FC<{
                     onChanged={refreshRepositoryItem}
                 />
             ) : undefined}
+            assigneesControl={previewItem?.source === 'repository' && previewItem.reference.kind === 'issue' && previewItem.reference.linked !== true && context ? <SourceBoardAssignees key={referencePickerItemKey(previewItem)} issue={previewItem.reference} detail={browser.repositoryDetail} writeAccess={readyValue(browser.repositoryDetail)?.writeAccess} context={context} onChanged={refreshRepositoryItem} sheet={isMobile} /> : undefined}
             reviewersControl={previewItem?.source === 'repository' && previewItem.reference.kind === 'pull' && context ? (
                 <span className="inline-flex flex-wrap items-center gap-2">
                     <SourceBoardReviewers

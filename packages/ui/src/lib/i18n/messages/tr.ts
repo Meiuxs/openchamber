@@ -71,6 +71,7 @@ import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
+import { integrateConflictI18n } from './integrate-conflict.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { subagentsI18n } from './subagents.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
@@ -217,6 +218,7 @@ export const dict = {
   ...markdownOutlineI18n['tr'],
   ...markdownGithubI18n['tr'],
   ...autocompleteScopeI18n['tr'],
+  ...integrateConflictI18n['tr'],
   ...workflowsI18n['tr'],
   ...subagentsI18n['tr'],
   ...sessionReferencesI18n['tr'],
@@ -1496,6 +1498,7 @@ export const dict = {
   'walkthrough.blocked.emptyDiff.description': 'Bu kapsamda henüz değişiklik yok.',
   'walkthrough.blocked.contextTooSmall.title': 'Bu diff, geçerli model için çok büyük',
   'walkthrough.blocked.contextTooSmall.description': '{model} yaklaşık {available}K karakter alabiliyor; bu diff ise yaklaşık {required}K gerektiriyor. Hiçbir şey kırpılmaz — bunun yerine daha büyük bağlam alanı olan bir model seç.',
+  'walkthrough.blocked.contextTooSmall.descriptionRefused': '{model}, çok uzun olduğu için bu diff\'i reddetti. Daha büyük bağlam alanı olan bir model seç veya daha dar bir kapsamı incele.',
   'walkthrough.blocked.structuredOutput.title': 'Bu model yapılandırılmış çıktı üretemiyor',
   'walkthrough.blocked.structuredOutput.description': '{model}, bir inceleme turunun ihtiyaç duyduğu yapılandırılmış yanıtları desteklemiyor.',
   'walkthrough.blocked.chooseModel': 'Küçük modeli seç',
@@ -2309,6 +2312,9 @@ export const dict = {
   'session.githubPrPicker.empty.noPullRequestsFound': 'Pull request bulunamadı',
   'session.githubPrPicker.loading.pullRequests': 'Pull request\'ler yükleniyor...',
   'session.githubPrPicker.actions.loadMore': 'Daha fazla yükle',
+  'session.githubPrPicker.filter.group.repository': 'Depo',
+  'session.githubPrPicker.filter.group.author': 'Yazar',
+  'session.githubPrPicker.filter.clearAll': 'Filtreleri temizle',
   'session.newWorktree.title': 'Yeni Worktree',
   'session.newWorktree.mode.newBranch': 'Yeni Branch',
   'session.newWorktree.mode.existingBranch': 'Mevcut Branch',

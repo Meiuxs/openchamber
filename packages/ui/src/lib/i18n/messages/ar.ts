@@ -72,6 +72,7 @@ import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
+import { integrateConflictI18n } from './integrate-conflict.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { subagentsI18n } from './subagents.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
@@ -1531,6 +1532,7 @@ export const dict: Record<I18nKey, string> = {
   'walkthrough.blocked.emptyDiff.description': 'لا توجد تغييرات في هذا النطاق بعد.',
   'walkthrough.blocked.contextTooSmall.title': 'هذه الفروقات كبيرة جدًا على النموذج الحالي',
   'walkthrough.blocked.contextTooSmall.description': 'يتسع {model} لنحو {available}K حرف وتحتاج هذه الفروقات إلى نحو {required}K. لن يُقتطع أي شيء — اختر بدلًا من ذلك نموذجًا بسياق أكبر.',
+  'walkthrough.blocked.contextTooSmall.descriptionRefused': 'رفض {model} هذه الفروقات لأنها أطول من اللازم. اختر نموذجًا بسياق أكبر، أو راجع نطاقًا أضيق.',
   'walkthrough.blocked.structuredOutput.title': 'لا يستطيع هذا النموذج إنتاج مخرجات منظّمة',
   'walkthrough.blocked.structuredOutput.description': 'لا يدعم {model} الردود المنظّمة التي تحتاجها جولة الشرح.',
   'walkthrough.blocked.chooseModel': 'اختر النموذج الصغير',
@@ -2336,6 +2338,9 @@ export const dict: Record<I18nKey, string> = {
   'session.githubPrPicker.empty.noPullRequestsFound': 'لم يُعثر على طلبات سحب',
   'session.githubPrPicker.loading.pullRequests': 'جارٍ تحميل طلبات السحب…',
   'session.githubPrPicker.actions.loadMore': 'تحميل المزيد',
+  'session.githubPrPicker.filter.group.repository': 'المستودع',
+  'session.githubPrPicker.filter.group.author': 'المؤلف',
+  'session.githubPrPicker.filter.clearAll': 'مسح عوامل التصفية',
   'session.newWorktree.title': 'شجرة عمل (worktree) جديدة',
   'session.newWorktree.mode.newBranch': 'فرع جديد',
   'session.newWorktree.mode.existingBranch': 'فرع موجود',
@@ -4062,6 +4067,7 @@ export const dict: Record<I18nKey, string> = {
   ...markdownOutlineI18n['ar'],
   ...markdownGithubI18n['ar'],
   ...autocompleteScopeI18n['ar'],
+  ...integrateConflictI18n['ar'],
   ...workflowsI18n['ar'],
   ...subagentsI18n['ar'],
   ...sessionReferencesI18n['ar'],

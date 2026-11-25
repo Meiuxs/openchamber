@@ -71,6 +71,7 @@ import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
+import { integrateConflictI18n } from './integrate-conflict.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { subagentsI18n } from './subagents.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
@@ -278,6 +279,7 @@ export const dict = {
   ...markdownOutlineI18n['en'],
   ...markdownGithubI18n['en'],
   ...autocompleteScopeI18n['en'],
+  ...integrateConflictI18n['en'],
   ...workflowsI18n['en'],
   ...subagentsI18n['en'],
   ...sessionReferencesI18n['en'],
@@ -1621,6 +1623,7 @@ export const dict = {
   'walkthrough.blocked.emptyDiff.description': 'There are no changes in this scope yet.',
   'walkthrough.blocked.contextTooSmall.title': 'This diff is too large for the current model',
   'walkthrough.blocked.contextTooSmall.description': '{model} fits about {available}K characters and this diff needs about {required}K. Nothing gets truncated — pick a model with a larger context instead.',
+  'walkthrough.blocked.contextTooSmall.descriptionRefused': '{model} refused this diff because it is too long. Pick a model with a larger context, or review a narrower scope.',
   'walkthrough.blocked.structuredOutput.title': 'This model cannot produce structured output',
   'walkthrough.blocked.structuredOutput.description': '{model} does not support the structured responses a walkthrough needs.',
   'walkthrough.blocked.chooseModel': 'Choose the small model',
@@ -2448,6 +2451,9 @@ export const dict = {
   'session.githubPrPicker.empty.noPullRequestsFound': 'No pull requests found',
   'session.githubPrPicker.loading.pullRequests': 'Loading pull requests...',
   'session.githubPrPicker.actions.loadMore': 'Load more',
+  'session.githubPrPicker.filter.group.repository': 'Repository',
+  'session.githubPrPicker.filter.group.author': 'Author',
+  'session.githubPrPicker.filter.clearAll': 'Clear filters',
   'session.newWorktree.title': 'New worktree',
   'session.newWorktree.mode.newBranch': 'New branch',
   'session.newWorktree.mode.existingBranch': 'Existing branch',

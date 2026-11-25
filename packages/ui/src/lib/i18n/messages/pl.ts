@@ -72,6 +72,7 @@ import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
+import { integrateConflictI18n } from './integrate-conflict.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { subagentsI18n } from './subagents.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
@@ -279,6 +280,7 @@ export const dict: Record<I18nKey, string> = {
   ...markdownOutlineI18n['pl'],
   ...markdownGithubI18n['pl'],
   ...autocompleteScopeI18n['pl'],
+  ...integrateConflictI18n['pl'],
   ...workflowsI18n['pl'],
   ...subagentsI18n['pl'],
   ...sessionReferencesI18n['pl'],
@@ -1997,6 +1999,7 @@ export const dict: Record<I18nKey, string> = {
   'walkthrough.blocked.emptyDiff.description': 'W tym zakresie nie ma jeszcze zmian.',
   'walkthrough.blocked.contextTooSmall.title': 'Te różnice są za duże dla bieżącego modelu',
   'walkthrough.blocked.contextTooSmall.description': '{model} mieści około {available} tys. znaków, a te różnice potrzebują około {required} tys. Nic nie jest obcinane — wybierz model z większym kontekstem.',
+  'walkthrough.blocked.contextTooSmall.descriptionRefused': '{model} odrzucił te różnice, bo są za długie. Wybierz model z większym kontekstem albo węższy zakres przeglądu.',
   'walkthrough.blocked.structuredOutput.title': 'Ten model nie tworzy ustrukturyzowanych odpowiedzi',
   'walkthrough.blocked.structuredOutput.description': '{model} nie obsługuje ustrukturyzowanych odpowiedzi wymaganych przez przewodnik.',
   'walkthrough.blocked.chooseModel': 'Wybierz mały model',
@@ -3360,6 +3363,9 @@ export const dict: Record<I18nKey, string> = {
   'saveProjectPlanDialog.title': 'Zapisz plan projektu',
   'session.githubIssuePicker.actions.refresh': 'Odśwież',
   'session.githubPrPicker.actions.loadMore': 'Załaduj więcej',
+  'session.githubPrPicker.filter.group.repository': 'Repozytorium',
+  'session.githubPrPicker.filter.group.author': 'Autor',
+  'session.githubPrPicker.filter.clearAll': 'Wyczyść filtry',
   'session.githubPrPicker.empty.noPullRequestsFound': 'Nie znaleziono pull requestów',
   'session.githubPrPicker.empty.notConnected': 'GitHub nie jest połączony. Połącz konto GitHub w ustawieniach.',
   'session.githubPrPicker.error.repoNotResolvable': 'Nie udało się rozpoznać repozytorium',

@@ -71,6 +71,7 @@ import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
+import { integrateConflictI18n } from './integrate-conflict.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { subagentsI18n } from './subagents.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
@@ -278,6 +279,7 @@ export const dict = {
   ...markdownOutlineI18n['de'],
   ...markdownGithubI18n['de'],
   ...autocompleteScopeI18n['de'],
+  ...integrateConflictI18n['de'],
   ...workflowsI18n['de'],
   ...subagentsI18n['de'],
   ...sessionReferencesI18n['de'],
@@ -2178,6 +2180,9 @@ export const dict = {
   'session.githubPrPicker.empty.noPullRequestsFound': 'Keine Pull Requests gefunden',
   'session.githubPrPicker.loading.pullRequests': 'Pull Requests werden geladen...',
   'session.githubPrPicker.actions.loadMore': 'Mehr laden',
+  'session.githubPrPicker.filter.group.repository': 'Repository',
+  'session.githubPrPicker.filter.group.author': 'Autor',
+  'session.githubPrPicker.filter.clearAll': 'Filter zurücksetzen',
   'session.newWorktree.title': 'Neuer Worktree',
   'session.newWorktree.mode.newBranch': 'Neue Branch',
   'session.newWorktree.mode.existingBranch': 'Vorhandener Branch',
@@ -3662,6 +3667,7 @@ export const dict = {
   'walkthrough.blocked.emptyDiff.description': 'Es gibt keine Änderungen, die zusammengefasst werden können.',
   'walkthrough.blocked.contextTooSmall.title': 'Kontext zu klein',
   'walkthrough.blocked.contextTooSmall.description': '{model} passt in etwa {available}K Zeichen, und dieser Diff braucht etwa {required}K. Nichts wird abgeschnitten — wähle stattdessen ein Modell mit größerem Kontext.',
+  'walkthrough.blocked.contextTooSmall.descriptionRefused': '{model} hat diesen Diff abgelehnt, weil er zu lang ist. Wähle ein Modell mit größerem Kontext oder prüfe einen kleineren Bereich.',
   'walkthrough.blocked.structuredOutput.title': 'Strukturierte Ausgabe nicht verfügbar',
   'walkthrough.blocked.structuredOutput.description': '{model} unterstützt die strukturierten Antworten nicht, die ein Walkthrough benötigt.',
   'walkthrough.blocked.chooseModel': 'Modell auswählen',

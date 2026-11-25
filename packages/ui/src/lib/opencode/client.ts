@@ -1,6 +1,7 @@
 
 import { AgentUnavailableError } from "./agent-unavailable-error"
 import { isLocationNotFoundError } from "./location-errors"
+import { requireLocationPlugins } from "./location-plugins"
 import { ClientError, OpenCode, type OpenCodeClient } from "@opencode/client"
 import type {
   FileDiffInfo,
@@ -22,8 +23,8 @@ import { runtimeFetch } from "@/lib/runtime-fetch"
 import { captureRuntimeCleanup } from "@/lib/runtime-cleanup"
 import { clearOpenCodeTrustPause, forgetOpenCodeTrustDeclines, isDeliberateOpenCodeRequest, openCodeTrustRefusalDirectory, requestOpenCodeTrust } from "@/lib/opencodeTrust"
 import { isRelayModeActive } from "@/lib/relay/runtime-tunnel"
-import { isSpaceDirectory, spaceIdOfDirectory } from "@/lib/spaces/space-route"
-import { getSpaceMark, spaceMarkSchema, type SpaceMark } from "@/lib/spaces/spaces-store"
+import { isSpaceDirectory } from "@/lib/spaces/space-route"
+import { isSpaceDirectoryStopped, spaceMarkSchema, spaceProjectDirectoryOf, type SpaceMark } from "@/lib/spaces/spaces-store"
 import { captureRuntimeInstance, getRuntimeKey } from "@/lib/runtime-switch"
 import { getRegisteredRuntimeAPIs } from "@/contexts/runtimeAPIRegistry"
 import { markStartupTrace } from "@/lib/startupTrace"
@@ -655,8 +656,7 @@ class OpencodeService {
   }
 
   private hostClientOfSpace(directory: string | undefined): OpenCodeClient {
-    const spaceId = spaceIdOfDirectory(directory)
-    const projectDirectory = spaceId ? getSpaceMark(spaceId)?.projectDirectory : null
+    const projectDirectory = spaceProjectDirectoryOf(directory)
     return projectDirectory ? this.getScopedSdkClient(projectDirectory) : this.client
   }
 
@@ -1797,8 +1797,9 @@ class OpencodeService {
     }
 
     const request = (async () => {
-      const client = this.clientFor(effectiveDirectory)
-      const providerClient = isSpaceDirectory(effectiveDirectory) ? this.hostClientOfSpace(effectiveDirectory) : client
+      const providerClient = isSpaceDirectory(effectiveDirectory) ? this.hostClientOfSpace(effectiveDirectory) : this.clientFor(effectiveDirectory)
+      const client = isSpaceDirectoryStopped(effectiveDirectory) ? providerClient : this.clientFor(effectiveDirectory)
+      await requireLocationPlugins([client, providerClient], isCurrent)
       const [models, fallback, providers] = await Promise.all([
         call("model.list", () => client.model.list({ types: ["chat", "image"] }).then((r) => r.data)),
         call("model.default", () => client.model.default().then((r) => r.data)).catch(() => undefined),

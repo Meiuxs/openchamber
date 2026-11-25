@@ -71,6 +71,7 @@ import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
+import { integrateConflictI18n } from './integrate-conflict.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { subagentsI18n } from './subagents.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
@@ -1531,6 +1532,7 @@ export const dict: Record<I18nKey, string> = {
   'walkthrough.blocked.emptyDiff.description': 'עדיין אין שינויים בטווח הזה.',
   'walkthrough.blocked.contextTooSmall.title': 'ההבדלים גדולים מדי עבור המודל הנוכחי',
   'walkthrough.blocked.contextTooSmall.description': '{model} מכיל כ-{available}K תווים וההבדלים האלה דורשים כ-{required}K. שום דבר לא נחתך — במקום זאת יש לבחור מודל עם הקשר גדול יותר.',
+  'walkthrough.blocked.contextTooSmall.descriptionRefused': '{model} דחה את ההבדלים האלה כי הם ארוכים מדי. יש לבחור מודל עם הקשר גדול יותר או לסקור טווח מצומצם יותר.',
   'walkthrough.blocked.structuredOutput.title': 'המודל הזה לא יכול להפיק פלט מובנה',
   'walkthrough.blocked.structuredOutput.description': '{model} לא תומך בתגובות המובנות שסיור מודרך צריך.',
   'walkthrough.blocked.chooseModel': 'בחר את המודל הקטן',
@@ -2336,6 +2338,9 @@ export const dict: Record<I18nKey, string> = {
   'session.githubPrPicker.empty.noPullRequestsFound': 'לא נמצאו בקשות משיכה',
   'session.githubPrPicker.loading.pullRequests': 'טוען בקשות משיכה…',
   'session.githubPrPicker.actions.loadMore': 'טען עוד',
+  'session.githubPrPicker.filter.group.repository': 'מאגר',
+  'session.githubPrPicker.filter.group.author': 'מחבר',
+  'session.githubPrPicker.filter.clearAll': 'ניקוי מסננים',
   'session.newWorktree.title': 'עץ עבודה חדש',
   'session.newWorktree.mode.newBranch': 'ענף חדש',
   'session.newWorktree.mode.existingBranch': 'ענף קיים',
@@ -4062,6 +4067,7 @@ export const dict: Record<I18nKey, string> = {
   ...markdownOutlineI18n['he'],
   ...markdownGithubI18n['he'],
   ...autocompleteScopeI18n['he'],
+  ...integrateConflictI18n['he'],
   ...workflowsI18n['he'],
   ...subagentsI18n['he'],
   ...sessionReferencesI18n['he'],
@@ -4143,4 +4149,4 @@ export const dict: Record<I18nKey, string> = {
   'chat.promptHistorySearch.hint': "↑ ↓ לעיון · Enter לטעינה · Esc לסגירה",
   'helpDialog.item.searchPromptHistory': "חיפוש בהיסטוריית ההנחיות (קלט צ׳אט)",
 
-} as const;
+};

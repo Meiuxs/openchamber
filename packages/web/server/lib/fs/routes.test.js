@@ -1572,6 +1572,33 @@ describe('fs reveal', () => {
     expect(child.unref).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    [true, '/code/x’;calc;’'],
+    [false, '/code/x’;calc;’/a.txt'],
+  ])('keeps a Windows path out of the PowerShell command text (directory: %s)', async (isDirectory, target) => {
+    const child = new EventEmitter();
+    const spawn = vi.fn(() => {
+      queueMicrotask(() => child.emit('exit', 0));
+      return child;
+    });
+    const handler = registerReveal({
+      fsPromises: {
+        access: vi.fn(async () => undefined),
+        stat: vi.fn(async () => ({ isDirectory: () => isDirectory })),
+      },
+      spawn,
+      platform: 'win32',
+    });
+
+    const res = await callReveal(handler, { path: target });
+
+    expect(res.body).toEqual({ success: true, path: target });
+    const [program, args, options] = spawn.mock.calls[0];
+    expect(program).toBe('powershell.exe');
+    expect(args.join(' ')).not.toContain('calc');
+    expect(Object.values(options.env)).toContain(target);
+  });
+
   it('returns a controlled error when the launcher throws synchronously', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const spawnError = Object.assign(new Error('not found'), { code: 'ENOENT' });
@@ -2677,7 +2704,7 @@ describe('fs stat directory error handling', () => {
       await mkdir(path.join(directory, 'fs'));
       await mkdir(path.join(directory, 'git'));
       await mkdir(path.join(directory, 'shared'));
-      const helpers = ['routes', 'canonical-path', 'workspace-target', 'byte-range', 'preview-bridge', 'workspace-file-names', 'content-search', 'search'];
+      const helpers = ['routes', 'canonical-path', 'workspace-target', 'byte-range', 'preview-bridge', 'workspace-file-names', 'content-search', 'search', 'windows-shell-open'];
       const require = createRequire(import.meta.url);
       const compiler = path.join(path.dirname(require.resolve('typescript/package.json')), 'bin/tsc');
       execFileSync(process.execPath, [
@@ -2686,8 +2713,10 @@ describe('fs stat directory error handling', () => {
         '--outDir', directory,
         ...helpers.map((name) => fileURLToPath(new URL(`./${name}.ts`, import.meta.url))),
         fileURLToPath(new URL('../git/redaction.ts', import.meta.url)),
+        fileURLToPath(new URL('../git/git-launch.ts', import.meta.url)),
          fileURLToPath(new URL('../shared/object-guards.ts', import.meta.url)),
          fileURLToPath(new URL('../path-realpath-cache.ts', import.meta.url)),
+        ...['index', 'probe-process', 'while-reachable'].map((name) => fileURLToPath(new URL(`../directory-reachability/${name}.ts`, import.meta.url))),
       ], { cwd: directory, stdio: 'pipe' });
       await copyFile(new URL('../shared/guards.ts', import.meta.url), path.join(directory, 'shared/guards.js'));
       expect(() => execFileSync('node', [
@@ -3114,6 +3143,90 @@ describe('canonical managed roots with real filesystem aliases', () => {
     expect(outside.body).toEqual({ error: 'Directory parameter or active project is required' });
   });
 
+  describe('with the active project above a linked chats root', () => {
+    const setupLinkedChats = async (context) => {
+      const root = await nativeFs.realpath(await nativeFs.mkdtemp(path.join(tmpdir(), 'oc-linked-chats-')));
+      context.onTestFinished(() => nativeFs.rm(root, { recursive: true, force: true }));
+      const project = path.join(root, 'home');
+      const config = path.join(project, '.config/openchamber');
+      const realChats = path.join(root, 'other-drive/chats');
+      const outside = path.join(root, 'outside');
+      for (const directory of [config, realChats, outside]) await nativeFs.mkdir(directory, { recursive: true });
+      const chats = path.join(config, 'chats');
+      await nativeFs.symlink(realChats, chats, 'junction');
+      const { app, getRoute } = createRouteRegistry();
+      registerFsRoutes(app, {
+        os: { homedir: () => project }, path, fsPromises: nativeFs,
+        normalizeDirectoryPath: value => value,
+        resolveProjectDirectory: async () => ({ directory: project }),
+        openchamberUserConfigRoot: config, managedChatsRoot: chats,
+      });
+      const post = async (route, body) => {
+        const response = createMockResponse();
+        await getRoute('POST', route)({ body }, response);
+        return response;
+      };
+      return { post, project, config, chats, realChats, outside };
+    };
+
+    it('creates and cleans up the first session folder of a day at the real chats location', async context => {
+      const { post, chats, realChats } = await setupLinkedChats(context);
+      const directory = path.join(chats, '2026-11-25/session-a');
+      const created = await post('/api/fs/mkdir', { path: directory });
+      expect(created.statusCode).toBe(200);
+      expect(created.body.path).toBe(directory);
+      expect(await nativeFs.realpath(directory)).toBe(path.join(realChats, '2026-11-25/session-a'));
+
+      const deleted = await post('/api/fs/delete', { path: directory });
+      expect(deleted.statusCode).toBe(200);
+      expect(await nativeFs.readdir(path.join(realChats, '2026-11-25'))).toEqual([]);
+    });
+
+    it('refuses a session folder whose day folder links outside the chats root', async context => {
+      const { post, chats, realChats, outside } = await setupLinkedChats(context);
+      await nativeFs.symlink(outside, path.join(realChats, '2026-11-25'), 'junction');
+      await nativeFs.mkdir(path.join(outside, 'session-kept'));
+
+      const created = await post('/api/fs/mkdir', { path: path.join(chats, '2026-11-25/session-a') });
+      const deleted = await post('/api/fs/delete', { path: path.join(chats, '2026-11-25/session-kept') });
+
+      expect(created.statusCode).toBe(403);
+      expect(deleted.statusCode).toBe(403);
+      expect(await nativeFs.readdir(outside)).toEqual(['session-kept']);
+    });
+
+    it('keeps allowing a day folder that links elsewhere inside the project', async context => {
+      const { post, project, chats, realChats } = await setupLinkedChats(context);
+      const archive = path.join(project, 'archive');
+      await nativeFs.mkdir(archive);
+      await nativeFs.symlink(archive, path.join(realChats, '2026-11-25'), 'junction');
+      await nativeFs.writeFile(path.join(archive, 'session-notes.md'), 'hi');
+
+      const created = await post('/api/fs/mkdir', { path: path.join(chats, '2026-11-25/session-a') });
+      const deleted = await post('/api/fs/delete', { path: path.join(chats, '2026-11-25/session-notes.md') });
+
+      expect(created.statusCode).toBe(200);
+      expect(deleted.statusCode).toBe(200);
+      expect(await nativeFs.readdir(archive)).toEqual(['session-a']);
+    });
+
+    it('keeps the project as the base for other folders and moves', async context => {
+      const { post, project, config, chats, realChats } = await setupLinkedChats(context);
+      await nativeFs.mkdir(path.join(realChats, 'notes'));
+      await nativeFs.mkdir(path.join(realChats, '2026-11-25/session-a/src'), { recursive: true });
+      for (const target of ['notes', '2026-11-25/session-a/src']) {
+        expect((await post('/api/fs/delete', { path: path.join(chats, target) })).statusCode).toBe(403);
+      }
+
+      await nativeFs.writeFile(path.join(project, 'note.md'), 'hi');
+      const moved = await post('/api/fs/rename', {
+        oldPath: path.join(project, 'note.md'), newPath: path.join(config, 'note.md'),
+      });
+      expect(moved.statusCode).toBe(200);
+      expect(await nativeFs.readFile(path.join(config, 'note.md'), 'utf8')).toBe('hi');
+    });
+  });
+
   it('reports on-disk home casing on a case-insensitive macOS volume', { skip: process.platform !== 'darwin' }, async context => {
     const { getRoute, canonicalChats, rawChats, reportedHome } = await setup(context, { caseAlias: true });
     const response = createMockResponse();
@@ -3388,7 +3501,7 @@ describe('GET /api/fs/search', () => {
   it('reads Git ignores once per repository and preserves nested rules and tracked files', async () => {
     const { spawn } = await import('node:child_process');
     const gitReads = [];
-    const ask = await register({ spawn: (...args) => { gitReads.push(args[2].cwd); return spawn(...args); } });
+    const ask = await register({ spawn: (...args) => { gitReads.push(args[1][1]); return spawn(...args); } });
     for (let index = 0; index < 12; index++) {
       const directory = path.join(repo, `dir-${index}`);
       await mkdir(directory);

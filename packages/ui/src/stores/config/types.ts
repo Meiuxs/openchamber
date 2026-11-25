@@ -136,7 +136,7 @@ export interface ConfigStore {
     setLocalTtsModelId: (modelId: string) => void;
     setTtsFollowTextLanguage: (enabled: boolean) => void;
     setOpenaiVoice: (voice: string) => void;
-    setVoiceApiKey: (kind: VoiceApiKeyKind, apiKey: string | null) => Promise<boolean>;
+    setVoiceApiKey: (kind: VoiceApiKeyKind, apiKey: string | null, speechServer?: string | null) => Promise<boolean>;
     refreshVoiceApiKeys: (options?: { force?: boolean }) => Promise<void>;
     setOpenaiCompatibleUrl: (url: string) => void;
     setOpenaiCompatibleVoice: (voice: string) => void;
@@ -169,6 +169,7 @@ export interface ConfigStore {
     invalidateProviderCache: (directory?: string | null) => void;
     setProvider: (providerId: string) => void;
     setModel: (modelId: string) => void;
+    followModel: (providerId: string, modelId: string) => void;
     setCurrentVariant: (variant: string | undefined) => void;
     setCurrentVariantOverride: (override: string | null | undefined, inherited: string | null | undefined) => void;
     cycleCurrentVariant: () => string | undefined;

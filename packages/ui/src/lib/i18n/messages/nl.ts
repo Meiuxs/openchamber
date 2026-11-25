@@ -71,6 +71,7 @@ import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
+import { integrateConflictI18n } from './integrate-conflict.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { subagentsI18n } from './subagents.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
@@ -278,6 +279,7 @@ export const dict = {
   ...markdownOutlineI18n['nl'],
   ...markdownGithubI18n['nl'],
   ...autocompleteScopeI18n['nl'],
+  ...integrateConflictI18n['nl'],
   ...workflowsI18n['nl'],
   ...subagentsI18n['nl'],
   ...sessionReferencesI18n['nl'],
@@ -1616,6 +1618,7 @@ export const dict = {
   'walkthrough.blocked.emptyDiff.description': 'Er zijn in dit bereik nog geen wijzigingen.',
   'walkthrough.blocked.contextTooSmall.title': 'Deze diff is te groot voor het huidige model',
   'walkthrough.blocked.contextTooSmall.description': '{model} past ongeveer {available}K tekens en deze diff heeft ongeveer {required}K nodig. Er wordt niets afgekapt — kies in plaats daarvan een model met een grotere context.',
+  'walkthrough.blocked.contextTooSmall.descriptionRefused': '{model} heeft deze diff geweigerd omdat die te lang is. Kies een model met een grotere context of bekijk een smaller bereik.',
   'walkthrough.blocked.structuredOutput.title': 'Dit model kan geen gestructureerde output leveren',
   'walkthrough.blocked.structuredOutput.description': '{model} ondersteunt de gestructureerde antwoorden die een rondleiding nodig heeft.',
   'walkthrough.blocked.chooseModel': 'Kies het kleine model',
@@ -2448,6 +2451,9 @@ export const dict = {
   'session.githubPrPicker.empty.noPullRequestsFound': 'Geen pull requests gevonden',
   'session.githubPrPicker.loading.pullRequests': 'Pull requests laden...',
   'session.githubPrPicker.actions.loadMore': 'Meer laden',
+  'session.githubPrPicker.filter.group.repository': 'Repository',
+  'session.githubPrPicker.filter.group.author': 'Auteur',
+  'session.githubPrPicker.filter.clearAll': 'Filters wissen',
   'session.newWorktree.title': 'Nieuwe worktree',
   'session.newWorktree.mode.newBranch': 'Nieuwe branch',
   'session.newWorktree.mode.existingBranch': 'Bestaande branch',

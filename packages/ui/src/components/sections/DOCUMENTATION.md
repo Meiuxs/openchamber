@@ -92,6 +92,32 @@ location, which nobody had read yet: it booted there and answered
 "Integration not found", so every first connect failed and the retry worked.
 `credential.*` routes are not location-bound and stay unscoped.
 
+On the Providers page that location is the project selected in Settings
+(`useSettingsDirectory`), the same one `PUT /api/provider` writes a custom
+provider's config for; elsewhere it is the chat's project. A provider kept in a
+project's own config exists only in that project, so a key sent to the chat's
+project answered "Integration not found" on every retry, and a list read there
+showed the provider as not connected. The API key form, the OAuth and external
+sign-ins and the custom provider form all take that project.
+
+The Settings project may be one OpenCode has not opened yet. Since 2.4 such a
+location answers `integration.list` with an empty list until its plugins load,
+which showed "Connect provider" with only the custom provider card; the read
+first waits for the location's plugins (`requireLocationPlugins`, up to 5 s)
+and fails rather than returning an empty catalog.
+
+After saving a custom provider, OpenCode accepts its key only once that location
+has loaded the new provider, and a location nobody opened yet first waits for
+its plugins to start: 5.6 s with a plugin that takes 5 s, past the old 3.75 s of
+retries. `storeKeyAfterConfigWrite` in `providers/provider-key-writes.ts`
+retries "Integration not found" for up to 30 s.
+
+### Why retry the key and not wait for an event
+
+The reload announces itself with `config.updated`, `integration.updated` and
+`provider.updated`, but for every location at once and without naming the
+provider, so a retry after each event is the same as retrying on a timer.
+
 An integration method can declare a `form` (an Azure resource name, a
 Cloudflare account id). OAuth, external and API key methods render it through
 the same `ProviderFormFields`, check required fields with the helpers in
@@ -949,6 +975,7 @@ the browser, and a second meaning there confuses both.
 - Retention fields remain editable with automatic cleanup off because manual cleanup uses them too. The In work block never includes archived sessions.
 - Message-search status reads continue beyond an initially settled answer after a switch because the debounced save can start indexing later.
 - Voice keys stay on the server. Dictation cleanup starts off because it sends text to the small-model provider, and without that model the server retains the transcription. Voice pickers share install state and list installed models plus the default; dictation displays the server's choice when no saved model is available.
+- A custom speech server that lists its voices gets a voice dropdown ending in Custom…; a server without a list keeps the text field. The saved voice changes only when the user picks or types one, so a voice missing from the list shows as Custom… with its value. Typing in the field keeps it in Custom mode until a listed voice is picked, and a list that arrives while the cursor is in the field keeps the field, its text and the focus; the dropdown appears beside it. A failed read names its reason in the line reserved under the field, and a Retry that clears the line hands focus to the voice control. The list is read for a finished address only (on open, when the URL field loses focus, on Enter); whether the stored key goes along is the server's decision (`packages/web/server/lib/tts/DOCUMENTATION.md`). A list longer than 100 voices uses `LongVoicePicker`, with search and rows mounted as it scrolls; its Custom… item stays in view.
 - Usage panels show only their provider's error, so Console budgets survive a failed Go usage read. Balance-only windows omit percentage bars and used captions because they report no usage share.
 - Settings names the Go credential next to its meters and the Console workspace next to its budgets. The two reads can use different accounts when the Go reader falls back to a key.
 - About separates app, connected-server and OpenCode updates. A latest-version toast waits for every relevant check; failed checks keep prior status, and authoritative running versions replace temporary installed-but-not-running state.
@@ -1018,3 +1045,11 @@ Underlining identifies links while the accent remains reserved for primary actio
 `integrations/RepositoryBindingsPage.tsx` lists the Git repositories in the OpenChamber project list and their provider bindings. Non-Git projects stay out of the table. A Git project without a binding stays in the list with the unbound status and a Bind action.
 
 The Bind dialog chooses the account and the primary remote explicitly instead of relying only on remote inference. Its account list flattens every connected provider instance and its valid accounts; the remote list comes from the repository's own remotes. When the remote URL matches a known identity, the dialog preselects that identity's account and inferred remote so the common case needs one confirmation. When no remote matches, the unbound row still offers Bind and the person picks an account and remote by hand, so a self-hosted or unrecognised host can still be bound. With no connected account at all, the dialog explains where to connect one and disables confirmation. The chosen account and remote are passed to the binding write: a matching Git identity profile is applied first, and otherwise the provider binding is written with HTTPS transport bound to that account. A duplicate group joins projects with the same provider, instance, account, and normalized project path. The group is a visibility hint; the resolver keeps the folder the user selects and resets the others with per-folder failure reporting. Reset and rebind call the existing binding APIs with captured authority. Undo reapplies a captured provider binding against the new revision in the same session. All four dialogs (bind, rebind, reset, duplicate) carry a visible description of what the action does and use `SettingsStackedField` for labelled fields with info hints; the Bind dialog also shows a persistent note about which identity data gets written. VS Code hides the page because it has no binding API.
+
+### Why a custom voice is a Custom… item and not a combobox
+
+No combobox primitive exists. A Custom… item keeps blends like `af_bella+af_sky`, voice profiles and servers without a list working, beside a plain dropdown for everyone else.
+
+### Why the voice-list line wraps instead of truncating
+
+The line has a reserved one-line slot, so the common messages move nothing below it. It wraps because a phone has no tooltips and two of its messages are the fix itself (an environment variable, the address form); a longer message appears only after the user typed that address, below the field they typed into.

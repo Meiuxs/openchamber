@@ -1201,65 +1201,61 @@ describe('useConfigStore provider persistence', () => {
     expect(state.currentVariant).toBe('high');
   });
 
-  test('[issue-5933] a manual model pick survives picking an agent that configures a model', () => {
-    const sessionId = 'ses_5933_manual_model_survives_agent';
+  test('[issue-3391] a model picked for one agent stays with it and never replaces another agent\'s pinned model', () => {
+    const sessionId = 'ses_3391_pick_stays_with_agent';
     useSessionUIStore.setState({ currentSessionId: sessionId });
     useConfigStore.setState({
       activeDirectoryKey: DIRECTORY,
-      providers: [
-        provider('openai', 'gpt-5.5', ['low', 'high']),
-        provider('anthropic', 'claude-3', ['low', 'high']),
+      providers: [provider('openai', 'sol'), provider('google', 'terra'), provider('anthropic', 'claude-3')],
+      agents: [
+        testAgent('build', { model: { providerID: 'openai', modelID: 'sol' } }),
+        testAgent('build-terra', { model: { providerID: 'google', modelID: 'terra' } }),
+        testAgent('plan'),
       ],
-      agents: [testAgent('plan', { model: { providerID: 'openai', modelID: 'gpt-5.5' } })],
-      settingsDefaultModel: 'openai/gpt-5.5',
-      // Restores also mark the model manual; the pending pick records intent.
+      currentAgentName: 'build',
       currentProviderId: 'anthropic',
       currentModelId: 'claude-3',
-      currentVariant: undefined,
+      selectionSource: 'manual',
+      directoryScoped: {},
+    });
+    // The least a pick records (the mobile list and the favorite-model shortcuts write only this).
+    useSelectionStore.getState().saveSessionModelSelection(sessionId, 'anthropic', 'claude-3');
+    useSelectionStore.getState().pickSessionModel(sessionId, 'anthropic', 'claude-3');
+
+    useConfigStore.getState().setAgent('build-terra');
+    expect(useConfigStore.getState().currentModelId).toBe('terra');
+    expect(useSelectionStore.getState().getAgentModelForSession(sessionId, 'build-terra')).toBe(null);
+    expect(useSelectionStore.getState().getSessionModelPick(sessionId)).toBe(null);
+    expect(useSelectionStore.getState().getSessionModelSelection(sessionId)).toEqual({ providerId: 'google', modelId: 'terra' });
+
+    useConfigStore.getState().setAgent('build');
+    expect(useConfigStore.getState().currentModelId).toBe('claude-3');
+
+    // An agent without a pinned model still carries the manual model (#2531).
+    useConfigStore.getState().setAgent('plan');
+    expect(useConfigStore.getState().currentModelId).toBe('claude-3');
+
+    useConfigStore.getState().setAgent('build-terra');
+    expect(useConfigStore.getState().currentModelId).toBe('terra');
+  });
+
+  test('[issue-3391] a draft model pick does not replace the next agent\'s pinned model', () => {
+    useSessionUIStore.setState({ currentSessionId: null });
+    useConfigStore.setState({
+      activeDirectoryKey: DIRECTORY,
+      providers: [provider('anthropic', 'claude-3'), provider('openai', 'gpt-5.5')],
+      agents: [testAgent('plan', { model: { providerID: 'openai', modelID: 'gpt-5.5' } })],
+      currentProviderId: 'anthropic',
+      currentModelId: 'claude-3',
       selectionSource: 'manual',
       directoryScoped: {},
     });
 
-    useSelectionStore.getState().pickSessionModel(sessionId, 'anthropic', 'claude-3');
-    // Picking an agent must not move the session off the model the user chose.
     useConfigStore.getState().setAgent('plan');
 
-    const state = useConfigStore.getState();
-    expect(state.currentProviderId).toBe('anthropic');
-    expect(state.currentModelId).toBe('claude-3');
-    expect(state.selectionSource).toBe('manual');
-    expect(useSelectionStore.getState().getAgentModelForSession(sessionId, 'plan')).toEqual({
-      providerId: 'anthropic',
-      modelId: 'claude-3',
-    });
+    expect(useConfigStore.getState().currentModelId).toBe('gpt-5.5');
+    expect(useConfigStore.getState().selectionSource).toBe('auto');
   });
-
-  for (const scenario of ['older override', 'undiscovered pinned model', 'restored selection', 'draft pick']) {
-    test(`[issue-5933] model precedence with ${scenario}`, () => {
-      const sessionId = 'ses_5933_precedence';
-      useSessionUIStore.setState({ currentSessionId: scenario === 'draft pick' ? null : sessionId });
-      useConfigStore.setState({
-        activeDirectoryKey: DIRECTORY,
-        providers: [provider('anthropic', 'claude-3', ['low', 'high']), provider('openai', 'gpt-5.5')],
-        agents: [testAgent('plan', { model: {
-          providerID: 'openai', modelID: scenario === 'undiscovered pinned model' ? 'not-discovered' : 'gpt-5.5',
-        } })],
-        settingsDefaultModel: 'openai/gpt-5.5',
-        currentProviderId: 'anthropic', currentModelId: 'claude-3', selectionSource: 'manual',
-        currentVariant: 'high', currentVariantSelection: { override: 'high', inherited: 'low' },
-      });
-      const selection = useSelectionStore.getState();
-      if (scenario === 'older override') selection.saveAgentModelForSession(sessionId, 'plan', 'openai', 'gpt-5.5');
-      if (scenario !== 'restored selection') selection.pickSessionModel(sessionId, 'anthropic', 'claude-3');
-      else selection.saveSessionModelSelection(sessionId, 'anthropic', 'claude-3');
-
-      useConfigStore.getState().setAgent('plan');
-
-      expect(useConfigStore.getState().currentModelId).toBe(scenario === 'restored selection' ? 'gpt-5.5' : 'claude-3');
-      expect(useConfigStore.getState().selectionSource).toBe(scenario === 'restored selection' ? 'auto' : 'manual');
-      expect(useConfigStore.getState().currentVariant).toBe(scenario === 'restored selection' ? undefined : 'high');
-    });
-  }
 
   test('[issue-4601] the settings effort stays with the settings model', () => {
     const sessionId = 'ses_4601_settings_effort';
@@ -2644,7 +2640,7 @@ describe('useConfigStore provider persistence', () => {
     expect(useConfigStore.getState().providers).toEqual([]);
   });
 
-  test('a saved default the live catalog no longer lists gives way without being cleared', async () => {
+  test('a saved default the live catalog no longer lists stands instead of a model nobody chose', async () => {
     liveAgents = [testAgent('build')];
     liveProviderId = 'sidecar';
     persistedOpenChamberSettings = { defaultModel: 'sidecar/default' };
@@ -2654,7 +2650,7 @@ describe('useConfigStore provider persistence', () => {
 
     expect(useConfigStore.getState().settingsDefaultModel).toBe('sidecar/default');
     expect(useConfigStore.getState().currentProviderId).toBe('sidecar');
-    expect(useConfigStore.getState().currentModelId).toBe('sidecar-model');
+    expect(useConfigStore.getState().currentModelId).toBe('default');
   });
 
   test('a live catalog without the project default selects the global default (provider removed)', async () => {
@@ -2714,7 +2710,7 @@ describe('useConfigStore provider persistence', () => {
     expect(useConfigStore.getState()).toMatchObject({ currentProviderId: 'agent', currentModelId: 'pinned' });
   });
 
-  test('with neither configured default in the live catalog the last chat pick and fallback skip missing models too', async () => {
+  test('with every named model gone from the live catalog the first one stands and Big Pickle is not chosen', async () => {
     liveAgents = [testAgent('build')];
     projectsState.projects[0] = { ...projectsState.projects[0], defaultModel: 'removed/chosen' };
     persistedOpenChamberSettings = { defaultModel: 'removed/global' };
@@ -2723,7 +2719,34 @@ describe('useConfigStore provider persistence', () => {
 
     await useConfigStore.getState().loadProviders({ directory: DIRECTORY });
     await useConfigStore.getState().loadAgents({ directory: DIRECTORY });
-    expect(useConfigStore.getState()).toMatchObject({ currentProviderId: 'opencode', currentModelId: 'big-pickle' });
+    expect(useConfigStore.getState()).toMatchObject({ currentProviderId: 'removed', currentModelId: 'chosen' });
+  });
+
+  const reloadCases: Array<[string, NonNullable<typeof persistedOpenChamberSettings>, string | undefined, 'chosen' | 'zen' | undefined]> = [
+    ['settings default', { defaultModel: 'perf/chosen' }, undefined, undefined],
+    ['OpenCode config model', {}, 'perf/chosen', undefined],
+    ['last chat pick', {}, undefined, 'chosen'],
+    ['settings default over a Zen last pick', { defaultModel: 'perf/chosen' }, undefined, 'zen'],
+  ];
+  for (const [name, settings, opencodeDefaultModel, lastPick] of reloadCases) test(`a reload that lists only the built-in provider keeps the ${name}`, async () => {
+    liveAgents = [testAgent('build')];
+    persistedOpenChamberSettings = settings;
+    useConfigStore.setState({ opencodeDefaultModel });
+    if (lastPick === 'chosen') useUIStore.getState().setLastSelectedModel('perf', 'chosen');
+    if (lastPick === 'zen') useUIStore.getState().setLastSelectedModel('opencode', 'big-pickle');
+    const full = {
+      providers: [providerInfo('opencode'), providerInfo('perf')],
+      models: [model('opencode', 'big-pickle'), model('perf', 'chosen')],
+      default: { providerID: 'perf', id: 'chosen' },
+    };
+    for (const listing of [full, providerResponse('opencode', 'big-pickle'), full]) {
+      getProvidersForConfigImpl = async () => listing;
+      await useConfigStore.getState().loadProviders({ directory: DIRECTORY, fresh: true });
+      await useConfigStore.getState().loadAgents({ directory: DIRECTORY });
+      useConfigStore.setState({ opencodeDefaultModel });
+      useConfigStore.getState().applyDefaultModelAgentSelection();
+      expect(useConfigStore.getState()).toMatchObject({ currentProviderId: 'perf', currentModelId: 'chosen' });
+    }
   });
 
   test('an empty live catalog keeps the configured default', async () => {

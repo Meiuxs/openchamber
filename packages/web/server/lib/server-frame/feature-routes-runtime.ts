@@ -113,6 +113,7 @@ import { createSshPassphraseStore } from '../git/ssh-passphrases.js';
 import { openCodeCredentialSource } from '../opencode/auth.js';
 import { createContributorProvenanceStore } from '../git/contributor-provenance-storage.js';
 import { createGitNetworkOperationStore } from '../git/network-operation-storage.js';
+import { createWithPlannedRemote, hydrateFollowingPlannedRemotes } from '../git/planned-remotes.js';
 import { readEffectiveGitTransportRevision } from '../git/transport-config.js';
 import { completeWorktreeCheckoutHydration, configureRepositoryTransport, deleteBranch as deleteBranchService, getWorktreeBootstrapStatus, isGitRepository as isGitRepositoryService, removeWorktree as removeWorktreeService, resolvePrimaryWorktreeRoot, resolveWorktreeTopLevel } from '../git/service.js';
 import { worktreeSetupOf } from '../projects/worktree-setup.js';
@@ -169,9 +170,9 @@ type RouteDependencies =
   & Pick<Parameters<typeof registerOpenCodeRoutes>[1], 'crypto' | 'getOpenCodeResolutionSnapshot' | 'getOpenCodeUpgradeCapability' | 'upgradeOpenCodeCli' | 'getOpenCodeCompatibility' | 'installOpenCodeV2'>
   & Pick<ScheduledTaskOptions, 'projectConfigRuntime' | 'scheduledTasksRuntime' | 'sanitizeProjects'>
   & Required<Pick<ScheduledTaskOptions, 'scheduledTaskService'>>
-  & Pick<Parameters<typeof registerSkillRoutes>[1], 'sanitizeSkillCatalogs' | 'isUnsafeSkillRelativePath' | 'getOpenCodePort'>
+  & Pick<Parameters<typeof registerSkillRoutes>[1], 'sanitizeSkillCatalogs' | 'isUnsafeSkillRelativePath' | 'getOpenCodePort' | 'getManagedOpenCodeProcessEnv'>
   & {
-    settingsRuntime: Pick<SettingsRuntime, 'readSettingsFromDisk' | 'readSettingsFromDiskMigrated' | 'persistSettings' | 'persistResolvedSettings' | 'watchSettingsFiles' | 'reconcileExternalSettings'>;
+    settingsRuntime: Pick<SettingsRuntime, 'readSettingsFromDisk' | 'readSettingsFromDiskMigrated' | 'persistSettings' | 'persistResolvedSettings' | 'watchSettingsFiles' | 'reconcileExternalSettings' | 'subscribeTakenInSettings'>;
     fs: typeof import('node:fs');
     formatSettingsResponse: ReturnType<typeof createSettingsHelpers>['formatSettingsResponse'];
     buildOpenCodeUrl: ReturnType<typeof createOpenCodeNetworkRuntime>['buildOpenCodeUrl'];
@@ -288,16 +289,11 @@ export const createFeatureRoutesRuntime = (dependencies: FeatureRuntimeDependenc
         code: 'RUNTIME_UNSUPPORTED',
       });
     }
-    const bindingRead = await walkthroughBindingService.get(parentDirectory);
-    const repositoryAuthority = {
-      repositoryId: bindingRead.repository.repositoryId,
-      bindingRevision: bindingRead.revision,
-      configRevision: bindingRead.repository.configRevision,
-    };
-    return networkOperations.hydrateBoundCheckout({
-      directory,
-      parentRemoteName,
-      repositoryAuthority,
+    const { get: readBinding } = walkthroughBindingService;
+    const { hydrateBoundCheckout: hydrate } = networkOperations;
+    return createWithPlannedRemote({
+      directory: parentDirectory, remote: undefined, serialize: false, readBinding,
+      create: (pinned) => hydrateFollowingPlannedRemotes(pinned, (repositoryAuthority) => hydrate({ directory, parentRemoteName, repositoryAuthority })),
     });
   };
 
@@ -365,7 +361,7 @@ export const createFeatureRoutesRuntime = (dependencies: FeatureRuntimeDependenc
       isUnsafeSkillRelativePath,
       buildOpenCodeUrl,
       getOpenCodeAuthHeaders,
-      getOpenCodePort,
+      getOpenCodePort, getManagedOpenCodeProcessEnv,
       getOwnPorts,
       devServerScanner,
       buildAugmentedPath,
@@ -545,7 +541,7 @@ export const createFeatureRoutesRuntime = (dependencies: FeatureRuntimeDependenc
       refreshPluginSwitches,
     });
 
-    const { getProfiles, getProfile, getGlobalIdentity, resolveRepositoryGitPaths } = await import('../git/index.js');
+    const { getProfiles, getProfile, getGlobalIdentity, resolveRepositoryGitPaths, spawnOutsideProjects } = await import('../git/index.js');
 
     registerQuotaRoutes(app, { getQuotaProviders });
     registerSmallModelRoutes(app, { getSmallModelService });
@@ -755,7 +751,7 @@ export const createFeatureRoutesRuntime = (dependencies: FeatureRuntimeDependenc
       clientReloadDelayMs,
       buildOpenCodeUrl,
       getOpenCodeAuthHeaders,
-      getOpenCodePort,
+      getOpenCodePort, getManagedOpenCodeProcessEnv,
       getSkillSources,
       discoverSkills,
       mergeDiscoveredSkills,
@@ -808,7 +804,7 @@ export const createFeatureRoutesRuntime = (dependencies: FeatureRuntimeDependenc
         bootstrapStore: worktreeBootstrapStore,
         disposeInstance: createWorktreeInstanceDisposer({ buildOpenCodeUrl, getOpenCodeAuthHeaders }),
       }),
-      spawnImpl: spawn,
+      spawnImpl: spawnOutsideProjects(gitBinary, spawn),
       fsImpl: fsPromises,
       pathImpl: path,
       gitBinary,

@@ -72,6 +72,7 @@ import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
+import { integrateConflictI18n } from './integrate-conflict.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { subagentsI18n } from './subagents.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
@@ -279,6 +280,7 @@ export const dict: Record<I18nKey, string> = {
   ...markdownOutlineI18n['ja'],
   ...markdownGithubI18n['ja'],
   ...autocompleteScopeI18n['ja'],
+  ...integrateConflictI18n['ja'],
   ...workflowsI18n['ja'],
   ...subagentsI18n['ja'],
   ...sessionReferencesI18n['ja'],
@@ -1618,6 +1620,7 @@ export const dict: Record<I18nKey, string> = {
   'walkthrough.blocked.emptyDiff.description': 'この範囲にはまだ変更がありません。',
   'walkthrough.blocked.contextTooSmall.title': 'この差分は現在のモデルには大きすぎます',
   'walkthrough.blocked.contextTooSmall.description': '{model} が扱えるのは約 {available} 千文字ですが、この差分には約 {required} 千文字が必要です。切り詰めは行いません。コンテキストの大きいモデルを選んでください。',
+  'walkthrough.blocked.contextTooSmall.descriptionRefused': 'この差分は長すぎるため、{model} に拒否されました。コンテキストの大きいモデルを選ぶか、対象範囲を絞ってください。',
   'walkthrough.blocked.structuredOutput.title': 'このモデルは構造化出力に対応していません',
   'walkthrough.blocked.structuredOutput.description': '{model} はウォークスルーに必要な構造化応答をサポートしていません。',
   'walkthrough.blocked.chooseModel': 'スモールモデルを選択',
@@ -2444,6 +2447,9 @@ export const dict: Record<I18nKey, string> = {
   'session.githubPrPicker.empty.noPullRequestsFound': 'プルリクエストが見つかりません',
   'session.githubPrPicker.loading.pullRequests': 'プルリクエストを読み込み中...',
   'session.githubPrPicker.actions.loadMore': 'さらに読み込む',
+  'session.githubPrPicker.filter.group.repository': 'リポジトリ',
+  'session.githubPrPicker.filter.group.author': '作成者',
+  'session.githubPrPicker.filter.clearAll': 'フィルターをクリア',
   'session.newWorktree.title': '新しいワークツリー',
   'session.newWorktree.mode.newBranch': '新しいブランチ',
   'session.newWorktree.mode.existingBranch': '既存のブランチ',

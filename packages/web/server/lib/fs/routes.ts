@@ -1,9 +1,12 @@
 import { createRealpathCache } from '../path-realpath-cache.js';
+import { GIT_LAUNCH_DIRECTORY, gitArgsIn } from '../git/git-launch.js';
+import { whileReachable } from '../directory-reachability/while-reachable.js';
 import { canonicalDirectoryPath } from './canonical-path.js';
-import { containedMkdirPath, containedPath, containedRenamePaths, containedWritePath, isPathWithinRoot } from './workspace-target.js';
+import { containedMkdirPath, containedPathOrChatFolder, containedRenamePaths, containedWritePath, isPathWithinRoot } from './workspace-target.js';
 import { redactGitText } from '../git/redaction.js';
 import { resolveByteRange } from './byte-range.js';
 import { injectPreviewBridge } from './preview-bridge.js';
+import { openWindowsFolder, selectInWindowsExplorer } from './windows-shell-open.js';
 import { createWorkspaceFileNameIndex } from './workspace-file-names.js';
 import { createFsSearchRuntime, createGitCheckIgnoreTimeoutMs } from './search.js';
 import {
@@ -733,9 +736,7 @@ export const registerFsRoutes = (app: Application, dependencies: FsRouteDependen
   const managedRoots = [path.resolve(openchamberUserConfigRoot), chatsRoot];
   const chatsRoots = [...new Set([chatsRoot, path.join(openchamberUserConfigRoot, 'chats')])];
   const previewGrants = createPreviewGrants({ crypto });
-  const realpathCache = createRealpathCache({
-    realpath: fsPromises.realpath.bind(fsPromises),
-  });
+  const realpathCache = createRealpathCache({ realpath: fsPromises.realpath.bind(fsPromises) });
 
   const spawnDetached = (command: string, args: string[]) => new Promise<void>((resolve, reject) => {
     let child: ChildProcess;
@@ -961,7 +962,7 @@ export const registerFsRoutes = (app: Application, dependencies: FsRouteDependen
       if (!resolved.ok) {
         return res.status(400).json({ error: resolved.error });
       }
-      const mkdirPath = await containedMkdirPath(resolved, { fsPromises, path, os });
+      const mkdirPath = await containedMkdirPath(resolved, chatsRoots, { fsPromises, path, os });
       if (!mkdirPath) {
         return res.status(403).json({ error: 'Access denied' });
       }
@@ -1093,7 +1094,7 @@ export const registerFsRoutes = (app: Application, dependencies: FsRouteDependen
 
     try {
       const resolvedPath = path.resolve(normalizeDirectoryPath(directoryPath));
-      const stats = await fsPromises.stat(resolvedPath);
+      const stats = await whileReachable(resolvedPath, () => fsPromises.stat(resolvedPath));
       if (!stats.isDirectory()) {
         return res.status(400).json({ error: 'Specified path is not a directory', reason: 'not-directory' });
       }
@@ -1256,11 +1257,11 @@ export const registerFsRoutes = (app: Application, dependencies: FsRouteDependen
     const results = await Promise.all(directoryPaths.map(async (directoryPath) => {
       try {
         const resolvedPath = path.resolve(normalizeDirectoryPath(directoryPath));
-        const stats = await fsPromises.stat(resolvedPath);
+        const stats = await whileReachable(resolvedPath, () => fsPromises.stat(resolvedPath));
         if (!stats.isDirectory()) {
           return { path: directoryPath, isDirectory: false, reason: 'not-directory' };
         }
-        const realPath = await projectRealpath(resolvedPath).catch(() => null);
+        const realPath = await whileReachable(resolvedPath, () => projectRealpath(resolvedPath)).catch(() => null);
         const result: DirectoryStatResult = { path: directoryPath, isDirectory: true };
         if (realPath) result.realPath = realPath;
         return result;
@@ -1791,7 +1792,7 @@ export const registerFsRoutes = (app: Application, dependencies: FsRouteDependen
         return res.status(400).json({ error: resolved.error });
       }
 
-      const deletePath = await containedPath(resolved, { fsPromises, path, os });
+      const deletePath = await containedPathOrChatFolder(resolved, chatsRoots, { fsPromises, path, os });
       if (!deletePath) {
         return res.status(403).json({ error: 'Access denied' });
       }
@@ -1912,11 +1913,11 @@ export const registerFsRoutes = (app: Application, dependencies: FsRouteDependen
         }
       } else if (platform === 'win32') {
         const stat = await fsPromises.stat(resolved);
-        const escapedPath = resolved.replace(/'/g, "''");
-        const command = stat.isDirectory()
-          ? `Start-Process -FilePath '${escapedPath}'`
-          : `Start-Process -FilePath explorer.exe -ArgumentList '/select,"${escapedPath}"'`;
-        await spawnAndWait('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], 'Explorer');
+        if (stat.isDirectory()) {
+          await openWindowsFolder(spawn, resolved);
+        } else {
+          await selectInWindowsExplorer(spawn, resolved);
+        }
       } else {
         const stat = await fsPromises.stat(resolved);
         const dir = stat.isDirectory() ? resolved : path.dirname(resolved);
@@ -2122,8 +2123,8 @@ export const registerFsRoutes = (app: Application, dependencies: FsRouteDependen
           if (pathsToCheck.length > 0) {
             try {
               const result = await new Promise<string>((resolve) => {
-                const child = spawn(resolveGitBinaryForSpawn(), ['check-ignore', '--', ...pathsToCheck], {
-                  cwd: resolvedPath,
+                const child = spawn(resolveGitBinaryForSpawn(), gitArgsIn(resolvedPath, ['check-ignore', '--', ...pathsToCheck]), {
+                  cwd: GIT_LAUNCH_DIRECTORY,
                   windowsHide: true,
                   stdio: ['ignore', 'pipe', 'ignore'],
                 });

@@ -65,6 +65,7 @@ import { createHmrStateRuntime } from './lib/opencode/hmr-state-runtime.js';
 import { createOpenCodeNetworkRuntime } from './lib/opencode/network-runtime.js';
 import { createOpenCodeAuthStateRuntime } from './lib/opencode/auth-state-runtime.js';
 import { createProjectDirectoryRuntime } from './lib/projects/project-directory-runtime.js';
+import { createServerCanonicalPaths } from './lib/settings/canonical-paths.js';
 import { createSettingsNormalizationRuntime } from './lib/settings/settings-normalization-runtime.js';
 import { createSettingsHelpers, isMessageSearchEnabled } from './lib/settings/settings-helpers.js';
 import { createThemeRuntime } from './lib/appearance/theme-runtime.js';
@@ -196,6 +197,7 @@ import { SPACE_IDLE_EXIT_CODE } from './lib/spaces/layout.js';
 import { createSwitchController, registerSpaceRoutes } from './lib/spaces/routes.js';
 import { getCheckedOutBranch, getWorktreeBootstrapGateStatus, getWorktrees, isWorktreeDirectoryPinned, readRenameableGeneratedBranch, renameGeneratedWorktreeBranch, resolvePrimaryWorktreeRoot, setWorktreeTaskTitle } from './lib/git/service.js';
 import { createEnvironmentStore } from './lib/environment/store.js';
+import { configureIntegrateSessions, readProjectPaths } from './lib/git/integrate-sessions.js';
 import { composeEnvironmentRuntime } from './lib/environment/composition.js';
 import { readOpenCodeServiceEnv } from './lib/environment/opencode-service-env.js';
 import { OPENCODE_CONFIG_DIR } from './lib/opencode/config-files.js';
@@ -384,8 +386,7 @@ const settingsNormalizationRuntime = createSettingsNormalizationRuntime({
   os,
   path,
   processLike: process,
-  realpathSync: fs.realpathSync,
-  readdirSync: fs.readdirSync,
+  canonicalPaths: createServerCanonicalPaths(),
   tunnelBootstrapTtlDefaultMs: TUNNEL_BOOTSTRAP_TTL_DEFAULT_MS,
   tunnelBootstrapTtlMinMs: TUNNEL_BOOTSTRAP_TTL_MIN_MS,
   tunnelBootstrapTtlMaxMs: TUNNEL_BOOTSTRAP_TTL_MAX_MS,
@@ -543,7 +544,7 @@ const settingsRuntime = createSettingsRuntime({
   sanitizeProjects,
   sanitizeSettingsUpdate,
   mergePersistedSettings,
-  normalizeSettingsPaths,
+  normalizeSettingsPaths, refreshCanonicalPaths: settingsNormalizationRuntime.refreshCanonicalPaths,
   normalizeStringArray,
   formatSettingsResponse,
   resolveDirectoryCandidate,
@@ -563,9 +564,7 @@ const settingsRuntime = createSettingsRuntime({
   },
   onLastDirectoryChanged: (directory) => {
     if (!isString(directory)) return;
-    void openCodeTrust.isTrusted(directory).then((trusted) => {
-      if (trusted) openCodeLifecycleRuntime.noteCurrentDirectory(directory);
-    }, () => {});
+    void openCodeLifecycleRuntime.noteCurrentDirectory(directory, openCodeTrust.isTrusted).catch(() => {});
   },
 });
 
@@ -1156,14 +1155,13 @@ const sessionGoalRuntime = createSessionGoalRuntime({
 });
 
 const openCodeSessionClient = (directory?: string) => createOpenCodeClient({
-  baseUrl: buildOpenCodeUrl('/', '').replace(/\/$/, ''),
-  headers: getOpenCodeAuthHeaders(),
-  directory,
+  baseUrl: buildOpenCodeUrl('/', '').replace(/\/$/, ''), headers: getOpenCodeAuthHeaders(), directory,
 });
+configureIntegrateSessions({ client: () => openCodeSessionClient(), listProjects: readProjectPaths(() => readSettingsFromDiskMigrated()) });
 
 const guestInstructions = createGuestInstructions({ dataDir: OPENCHAMBER_DATA_DIR });
 const guestAgentContext = createGuestAgentContext({
-  listGuests: () => listInstalledGuests({ persistPath: extensionsPersistPath(OPENCHAMBER_DATA_DIR) }),
+  persistPath: extensionsPersistPath(OPENCHAMBER_DATA_DIR),
   instructions: guestInstructions,
 });
 
@@ -1327,8 +1325,8 @@ messageQueueRuntime.start();
 
 const dispatchResultsRuntime = createDispatchResultsRuntime({
   globalEventHub: globalMessageStreamHub,
-  buildOpenCodeUrl,
-  getOpenCodeAuthHeaders,
+  buildOpenCodeUrl, getOpenCodeAuthHeaders,
+  ownWorkSources: () => ({ extensionWaits: extensionWaitsRuntime, prWatch: prWatchRuntime, workflows: workflowRuntime, waitsOnAnswer: (sessionID) => sessionRuntime.getPendingBlockingRequestsSnapshot()[sessionID] !== undefined }),
   dataDir: OPENCHAMBER_DATA_DIR,
   isSessionArchived: (sessionID) => openChamberSessionService.sessionArchive.isArchived(sessionID),
 });
@@ -1840,8 +1838,8 @@ const openCodeLifecycleRuntime = createOpenCodeLifecycleRuntime({
       }
     }
     const existing = await Promise.all([...new Set(directories)].map(async (directory) => (
-      (await fs.promises.stat(directory).catch(() => null))?.isDirectory()
-        && await openCodeTrust.isTrusted(directory).catch(() => false)
+      await openCodeTrust.isTrusted(directory).catch(() => false)
+        && (await fs.promises.stat(directory).catch(() => null))?.isDirectory()
         ? directory
         : null
     )));
@@ -1864,7 +1862,7 @@ const openCodeLifecycleRuntime = createOpenCodeLifecycleRuntime({
       console.warn('Failed to reconcile sessions after OpenCode restart:', isRecord(error) ? error.message ?? error : error);
     }
   },
-  getManagedOpenCodeEnv: async () => (retireClaudePlugin({ buildOpenCodeUrl, getOpenCodeAuthHeaders, directory: openCodeLifecycleRuntime.getDefaultOpenCodeDirectory(), notify: (payload) => broadcastUiNotification(payload) }), managedConfigRuntime ? managedConfigRuntime.buildManagedChildEnv() : {}),
+  getManagedOpenCodeEnv: async () => (retireClaudePlugin({ buildOpenCodeUrl, getOpenCodeAuthHeaders, directory: await openCodeLifecycleRuntime.getDefaultOpenCodeDirectory(), notify: (payload) => broadcastUiNotification(payload) }), managedConfigRuntime ? managedConfigRuntime.buildManagedChildEnv() : {}),
   getUserEnvironment: () => environmentRuntime.forOpenCode(),
   sharedService: createSharedOpenCodeServiceConnector({ readSettings: () => readSettingsFromDiskMigrated(), resolveBinary: () => ensureOpencodeCliEnv(), buildEnv: () => ({ ...getLoginShellEnvSnapshot(), ...process.env, PATH: buildManagedOpenCodePath() }), setAuthPassword: (password, source) => openCodeAuthStateRuntime.setOpenCodeAuthState(password, source), resolveLaunch: (binary) => resolveManagedOpenCodeLaunchSpec(binary) }),
 });
@@ -1905,7 +1903,7 @@ const getOpenCodeUpgradeCapability = () => {
   });
 };
 
-const restartOpenCode: typeof openCodeLifecycleRuntime.restartOpenCode = (...args) => openCodeLifecycleRuntime.restartOpenCode(...args);
+const restartOpenCode = async (...args: Parameters<typeof openCodeLifecycleRuntime.restartOpenCode>): Promise<void> => { await openCodeLifecycleRuntime.restartOpenCode(...args); };
 const waitForOpenCodeReady: typeof openCodeLifecycleRuntime.waitForOpenCodeReady = (...args) => openCodeLifecycleRuntime.waitForOpenCodeReady(...args);
 const refreshOpenCodeAfterConfigChange: typeof openCodeLifecycleRuntime.refreshOpenCodeAfterConfigChange = (...args) => openCodeLifecycleRuntime.refreshOpenCodeAfterConfigChange(...args);
 const startHealthMonitoring = () => openCodeLifecycleRuntime.startHealthMonitoring(HEALTH_CHECK_INTERVAL);
@@ -2985,7 +2983,7 @@ async function main(options: WebUiServerOptions = {}) {
     isUnsafeSkillRelativePath,
     buildOpenCodeUrl,
     getOpenCodeAuthHeaders,
-    getOpenCodePort: () => openCodePort,
+    getOpenCodePort: () => openCodePort, getManagedOpenCodeProcessEnv: () => openCodeLifecycleRuntime.getManagedOpenCodeProcessEnv(),
     getOwnPorts: () => [port, openCodePort].filter((value): value is number => isNumber(value) && Number.isInteger(value) && value > 0),
     getActivePort: () => {
       const address = server?.address?.();

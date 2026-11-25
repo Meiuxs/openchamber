@@ -219,6 +219,12 @@ The rejected alternative is canonicalizing the whole target for every route. It 
 
 A concurrent swap of the link between canonicalization and the operation can still land outside; closing that needs dirfd-relative operations, which neither this module nor the upload route has.
 
+### Why only a chat's session folder falls back to the chats root
+
+A project such as the home directory can contain the chats root lexically while a link or junction puts the real folder elsewhere. Checked against the project, creating the first chat of a day answers 403. When the workspace check refuses, mkdir and delete of `<chats root>/<YYYY-MM-DD>/session-<id>` therefore repeat the same canonical containment check with the chats root as the base. `containedChatSessionFolder` in `workspace-target.ts` owns that rule. Checking the chats root first would refuse a target behind a day folder that links elsewhere inside the project, which the workspace check allows.
+
+The rejected alternative is picking the deepest root for every route. Rename requires both paths to share a base, so it would refuse moves between a project and a managed folder inside it, and an HTML preview would get a narrower read root.
+
 ### Why route inputs retain property and string guards
 
 HTTP bodies and thrown values expose only optional unchecked properties until
@@ -302,7 +308,11 @@ Git startup and Windows untracked-file walks make repeated name lookups expensiv
 
 ### Why Windows folder reveal uses the default handler and not Explorer selection
 
-Opening a folder through its default handler respects replacement file managers. File selection inside a folder remains Explorer-specific.
+Opening a folder through its default handler respects replacement file managers. File selection inside a folder remains Explorer-specific. `windows-shell-open.ts` runs both through PowerShell `Start-Process`, and the desktop app's project header button imports the same helper so every way to open a project folder lands in the same file manager.
+
+### Why the Windows reveal path travels in an environment variable and not in the command text
+
+PowerShell ends a single-quoted string at `'` and also at the typographic quotes U+2018 to U+201B, which folder names carry after autocorrect. With the path inside the command, `Bob’s app` failed to open, and a folder named `x’;calc;’` ran `calc`. Read from `$env:` the path is never parsed as code, so no escaping rule has to keep up with PowerShell's quote set.
 
 ## Legacy clone route
 

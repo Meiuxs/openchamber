@@ -72,6 +72,7 @@ import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
+import { integrateConflictI18n } from './integrate-conflict.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { subagentsI18n } from './subagents.i18n';
 import { sessionReferencesI18n } from './session-references.i18n';
@@ -289,6 +290,7 @@ export const dict: Record<I18nKey, string> = {
   ...markdownOutlineI18n['es'],
   ...markdownGithubI18n['es'],
   ...autocompleteScopeI18n['es'],
+  ...integrateConflictI18n['es'],
   ...workflowsI18n['es'],
   ...subagentsI18n['es'],
   ...sessionReferencesI18n['es'],
@@ -1612,6 +1614,7 @@ export const dict: Record<I18nKey, string> = {
   "walkthrough.blocked.emptyDiff.description": "Todavía no hay cambios en este ámbito.",
   "walkthrough.blocked.contextTooSmall.title": "Este diff es demasiado grande para el modelo actual",
   "walkthrough.blocked.contextTooSmall.description": "{model} admite unos {available} mil caracteres y este diff necesita unos {required} mil. No se recorta nada: elige un modelo con más contexto.",
+  "walkthrough.blocked.contextTooSmall.descriptionRefused": "{model} rechazó este diff porque es demasiado largo. Elige un modelo con más contexto o revisa un ámbito más reducido.",
   "walkthrough.blocked.structuredOutput.title": "Este modelo no puede generar salida estructurada",
   "walkthrough.blocked.structuredOutput.description": "{model} no admite las respuestas estructuradas que necesita un recorrido.",
   "walkthrough.blocked.chooseModel": "Elige el modelo pequeño",
@@ -2416,6 +2419,9 @@ export const dict: Record<I18nKey, string> = {
   "session.githubPrPicker.empty.noPullRequestsFound": "No se encontraron PR",
   "session.githubPrPicker.loading.pullRequests": "Cargando PR...",
   "session.githubPrPicker.actions.loadMore": "Cargar más",
+  "session.githubPrPicker.filter.group.repository": "Repositorio",
+  "session.githubPrPicker.filter.group.author": "Autor",
+  "session.githubPrPicker.filter.clearAll": "Borrar filtros",
   "session.newWorktree.title": "Nuevo worktree",
   "session.newWorktree.mode.newBranch": "Nueva rama",
   "session.newWorktree.mode.existingBranch": "Rama existente",
