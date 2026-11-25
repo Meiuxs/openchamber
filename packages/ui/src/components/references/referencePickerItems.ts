@@ -40,9 +40,24 @@ export type ReferencePickerItem =
     | { source: 'repository'; reference: RepositoryReference; directory?: string }
     | { source: 'tracker'; provider: string; item: TrackerItemSummary };
 
+export type RepositoryPickerItem = Extract<ReferencePickerItem, { source: 'repository' }>;
+
 export type ReferencePickerSelection =
-    | { source: 'repository'; reference: RepositoryReference; includeDiff: boolean }
+    | { source: 'repository'; reference: RepositoryReference; includeDiff: boolean; directory?: string }
     | { source: 'tracker'; provider: string; item: TrackerItemSummary };
+
+/** The item as checked: it keeps the folder it was listed in, so a later repository switch cannot move it. */
+export const itemWithDirectory = (item: RepositoryPickerItem, directory: string | null): RepositoryPickerItem => (
+    item.directory || !directory ? item : { ...item, directory }
+);
+
+/** The selection carries the item's own folder, or the folder the list was reading. */
+export const repositorySelection = (item: RepositoryPickerItem, includeDiff: boolean, directory: string | null): ReferencePickerSelection => ({
+    source: 'repository',
+    reference: item.reference,
+    includeDiff,
+    directory: item.directory ?? directory ?? undefined,
+});
 
 /** Tracker lists combine a state filter (one of the descriptor's), whose items, a priority, and one grouping slug. */
 export type TrackerReferenceFilter = {

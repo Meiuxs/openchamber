@@ -26,6 +26,11 @@ export type ReferenceResolveDeps = {
      */
     contexts?: readonly SourceControlReadContext[];
     /**
+     * The read context of one folder, for a selection checked while listing a
+     * repository other than the session's own.
+     */
+    contextFor?: (directory: string) => Promise<SourceControlReadContext | null>;
+    /**
      * A tracker item with its comments, by tracker, the tracker's id and the
      * container it was listed under (identifiers restart per container).
      */
@@ -159,7 +164,12 @@ async function readChangeRequest(
 async function resolveOne(selection: ReferencePickerSelection, deps: ReferenceResolveDeps): Promise<ComposerReference> {
     if (selection.source === 'tracker') return readTrackerItem(deps, selection.provider, selection.item.id, selection.item.container?.id ?? null);
 
-    const { sourceControl, context } = deps;
+    const { sourceControl } = deps;
+    // A checked item carries the folder it was listed in, so a picker across
+    // several repositories still reads each through its own binding.
+    const context = selection.directory && deps.contextFor
+        ? await deps.contextFor(selection.directory)
+        : deps.context;
     if (!context) throw new Error('The repository is not available here');
     const { reference } = selection;
     const project = { owner: reference.sourceRepo.owner, name: reference.sourceRepo.repo };

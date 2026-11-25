@@ -5,11 +5,12 @@ import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { useI18n } from '@/lib/i18n';
 
 import type { SourceControlReadContext } from '@/lib/api/types';
-import { useRepositoryBindings } from '@/lib/source-control/repository-binding';
+import { repositoryBindingOwner, useRepositoryBindings } from '@/lib/source-control/repository-binding';
+import { useSourceControlProviders } from '@/lib/source-control/providers/registry';
 
 import type { ReferencePickerConfirmFailure } from './ReferencePickerDialog';
 import type { ReferencePickerSelection } from './referencePickerItems';
-import { readTrackerItemDetail, useNestedRepositoryDirectories, useRepositoryReadContext } from './referenceSources';
+import { firstByOrder, readTrackerItemDetail, useNestedRepositoryDirectories, useRepositoryReadContext } from './referenceSources';
 import { resolveComposerReferences, resolveReferenceLink, type ReferenceLinkTarget, type ReferenceResolveDeps } from './resolveComposerReferences';
 import { readTrackerDescriptor } from '@/lib/trackers/registry';
 
@@ -17,6 +18,7 @@ const readLocationKey = (context: SourceControlReadContext): string => `${contex
 
 function useReferenceResolveDeps(directory: string | null): ReferenceResolveDeps {
     const { sourceControl, trackers } = useRuntimeAPIs();
+    const descriptors = useSourceControlProviders();
     const repositoryContext = useRepositoryReadContext(directory);
     const primary = repositoryContext && repositoryContext !== 'missing' ? repositoryContext : null;
     // Only a directory without a repository of its own falls back to the
@@ -36,15 +38,23 @@ function useReferenceResolveDeps(directory: string | null): ReferenceResolveDeps
         }
         return found;
     }, [nestedBindings, primary]);
+    // A checked item's own folder may sit outside what the session directory
+    // scans (an established root's submodule, or one past the scan cap), so its
+    // binding is read on demand, ordered exactly as the list orders contexts.
+    const contextFor = React.useCallback(async (target: string) => {
+        const state = await repositoryBindingOwner.read(repositoryBindingOwner.scope(target), sourceControl);
+        return firstByOrder(state.contexts, descriptors);
+    }, [descriptors, sourceControl]);
     return React.useMemo(() => ({
         sourceControl,
         context: primary,
         contexts,
+        contextFor,
         readTrackerDetail: (provider, itemId, containerId) => (trackers
             ? readTrackerItemDetail(trackers, provider, itemId, containerId)
             : Promise.reject(new Error('Trackers are not available here'))),
         trackerName: (provider) => readTrackerDescriptor(provider).name,
-    }), [contexts, primary, sourceControl, trackers]);
+    }), [contextFor, contexts, primary, sourceControl, trackers]);
 }
 
 export function useAttachReferences(

@@ -92,6 +92,7 @@ export function renderComposerDialogs({
                 purpose="attach"
                 selection="multiple"
                 directory={referencePickerDirectory}
+                nestedRepositories
                 initialGitHubKind={referencePicker.source === 'repository' ? referencePicker.kind : undefined}
                 onConfirm={attachReferences}
             />

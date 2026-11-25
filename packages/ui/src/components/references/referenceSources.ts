@@ -71,7 +71,7 @@ const orderOf = (descriptors: readonly SourceControlProviderDescriptor[], provid
     (descriptors.find((descriptor) => descriptor.id === provider) ?? unknownProviderDescriptor(provider)).order
 );
 
-function firstByOrder<T extends { provider: string }>(entries: readonly T[], descriptors: readonly SourceControlProviderDescriptor[]): T | null {
+export function firstByOrder<T extends { provider: string }>(entries: readonly T[], descriptors: readonly SourceControlProviderDescriptor[]): T | null {
     let first: T | null = null;
     for (const entry of entries) {
         if (!first || orderOf(descriptors, entry.provider) < orderOf(descriptors, first.provider)) first = entry;

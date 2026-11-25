@@ -3,6 +3,8 @@ import * as React from 'react';
 
 import { Icon } from '@/components/icon/Icon';
 import { ProviderIcon } from '@/components/sourceControl/ProviderIcon';
+import { RepositoryPicker } from '@/components/sourceControl/RepositoryPicker';
+import { RepositoryAcrossNote } from '@/components/sourceControl/RepositoryAcrossNote';
 import { trackerPresentation } from '@/lib/trackers/presentation';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -10,15 +12,20 @@ import { MobileOverlayPanel } from '@/components/ui/MobileOverlayPanel';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import type { RepositoryReferenceKind } from '@/lib/api/types';
 import { useI18n } from '@/lib/i18n';
+import { useRepositoryScope, type RepositoryChoice } from '@/lib/source-control/repositoryScope';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/useUIStore';
 
+import { itemDirectory } from './acrossRepositories';
+import { DEFAULT_REPOSITORY_CHOICE, listDirectoriesOf, listDirectoryOf, repositoryChoiceFromPicker, scopesRepositories } from './pickerRepositoryScope';
 import { ReferenceBrowserList, ReferenceBrowserSearch, ReferenceBrowserTabs } from './ReferenceBrowser';
 import { usePreviewReturnScroll } from './usePreviewReturnScroll';
 import { IDLE_PULL_STATUS, useReferenceBrowser } from './useReferenceBrowser';
 import { ReferencePreview, type ReferencePreviewPurpose } from './ReferencePreview';
 import {
+    itemWithDirectory,
     referencePickerItemKey,
+    repositorySelection,
     type ReferencePickerItem,
     type ReferencePickerSelection,
     type ReferencePickerSource,
@@ -34,6 +41,8 @@ type ReferencePickerDialogProps = {
     selection: 'multiple' | 'single';
     directory: string | null;
     initialGitHubKind?: RepositoryReferenceKind;
+    /** Discover the repositories under a directory that is not one, and offer them beside it. */
+    nestedRepositories?: boolean;
     onConfirm: (selections: ReferencePickerSelection[]) => Promise<ReferencePickerConfirmFailure | null>;
 };
 
@@ -50,6 +59,7 @@ function ReferencePickerSurface({
     selection,
     directory,
     initialGitHubKind,
+    nestedRepositories = false,
     onConfirm,
     isMobile,
 }: ReferencePickerDialogProps & { isMobile: boolean }) {
@@ -58,22 +68,34 @@ function ReferencePickerSurface({
     const [diffIncluded, setDiffIncluded] = React.useState<ReadonlySet<string>>(new Set());
     const [confirming, setConfirming] = React.useState(false);
     const [confirmError, setConfirmError] = React.useState<string | null>(null);
+    const [choice, setChoice] = React.useState<RepositoryChoice>(DEFAULT_REPOSITORY_CHOICE);
 
-    const browser = useReferenceBrowser({ source, directory, isMobile, initialGitHubKind, retainedItems: checked });
+    const scoped = scopesRepositories(source, nestedRepositories);
+    const scope = useRepositoryScope(scoped ? directory : null, choice);
+
+    const browser = useReferenceBrowser({
+        source,
+        directory: listDirectoryOf(scope, directory),
+        directories: listDirectoriesOf(scope),
+        isMobile,
+        initialGitHubKind,
+        retainedItems: checked,
+    });
     const { highlightedItem, previewItem, previewKey, descriptor } = browser;
     const inPreview = isMobile && Boolean(browser.mobilePreviewKey && previewItem);
     const contentRef = usePreviewReturnScroll(inPreview ? browser.mobilePreviewKey : null);
 
+    const repositoryDirectory = browser.directory;
     const toggleChecked = React.useCallback((item: ReferencePickerItem) => {
         const key = referencePickerItemKey(item);
         setChecked((current) => {
             const next = new Map(current);
             if (next.has(key)) next.delete(key);
-            else next.set(key, item);
+            else next.set(key, item.source === 'repository' ? itemWithDirectory(item, repositoryDirectory) : item);
             return next;
         });
         setConfirmError(null);
-    }, []);
+    }, [repositoryDirectory]);
 
     const setIncludeDiff = React.useCallback((key: string, include: boolean) => {
         setDiffIncluded((current) => {
@@ -87,8 +109,8 @@ function ReferencePickerSurface({
     const toSelection = React.useCallback((item: ReferencePickerItem): ReferencePickerSelection => (
         item.source === 'tracker'
             ? item
-            : { source: 'repository', reference: item.reference, includeDiff: diffIncluded.has(referencePickerItemKey(item)) }
-    ), [diffIncluded]);
+            : repositorySelection(item, diffIncluded.has(referencePickerItemKey(item)), repositoryDirectory)
+    ), [diffIncluded, repositoryDirectory]);
 
     const confirm = React.useCallback(async (extra: ReferencePickerItem | null) => {
         if (confirming) return;
@@ -133,13 +155,41 @@ function ReferencePickerSurface({
     };
 
     const tabs = <ReferenceBrowserTabs browser={browser} />;
+    const repositoryPicker = scoped && scope.choosable && directory ? (
+        <RepositoryPicker
+            repositories={scope.repositories}
+            selected={scope.all ? null : scope.directory}
+            root={directory}
+            allAvailable={scope.allAvailable}
+            onSelect={(repository) => setChoice(repositoryChoiceFromPicker(repository))}
+            sheet={isMobile}
+            size="inline"
+        />
+    ) : null;
     const searchAndFilters = <ReferenceBrowserSearch browser={browser} onKeyDown={handleSearchKeyDown} />;
-    const listBody = (
+    // While the folder is probed and searched, or when the search failed, the
+    // picker says so instead of reading as "no repository" — the board's rule.
+    const discoveryPanel = scoped && (scope.discoveryFailed || scope.status !== 'ready') ? (
+        <div role="status" className="flex h-full min-h-[12rem] flex-col items-center justify-center gap-3 px-6 py-10 text-center typography-meta text-muted-foreground">
+            {scope.status !== 'failed' ? <Icon name="loader-4" className="size-5 animate-spin" /> : null}
+            <span>{t(scope.discoveryFailed || scope.status === 'failed' ? 'gitView.empty.discoverFailed' : 'gitView.empty.discoveringRepositories')}</span>
+            {scope.discoveryFailed || scope.status === 'failed' ? (
+                <Button size="sm" variant="outline" onClick={scope.retry}>
+                    <Icon name="refresh" className="size-3.5" />
+                    {t('gitView.empty.retryDiscovery')}
+                </Button>
+            ) : null}
+        </div>
+    ) : null;
+    const listBody = discoveryPanel ?? (
         <ReferenceBrowserList
             browser={browser}
             label={title}
             multiselectable={selection === 'multiple'}
             onOpenSettings={openSettings}
+            notice={browser.across && directory ? (
+                <RepositoryAcrossNote leftOut={browser.leftOut} root={directory} askedProvider={browser.acrossProvider} />
+            ) : null}
             rowSelection={(item, key) => ({
                 checked: selection === 'multiple' ? checked.has(key) : null,
                 diffIncluded: diffIncluded.has(key),
@@ -152,8 +202,8 @@ function ReferencePickerSurface({
     const preview = (
         <ReferencePreview
             item={previewItem}
-            directory={browser.directory}
-            pullStatus={previewItem?.source === 'repository' ? browser.pullStatusOf(previewItem.reference) : IDLE_PULL_STATUS}
+            directory={itemDirectory(previewItem, browser.directory)}
+            pullStatus={previewItem?.source === 'repository' ? browser.pullStatusOf(previewItem.reference, previewItem.directory) : IDLE_PULL_STATUS}
             trackerDetail={browser.trackerDetail}
             repositoryDetail={browser.repositoryDetail}
             purpose={purpose}
@@ -219,6 +269,7 @@ function ReferencePickerSurface({
                         </div>
                         {inPreview ? null : (
                             <>
+                                {repositoryPicker}
                                 {tabs}
                                 {searchAndFilters}
                             </>
@@ -260,6 +311,7 @@ function ReferencePickerSurface({
                         <DialogDescription className="sr-only">
                             {t(selection === 'multiple' ? 'references.picker.footer.hint.multiple' : 'references.picker.footer.hint.single')}
                         </DialogDescription>
+                        {repositoryPicker}
                         {tabs}
                         {searchAndFilters}
                     </div>
