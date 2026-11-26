@@ -62,6 +62,7 @@ import { gitIdentityEditorI18n } from './git-identity-editor.i18n';
 import { environmentI18n } from './environment.i18n';
 import { providersI18n } from './providers.i18n';
 import { mcpGridI18n } from './mcp-grid.i18n';
+import { dbBindingsI18n } from './db-bindings.i18n';
 import { pluginsGridI18n } from './plugins-grid.i18n';
 import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
@@ -210,6 +211,7 @@ export const dict = {
   ...environmentI18n.tr,
   ...providersI18n.tr,
   ...mcpGridI18n.tr,
+  ...dbBindingsI18n.tr,
   ...pluginsGridI18n.tr,
   ...integrationsCatalogI18n['tr'],
   ...diffFindI18n['tr'],

@@ -135,6 +135,7 @@ const MOBILE_SETTINGS_PAGES = [
   'agents',
   'commands',
   'mcp',
+  'databases',
   'plugins',
   'skills.installed',
   'skills.catalog',

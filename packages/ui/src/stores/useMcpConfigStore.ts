@@ -93,7 +93,7 @@ interface McpRemoteConfig extends McpConfigBase {
 
 type McpServerConfig = (McpLocalConfig | McpRemoteConfig) & { name: string };
 
-type McpServerWithScope = McpServerConfig & {
+export type McpServerWithScope = McpServerConfig & {
   scope?: McpScope | null;
   path?: string | null;
   legacy?: boolean;

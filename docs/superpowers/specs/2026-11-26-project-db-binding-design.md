@@ -128,7 +128,17 @@ timeout: { startup: 15000, execution: 30000 }
 - npx 网络依赖(内网环境,见 5.4 缓解);
 - 密码明文(一期接受,注明,后续接 safeStorage)。
 
-## 8. V2 演进方向(不在本期)
+## 8. 实现记录(2026-11-27,方案 A 第一期落地)
+
+- **UI**:`packages/ui/src/components/sections/database/DatabasePage.tsx` 新设置页(slug `databases`,opencode 分组),复用 `SettingsCard*` / `SettingsProjectSelector` / `useMcpConfigStore` 全套既有模式;支持粘贴连接串(`mysql://` / `mariadb://` / `postgres://` / `postgresql://`,含 `jdbc:` 前缀)自动填充表单。
+- **DSN 工具**:`packages/ui/src/lib/db-bindings/dsn.ts`(+ 16 个单测):解析/构建 DSN、识别 dbhub 条目、组装 `McpDraft`。
+- **内网镜像**:DSN 走 `DBHUB_DSN` env;同时注入 `npm_config_registry`(取自全局 npm 镜像设置 `sessions.npm-registry`),npx 从内网镜像解析 dbhub;测试端点侧则用 server 的 `readNpmRegistry()`(策略文件 / 环境变量 / .npmrc)。
+- **版本策略**:默认不锁版本(npx 拉 latest);表单"高级"区可填精确版本(如 `0.9.0`)写入 command 实现锁定;因条目就是普通 MCP 记录,后续升级即改版本号或清空回 latest。
+- **测试连接**:`POST /api/db/test`(server 一次性拉起 dbhub stdio,完成 MCP initialize + tools/list 握手后立即杀进程,不落盘)。
+- **i18n**:15 个 locale 全量翻译(`db-bindings.i18n.ts` + 各 locale 主字典 spread)。
+- 遗留(后续迭代):测试连接的集成测试、密码接入 safeStorage、共享远程 dbhub 网关(V2)。
+
+## 9. V2 演进方向(不在本期)
 
 - 共享远程 dbhub 网关(方案 C),配合内网 web 部署;
 - dbhub Custom Tools(把常用参数化查询固化为工具);

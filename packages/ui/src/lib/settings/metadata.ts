@@ -14,6 +14,7 @@ export type SettingsPageSlug =
   | 'behavior'
   | 'commands'
   | 'mcp'
+  | 'databases'
   | 'plugins'
   | 'skills.installed'
   | 'skills.catalog'
@@ -139,6 +140,13 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
     group: 'opencode',
     kind: 'single',
     keywords: ['mcp', 'model context protocol', 'servers', 'tools', 'remote', 'stdio'],
+  },
+  {
+    slug: 'databases',
+    title: 'Databases',
+    group: 'opencode',
+    kind: 'single',
+    keywords: ['database', 'databases', 'mysql', 'postgres', 'postgresql', 'sql', 'dbhub', 'binding', 'readonly', 'schema'],
   },
   {
     slug: 'plugins',
@@ -320,6 +328,8 @@ export function getSettingsNavIcon(slug: SettingsPageSlug): IconName | null {
       return 'slash-commands-2';
     case 'mcp':
       return null;
+    case 'databases':
+      return 'database-2';
     case 'plugins':
       return 'plug-2';
 

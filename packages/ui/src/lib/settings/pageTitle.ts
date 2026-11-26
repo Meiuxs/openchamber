@@ -13,6 +13,7 @@ const SETTINGS_PAGE_TITLE_KEYS = {
   behavior: 'settings.page.behavior.title',
   commands: 'settings.page.commands.title',
   mcp: 'settings.page.mcp.title',
+  databases: 'settings.page.databases.title',
   plugins: 'settings.page.plugins.title',
   'skills.installed': 'settings.page.skills.title',
   'skills.catalog': 'settings.page.skillsCatalog.title',

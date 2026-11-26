@@ -44,6 +44,7 @@ import { registerExtensionWaitsRoutes } from '../extension-waits/runtime.js';
 import { registerWorkflowRoutes } from '../workflows/routes.js';
 import { registerRoutingPromptRewrite, registerRoutingRoutes } from '../routing/routes.js';
 import { registerConfigEntityRoutes } from '../opencode/config-entity-routes.js';
+import { registerDbTestRoutes } from '../db/db-test-routes.js';
 import { createFeatureFolderWatches } from './feature-folder-watches.js';
 import { registerSettingsUtilityRoutes } from './core-routes.js';
 import { registerProjectIconRoutes } from '../appearance/project-icon-routes.js';
@@ -516,6 +517,8 @@ export const createFeatureRoutesRuntime = (dependencies: FeatureRuntimeDependenc
       expandSnippets,
       previewSnippet,
     });
+
+    registerDbTestRoutes(app);
 
     registerPluginRoutes(app, {
       resolveOptionalProjectDirectory,

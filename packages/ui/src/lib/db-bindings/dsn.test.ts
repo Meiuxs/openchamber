@@ -1,0 +1,158 @@
+import { describe, expect, test } from 'bun:test';
+import {
+  bindingNameOf,
+  buildDbDsn,
+  buildDbhubMcpDraft,
+  isBindingComplete,
+  isDbhubServer,
+  isValidBindingAlias,
+  parseDbConnectionUrl,
+  readDbBindingSpec,
+  type DbConnectionFields,
+} from './dsn';
+import type { McpServerWithScope } from '@/stores/useMcpConfigStore';
+
+const fields = (overrides: Partial<DbConnectionFields> = {}): DbConnectionFields => ({
+  engine: 'mysql',
+  host: 'db-internal.local',
+  port: '3306',
+  database: 'orders',
+  username: 'svc_agent',
+  password: 'hunter2',
+  sslMode: '',
+  ...overrides,
+});
+
+describe('parseDbConnectionUrl', () => {
+  test('parses a mysql URL with credentials', () => {
+    expect(parseDbConnectionUrl('mysql://svc_agent:hunter2@db-internal.local:3307/orders?sslmode=require'))
+      .toEqual(fields({ port: '3307', sslMode: 'require' }));
+  });
+
+  test('parses postgres and postgresql schemes', () => {
+    const expected = fields({ engine: 'postgresql', port: '5432', host: 'db.internal', database: 'analytics', username: 'u', password: 'p' });
+    expect(parseDbConnectionUrl('postgres://u:p@db.internal/analytics')).toEqual(expected);
+    expect(parseDbConnectionUrl('postgresql://u:p@db.internal/analytics')).toEqual(expected);
+  });
+
+  test('fills the default port per engine', () => {
+    const parsed = parseDbConnectionUrl('mysql://u@host/db');
+    expect(parsed?.port).toBe('3306');
+    const pg = parseDbConnectionUrl('postgres://u@host/db');
+    expect(pg?.port).toBe('5432');
+  });
+
+  test('decodes URL-encoded passwords', () => {
+    const value = 'ab:cd12';
+    const parsed = parseDbConnectionUrl(`mysql://u:${encodeURIComponent(value)}@host/db`);
+    expect(parsed?.password).toBe(value);
+  });
+
+  test('strips a jdbc: prefix', () => {
+    const parsed = parseDbConnectionUrl('jdbc:mysql://u:p@host:3306/db');
+    expect(parsed?.host).toBe('host');
+    expect(parsed?.database).toBe('db');
+  });
+
+  test('rejects non-database URLs', () => {
+    expect(parseDbConnectionUrl('https://example.com/path')).toBeNull();
+    expect(parseDbConnectionUrl('npx -y @bytebase/dbhub')).toBeNull();
+    expect(parseDbConnectionUrl('')).toBeNull();
+    expect(parseDbConnectionUrl('mysql://u:p@host/db and more words')).toBeNull();
+  });
+});
+
+describe('buildDbDsn', () => {
+  test('round-trips through the parser', () => {
+    const dsn = buildDbDsn(fields());
+    expect(parseDbConnectionUrl(dsn)).toEqual(fields());
+  });
+
+  test('encodes special characters and optional ssl', () => {
+    const value = 'ab:cd12';
+    const dsn = buildDbDsn(fields({ password: value, sslMode: 'disable' }));
+    expect(dsn).toBe(`mysql://svc_agent:${encodeURIComponent(value)}@db-internal.local:3306/orders?sslmode=disable`);
+  });
+
+  test('omits auth when no username and skips empty port', () => {
+    const dsn = buildDbDsn(fields({ username: '', password: '', port: '' }));
+    expect(dsn).toBe('mysql://db-internal.local/orders');
+  });
+});
+
+describe('dbhub mcp entry helpers', () => {
+  test('builds a project-scope draft with DSN in env and registry mirror', () => {
+    const draft = buildDbhubMcpDraft(
+      { ...fields(), alias: 'Orders DB', readonly: true, dbhubVersion: '0.9.0' },
+      'https://npm.mirror.local/',
+    );
+    expect(draft.name).toBe('dbhub-orders-db');
+    expect(draft.scope).toBe('project');
+    expect(draft.type).toBe('local');
+    expect(draft.command).toEqual(['npx', '-y', '@bytebase/dbhub@0.9.0', '--transport', 'stdio', '--readonly']);
+    const env = Object.fromEntries(draft.environment.map((e) => [e.key, e.value]));
+    expect(env.DBHUB_DSN).toBe(buildDbDsn(fields()));
+    expect(env.npm_config_registry).toBe('https://npm.mirror.local/');
+  });
+
+  test('defaults to unpinned dbhub and skips empty registry', () => {
+    const draft = buildDbhubMcpDraft(
+      { ...fields(), alias: 'analytics', readonly: false, dbhubVersion: 'latest' },
+      null,
+    );
+    expect(draft.command).toEqual(['npx', '-y', '@bytebase/dbhub', '--transport', 'stdio']);
+    expect(draft.environment.some((e) => e.key === 'npm_config_registry')).toBe(false);
+  });
+
+  const server = (command: string[], environment: Record<string, string> = {}): McpServerWithScope =>
+    ({ name: 'dbhub-orders', type: 'local', command, environment, scope: 'project' }) as McpServerWithScope;
+
+  test('recognizes dbhub entries by command or env', () => {
+    expect(isDbhubServer(server(['npx', '-y', '@bytebase/dbhub'], { DBHUB_DSN: 'mysql://h/db' }))).toBe(true);
+    expect(isDbhubServer(server(['npx', '-y', '@bytebase/dbhub']))).toBe(true);
+    expect(isDbhubServer(server(['npx', '-y', 'other-server'], { DBHUB_DSN: 'mysql://h/db' }))).toBe(true);
+    expect(isDbhubServer(server(['npx', '-y', 'other-server']))).toBe(false);
+    expect(isDbhubServer(({ name: 'x', type: 'remote', url: 'https://x' }) as unknown as McpServerWithScope)).toBe(false);
+  });
+
+  test('reads a binding spec back without the password', () => {
+    const spec = readDbBindingSpec(server(
+      ['npx', '-y', '@bytebase/dbhub@0.9.0', '--transport', 'stdio', '--readonly'],
+      { DBHUB_DSN: buildDbDsn(fields({ password: 'secret' })) },
+    ));
+    expect(spec).toMatchObject({
+      alias: 'orders',
+      engine: 'mysql',
+      host: 'db-internal.local',
+      port: '3306',
+      database: 'orders',
+      readonly: true,
+      dbhubVersion: '0.9.0',
+      password: '',
+    });
+  });
+});
+
+describe('validation', () => {
+  test('validates aliases', () => {
+    expect(isValidBindingAlias('orders-db')).toBe(true);
+    expect(isValidBindingAlias('Orders DB')).toBe(true);
+    expect(isValidBindingAlias('a')).toBe(true);
+    expect(isValidBindingAlias('-bad')).toBe(false);
+    expect(isValidBindingAlias('bad-')).toBe(false);
+    expect(isValidBindingAlias('')).toBe(false);
+  });
+
+  test('binding completeness requires alias, host, database', () => {
+    expect(isBindingComplete({ ...fields(), alias: 'orders', readonly: true, dbhubVersion: 'latest' })).toBe(true);
+    expect(isBindingComplete({ ...fields(), host: '', alias: 'orders', readonly: true, dbhubVersion: 'latest' })).toBe(false);
+    expect(isBindingComplete({ ...fields(), database: '', alias: 'orders', readonly: true, dbhubVersion: 'latest' })).toBe(false);
+    expect(isBindingComplete({ ...fields(), alias: 'bad!', readonly: true, dbhubVersion: 'latest' })).toBe(false);
+  });
+
+  test('bindingNameOf normalizes aliases', () => {
+    expect(bindingNameOf('Orders DB')).toBe('dbhub-orders-db');
+    expect(bindingNameOf('--weird--')).toBe('dbhub-weird');
+    expect(bindingNameOf('')).toBe('dbhub-db');
+  });
+});
