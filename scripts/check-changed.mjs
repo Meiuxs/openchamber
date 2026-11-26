@@ -27,6 +27,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { resolveBunExecutable } from './lib/bun-executable.mjs';
+
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OXLINT_CONFIG = path.join(REPO_ROOT, 'oxlint.anti-slop.config.ts');
 const LINTABLE_FILE = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
@@ -171,23 +173,24 @@ export const parseOxlintReport = (stdout) => {
   return JSON.parse(stdout.slice(start)).diagnostics;
 };
 
-const runOxlint = (files, cwd) => {
+const runOxlint = (bun, files, cwd) => {
+  if (files.length === 0) return [];
   const diagnostics = [];
   const batchSize = 40;
   for (let index = 0; index < files.length; index += batchSize) {
     const batch = files.slice(index, index + batchSize);
-    const result = spawnSync('bunx', ['oxlint', '-c', OXLINT_CONFIG, '-f', 'json', ...batch], {
-      cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+    const result = spawnSync(bun, ['x', 'oxlint', '-c', OXLINT_CONFIG, '-f', 'json', ...batch], {
+      cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, windowsHide: true,
     });
     if (result.error) throw result.error;
-    if (!result.stdout) throw new Error(`oxlint produced no report: ${result.stderr}`);
+    if (!result.stdout) throw new Error(`oxlint produced no report: ${result.stderr?.trim() || result.signal || `exit code ${result.status}`}`);
     diagnostics.push(...parseOxlintReport(result.stdout));
   }
   return diagnostics;
 };
 
-const checkRatchet = (base, files, renames, deleted) => {
-  const current = countFindings(runOxlint(files, REPO_ROOT), (file) => path.relative(REPO_ROOT, path.resolve(REPO_ROOT, file)));
+const checkRatchet = (bun, base, files, renames, deleted) => {
+  const current = countFindings(runOxlint(bun, files, REPO_ROOT), (file) => path.relative(REPO_ROOT, path.resolve(REPO_ROOT, file)));
 
   const baseDir = mkdtempSync(path.join(tmpdir(), 'oc-check-changed-'));
   try {
@@ -200,7 +203,7 @@ const checkRatchet = (base, files, renames, deleted) => {
       writeFileSync(target, content);
       baseFiles.push(target);
     }
-    const baseCounts = countFindings(runOxlint(baseFiles, baseDir), (file) => path.relative(baseDir, path.resolve(baseDir, file)));
+    const baseCounts = countFindings(runOxlint(bun, baseFiles, baseDir), (file) => path.relative(baseDir, path.resolve(baseDir, file)));
     return findRatchetViolations(baseCounts, current);
   } finally {
     rmSync(baseDir, { recursive: true, force: true });
@@ -248,7 +251,8 @@ export const withKnipSnapshot = (root, analyze) => {
 
 const runStep = (label, command, args, cwd = REPO_ROOT) => {
   console.log(`\n▶ ${label}`);
-  const result = spawnSync(command, args, { cwd, stdio: 'inherit' });
+  const result = spawnSync(command, args, { cwd, stdio: 'inherit', windowsHide: true });
+  if (result.error) console.error(result.error.message);
   return result.status === 0;
 };
 
@@ -258,25 +262,26 @@ const main = () => {
   const ratchetOnly = argv.includes('--ratchet-only');
   const files = listChangedFiles(base);
   const renames = listRenames(base);
+  const bun = resolveBunExecutable();
   console.log(`Base ${base.slice(0, 9)}; ${files.length} changed source file(s).`);
 
   const failed = [];
   if (!ratchetOnly) {
-    if (!runStep('type-check', 'bun', ['run', 'type-check'])) failed.push('type-check');
-    if (!runStep('lint', 'bun', ['run', 'lint'])) failed.push('lint');
-    if (!withKnipSnapshot(REPO_ROOT, (cwd) => runStep('dead code', 'bun', ['run', 'dead-code'], cwd))) failed.push('dead code');
+    if (!runStep('type-check', bun, ['run', 'type-check'])) failed.push('type-check');
+    if (!runStep('lint', bun, ['run', 'lint'])) failed.push('lint');
+    if (!withKnipSnapshot(REPO_ROOT, (cwd) => runStep('dead code', bun, ['run', 'dead-code'], cwd))) failed.push('dead code');
   }
-  if (ratchetOnly && !runStep('server TypeScript lint and declaration pairs', 'bun', ['run', '--cwd', 'packages/web', 'lint:server'])) {
+  if (ratchetOnly && !runStep('server TypeScript lint and declaration pairs', bun, ['run', '--cwd', 'packages/web', 'lint:server'])) {
     failed.push('server TypeScript lint and declaration pairs');
   }
 
   console.log('\n▶ ratchet');
-  const violations = checkRatchet(base, files, renames, listDeletedFiles(base));
+  const violations = checkRatchet(bun, base, files, renames, listDeletedFiles(base));
   for (const { rule, base: before, current, files: grown } of violations) {
     console.log(`  ${rule}: ${before} → ${current} (grew in ${grown.join(', ')})`);
   }
   if (violations.length > 0) {
-    console.log(`  Run \`bunx oxlint -c oxlint.anti-slop.config.ts <file>\` for locations and what to do instead. Fix the new findings; the old ones may stay.`);
+    console.log(`  Run \`bun x oxlint -c oxlint.anti-slop.config.ts <file>\` for locations and what to do instead. Fix the new findings; the old ones may stay.`);
     failed.push('ratchet');
   } else {
     console.log('  No new findings.');

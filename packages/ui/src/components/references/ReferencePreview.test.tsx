@@ -200,4 +200,12 @@ describe('ReferencePreview layout', () => {
         expect(header?.querySelector('button[aria-label="Copy link"]')).not.toBeNull();
         expect(header?.querySelector('button[aria-label="Copy in-app link"]')).toBeNull();
     });
+
+    test('keeps a long description expanded by default', () => {
+        const longPull = { ...pull, body: 'A long description. '.repeat(40) };
+        const container = renderPreview({ source: 'repository', reference: longPull }, false);
+        expect(container.querySelector('[data-collapsed-body]')).toBeNull();
+        expect([...container.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Expand')).toBe(false);
+
+    });
 });

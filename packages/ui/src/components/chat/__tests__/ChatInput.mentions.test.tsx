@@ -123,6 +123,7 @@ const { useSkillsStore, invalidateSkillsLoadCache } = await import('@/stores/use
 const { ChatColumnSessionContext, ChatColumnActionsContext } = await import('../chatColumnSession');
 const { getSyncChildStores } = await import('@/sync/sync-refs');
 const { rememberEffort } = await import('@/lib/modelEfforts');
+const { useSelectionStore } = await import('@/sync/selection-store');
 const { useUIStore } = await import('@/stores/useUIStore');
 const { useMessageQueueStore, getMessageQueueKey } = await import('@/stores/messageQueueStore');
 const attachmentInput = await import('@/sync/input-store');
@@ -279,8 +280,10 @@ test('a picker choice during attachment preparation survives the composer send',
       await type('@shot');
       await choose('shot.png');
       await act(async () => {
+        // What the effort picker does: the level is this session's pick.
         useConfigStore.setState({ currentVariant: 'low' });
         rememberEffort('provider', 'model', 'low');
+        useSelectionStore.getState().pickSessionModel(useSessionUIStore.getState().currentSessionId!, 'provider', 'model');
       });
       await act(async () => {
         container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));

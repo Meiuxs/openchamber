@@ -11,6 +11,7 @@ import {
   type TokenUsageInfo,
 } from "./model"
 import { projectInboxMessage, sessionParentID, structuredErrorText, toolAttachments, toolOutputText } from "./projection"
+import { imageJobUpdate } from "./background-image"
 import { runningShellFromWire, type ShellEnd } from "./background-shell"
 
 
@@ -232,7 +233,7 @@ export function translateWireEvent(event: OpenCodeEvent): SyncEvent[] {
         updated,
         {
           type: "message.parts.replaced",
-          properties: { sessionID: event.data.sessionID, messageID: event.data.inboxID, parts: projected.parts },
+          properties: { sessionID: event.data.sessionID, messageID: event.data.inboxID, parts: projected.parts, whilePending: true },
         },
       ]
     }
@@ -681,6 +682,10 @@ export function translateWireEvent(event: OpenCodeEvent): SyncEvent[] {
       return []
     case "artifact.updated":
       return []
+    case "experimental.job.updated": {
+      const update = imageJobUpdate(event.data?.info)
+      return update ? [{ type: "image.job.updated", properties: update }] : []
+    }
 
     case "tui.command.execute":
     case "tui.prompt.append":

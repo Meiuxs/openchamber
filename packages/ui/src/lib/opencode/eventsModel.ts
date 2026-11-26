@@ -16,6 +16,7 @@ import type {
   TokenUsageInfo,
 } from "./model"
 import type { RunningShell, ShellEnd } from "./background-shell"
+import type { ImageJobUpdate } from "./background-image"
 
 export type SessionPatch = {
   title?: string
@@ -89,7 +90,7 @@ export type SyncEvent =
   | { type: "message.part.updated"; properties: { sessionID: string; part: Part } }
   | { type: "message.part.delta"; properties: { sessionID: string; messageID: string; partID: string; field: "text" | "raw"; delta: string } }
   | { type: "message.tool.transition"; properties: { sessionID: string; messageID: string; partID: string; transition: ToolTransition } }
-  | { type: "message.parts.replaced"; properties: { sessionID: string; messageID: string; parts: Part[] } }
+  | { type: "message.parts.replaced"; properties: { sessionID: string; messageID: string; parts: Part[]; whilePending?: true } }
   | { type: "message.compaction.delta"; properties: { sessionID: string; delta: string } }
   | { type: "permission.asked"; properties: PermissionRequest }
   | { type: "permission.replied"; properties: { sessionID: string; requestID: string } }
@@ -104,6 +105,7 @@ export type SyncEvent =
   }
   | { type: "shell.started"; properties: { shell: RunningShell } }
   | { type: "shell.ended"; properties: { shellID: string; end: ShellEnd; endedAt: number } }
+  | { type: "image.job.updated"; properties: ImageJobUpdate }
   | { type: "vcs.branch.updated"; properties: { branch?: string } }
   | { type: "filesystem.changed"; properties: { file: string } }
   | { type: "mcp.status.changed"; properties: { server: string } }

@@ -13,10 +13,12 @@ import type { normalizeTunnelProvider, normalizeTunnelMode, normalizeOptionalPat
 import { idleStopSchema } from '../spaces/idle-stop.js';
 import { sshHostSchema } from '../spaces/places/ssh-host.js';
 import { PROVIDER_LOGO_MIMES } from '../appearance/provider-logo-routes.js';
+import { sanitizeChatActivitySettings } from './settings-chat-activity.js';
 import { sanitizeDictationSettings } from './settings-dictation.js';
 import { normalizeGatewayList } from '../rate-gate/policy.js';
 import type { ClearableStringSettingsKey, NumberSettingsKey, StringArraySettingsKey, StringSettingsKey } from './settings-keys.js';
 import { keepOmittedBuiltinSections, sanitizeSidebarSections, sanitizeSidebarSettings, type SidebarSection } from './settings-sidebar.js';
+import { sanitizeSessionWorkSettings, sessionWorkResponseFields } from './settings-session-work.js';
 import { keepOrderedSessionCostAmounts, sanitizeSessionLimitSettings } from './settings-session-limits.js';
 
 const settingsDocumentSchema = z.looseObject({});
@@ -147,17 +149,18 @@ type BooleanSettingsKey =
   | 'showReasoningTraces' | 'streamingAutoFollowEnabled' | 'expandReasoningWhileStreaming'
   | 'codeBlockLineWrap' | 'tableCellWrap' | 'copyMessagesAsPlainText' | 'autoSaveEnabled' | 'fileEditorWrapLines'
   | 'confirmFileTreeMove' | 'layoutAnimations' | 'openLinksInBrowserPanel' | 'agentBrowserSharesLogins'
-  | 'openTrackerLinksOnBoard' | 'diffWrapLines' | 'diffHideWhitespace' | 'allowPromptingSubagentSessions'
+  | 'openTrackerLinksOnBoard' | 'diffWrapLines' | 'diffHideWhitespace' | 'allowPromptingSubagentSessions' | 'referencePreviewNewestFirst'
+  | 'referencePreviewCollapseDescription'
   | 'savePastedImagesAsFiles' | 'showOpenCodeRestartConfirm' | 'sessionTabsEnabled' | 'sessionTabsPerWorkspace'
   | 'terminalCloseOnExit' | 'terminalOpenOnProjectAction' | 'sessionRecapEnabled' | 'sessionSuggestionEnabled'
-  | 'sessionWorkEnabled' | 'sessionReviewOfferEnabled' | 'sessionGoalEnabled' | 'sessionGoalDefaultBudgetEnabled' | 'sessionCostAlertsEnabled'
+  | 'sessionWorkEnabled' | 'sessionWorkIncludesPinned' | 'sessionReviewOfferEnabled' | 'sessionGoalEnabled' | 'sessionGoalDefaultBudgetEnabled' | 'sessionCostAlertsEnabled'
   | 'collapsibleThinkingBlocks' | 'showTextJustificationActivity' | 'showDeletionDialog' | 'nativeNotificationsEnabled'
   | 'notifyOnSubtasks' | 'notifyOnCompletion' | 'notifyOnPullRequests' | 'notifyOnError' | 'notifyOnQuestion'
   | 'summarizeLastMessage' | 'autoDeleteEnabled' | 'sessionRetentionOnlyArchived' | 'sessionRetentionIncludeInWork'
   | 'mergedWorktreeCleanupEnabled' | 'worktreeArchiveOnDoneEnabled' | 'smallModelUseDefault' | 'autoCreateWorktree'
   | 'gitmojiEnabled' | 'defaultFileViewerPreview' | 'inputSpellcheckEnabled' | 'enterToSend' | 'enterToSendConfigured'
   | 'mobileReturnKeySends' | 'showOpenCodeUpdateNotifications' | 'useGlobalOpenCodeService' | 'agentWebToolEnabled' | 'isolatedSpacesEnabled'
-  | 'showToolFileIcons' | 'showTurnChangedFiles' | 'collapsibleUserMessages' | 'stickyUserHeader'
+  | 'showToolFileIcons' | 'showTurnChangedFiles' | 'keepEarlierReplies' | 'collapsibleUserMessages' | 'stickyUserHeader'
   | 'promptNavigatorEnabled' | 'wideChatLayoutEnabled' | 'showSplitAssistantMessageActions' | 'directoryShowHidden'
   | 'filesViewShowGitignored' | 'reportUsage' | 'responseStyleEnabled' | 'dictationEnabled' | 'dictationAutoSend'
   | 'sttCorrectTranscript' | (typeof AGENT_TOOL_BOOLEAN_KEYS)[number];
@@ -217,7 +220,7 @@ export type SanitizedSettings = Partial<Record<BooleanSettingsKey, boolean>>
     weekStartPreference?: 'auto' | 'sunday' | 'monday';
     chatRenderMode?: 'sorted' | 'live';
     messageStreamTransport?: 'auto' | 'ws' | 'sse';
-    activityRenderMode?: 'collapsed' | 'text' | 'summary';
+    activityRenderMode?: 'collapsed' | 'grouped' | 'summary';
     mermaidRenderingMode?: 'svg' | 'ascii';
     userMessageRenderingMode?: 'markdown' | 'plain';
     chatWidth?: 'default' | 'wider' | 'full';
@@ -712,12 +715,6 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
     if (candidate.fileTreeSide === 'left' || candidate.fileTreeSide === 'right') {
       result.fileTreeSide = candidate.fileTreeSide;
     }
-    if (isBoolean(candidate.diffWrapLines)) {
-      result.diffWrapLines = candidate.diffWrapLines;
-    }
-    if (isBoolean(candidate.diffHideWhitespace)) {
-      result.diffHideWhitespace = candidate.diffHideWhitespace;
-    }
     if (isBoolean(candidate.allowPromptingSubagentSessions)) {
       result.allowPromptingSubagentSessions = candidate.allowPromptingSubagentSessions;
     }
@@ -757,9 +754,7 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
     if (isBoolean(candidate.sessionSuggestionEnabled)) {
       result.sessionSuggestionEnabled = candidate.sessionSuggestionEnabled;
     }
-    if (isBoolean(candidate.sessionWorkEnabled)) {
-      result.sessionWorkEnabled = candidate.sessionWorkEnabled;
-    }
+    Object.assign(result, sanitizeSessionWorkSettings(candidate));
     if (isBoolean(candidate.sessionReviewOfferEnabled)) {
       result.sessionReviewOfferEnabled = candidate.sessionReviewOfferEnabled;
     }
@@ -981,7 +976,7 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
     if (candidate.mobileReturnKeySends === true || candidate.mobileReturnKeySends === false) {
       result.mobileReturnKeySends = candidate.mobileReturnKeySends;
     }
-    for (const key of ['showOpenCodeUpdateNotifications', 'useGlobalOpenCodeService', 'agentWebToolEnabled'] as const) {
+    for (const key of ['showOpenCodeUpdateNotifications', 'useGlobalOpenCodeService', 'agentWebToolEnabled', 'diffWrapLines', 'diffHideWhitespace', 'referencePreviewNewestFirst', 'referencePreviewCollapseDescription'] as const) {
       if (isBoolean(candidate[key])) result[key] = candidate[key];
     }
     if (isString(candidate.browserProvider) && candidate.browserProvider.trim()) {
@@ -1046,12 +1041,7 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
         result.logLevel = level;
       }
     }
-    if (isString(candidate.activityRenderMode)) {
-      const mode = candidate.activityRenderMode.trim();
-      if (mode === 'collapsed' || mode === 'text' || mode === 'summary') {
-        result.activityRenderMode = mode;
-      }
-    }
+    sanitizeChatActivitySettings(candidate, result);
     if (isString(candidate.mermaidRenderingMode)) {
       const mode = candidate.mermaidRenderingMode.trim();
       if (mode === 'svg' || mode === 'ascii') {
@@ -1416,6 +1406,7 @@ export const createSettingsHelpers = (dependencies: SettingsHelpersDependencies)
       modelRateLimitWindowMinutes: sanitized.modelRateLimitWindowMinutes ?? 10,
       modelRateLimitGateways: sanitized.modelRateLimitGateways ?? '',
       messageSearchEnabled: isMessageSearchEnabled(sanitized),
+      ...sessionWorkResponseFields(sanitized),
       securityScopedBookmarks: bookmarks,
       pinnedDirectories: normalizeStringArray(settings.pinnedDirectories),
       ...desktopFields,

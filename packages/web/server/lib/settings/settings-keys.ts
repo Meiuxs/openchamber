@@ -6,7 +6,7 @@ export type StringSettingsKey =
   | 'pwaAppName' | 'pwaOrientation' | 'mobileKeyboardMode' | 'browserProvider' | 'agentMemoryDreamingModel'
   | 'agentMemoryDreamingVariant' | 'agentImageModel' | 'isolatedSpacesSshHost' | 'openCodeUpdateToastDismissedVersion'
   | 'terminalShell' | 'openInAppId' | 'globalBehaviorPrompt' | 'responseStylePreset' | 'responseStyleCustomInstructions'
-  | 'sttServerUrl' | 'sttModel' | 'sttEndpointPath' | 'sttLocalModel' | 'sttLanguage' | 'sttPrompt' | 'sidebarProjectDisplayMode'
+  | 'sttServerUrl' | 'sttModel' | 'sttEndpointPath' | 'sttKeyProvider' | 'sttLocalModel' | 'sttLanguage' | 'sttPrompt' | 'sidebarProjectDisplayMode'
   | 'sidebarViewMode' | 'sidebarListSessionGrouping' | 'sidebarGrouping' | 'sidebarProjectSortOrder'
   | 'selectionApprovalText' | 'allowedInsecureGitOrigins' | 'logLevel' | 'modelRateLimitGateways';
 
@@ -17,7 +17,7 @@ export type ClearableStringSettingsKey =
 
 export type NumberSettingsKey =
   | 'inputHistoryLimit' | 'sidebarSessionBatchSize' | 'liveBrowserTabLimit' | 'sessionGoalMaxAutoTurns'
-  | 'sessionGoalDefaultBudget' | 'summaryThreshold' | 'summaryLength' | 'maxLastMessageLength' | 'autoDeleteAfterDays'
+  | 'sessionGoalDefaultBudget' | 'sessionCostWarnThreshold' | 'sessionCostCriticalThreshold' | 'summaryThreshold' | 'summaryLength' | 'maxLastMessageLength' | 'autoDeleteAfterDays'
   | 'tunnelSessionTtlMs' | 'tunnelHttpsPort' | 'fontSize' | 'chatFontSize' | 'terminalFontSize' | 'editorFontSize'
   | 'padding' | 'cornerRadius' | 'inputBarOffset'
   | 'modelRateLimitRequests' | 'modelRateLimitWindowMinutes';

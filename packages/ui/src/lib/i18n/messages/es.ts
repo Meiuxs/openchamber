@@ -72,6 +72,7 @@ import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
 import { autocompleteScopeI18n } from './autocomplete-scope.i18n';
+import { chatExchangeI18n } from './chat-exchange.i18n';
 import { integrateConflictI18n } from './integrate-conflict.i18n';
 import { workflowsI18n } from './workflows.i18n';
 import { subagentsI18n } from './subagents.i18n';
@@ -290,6 +291,7 @@ export const dict: Record<I18nKey, string> = {
   ...markdownOutlineI18n['es'],
   ...markdownGithubI18n['es'],
   ...autocompleteScopeI18n['es'],
+  ...chatExchangeI18n['es'],
   ...integrateConflictI18n['es'],
   ...workflowsI18n['es'],
   ...subagentsI18n['es'],
@@ -453,10 +455,6 @@ export const dict: Record<I18nKey, string> = {
   "mobile.menu.update": "Actualizar",
   "mobile.menu.settings": "Ajustes",
   "mobile.sessions.newChatCta": "Nuevo chat en {project}",
-  "mobile.sessions.dateGroup.today": "Hoy",
-  "mobile.sessions.dateGroup.yesterday": "Ayer",
-  "mobile.sessions.dateGroup.thisWeek": "Antes esta semana",
-  "mobile.sessions.dateGroup.older": "Más antiguos",
   "mobile.sessions.section.worktrees": "Worktrees",
   "mobile.sessions.section.otherProjects": "Cambiar de proyecto",
   "mobile.sessions.section.projects": "Proyectos",
@@ -761,6 +759,7 @@ export const dict: Record<I18nKey, string> = {
   "sessions.sidebar.empty.noMatches.description": "Inténtalo con un título o una rama diferente.",
   "sessions.sidebar.activity.chatsTitle": "Chats",
   "sessions.sidebar.activity.chatsEmpty": "Aún no hay chats.",
+  "sessions.sidebar.timeline.noSessionsYet": "Sin sesiones aún",
   "chat.chatInput.chooseProject": "Elegir proyecto",
   "sessions.sidebar.header.projectDisplay.label": "Mostrar proyectos",
   "sessions.sidebar.header.projectDisplay.all": "Todos los proyectos",
@@ -905,6 +904,8 @@ export const dict: Record<I18nKey, string> = {
   "sessions.sidebar.session.status.movingToWorktree": "Moviendo la sesión a un worktree nuevo",
   "sessions.sidebar.session.status.permissionRequired": "Permiso requerido",
   "sessions.sidebar.session.status.questionPending": "Pregunta pendiente",
+  "sessions.sidebar.session.status.permissionRequiredOpen": "Permiso requerido. Abre la sesión que lo pide",
+  "sessions.sidebar.session.status.questionPendingOpen": "Pregunta pendiente. Abre la sesión que lo pide",
   "sessions.sidebar.session.status.activeFor": "Activa desde hace {duration}",
   "sessions.sidebar.session.status.lastTurnDuration": "El último turno duró {duration}",
   "sessions.sidebar.session.subsessions.collapse": "Colapsar subsesiones",
@@ -1691,6 +1692,7 @@ export const dict: Record<I18nKey, string> = {
   "contextPanel.browser.annotate.intro": "Esta es una selección anotada del navegador integrado.",
   "contextPanel.browser.annotate.attached": "Anotación adjuntada al chat",
   "contextPanel.browser.annotate.noSession": "Abre una sesión de chat antes de adjuntar una anotación",
+  "contextPanel.browser.annotate.readOnly": "Este chat es de solo lectura, así que no se le pueden adjuntar anotaciones",
   "contextPanel.browser.annotate.noPage": "Carga una página antes de anotar",
   "contextPanel.browser.annotate.failed": "No se pudo anotar esta página",
   "contextPanel.browser.annotate.tool.element": "Elemento",
@@ -2706,6 +2708,7 @@ export const dict: Record<I18nKey, string> = {
   "chat.textSelection.title.saveInsightToNotes": "Guardar texto seleccionado en notas",
   "chat.messageBody.actions.revertAria": "Volver a este mensaje",
   "chat.messageBody.actions.revert": "Volver desde aquí",
+  "chat.messageBody.status.waitingForAgent": "Esperando al agente",
   "chat.messageBody.actions.forkAria": "Bifurcar desde este mensaje",
   "chat.messageBody.actions.fork": "Bifurcar desde aquí",
   "chat.messageBody.actions.copyMessageAria": "Copiar texto del mensaje",
