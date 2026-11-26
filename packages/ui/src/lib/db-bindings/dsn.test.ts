@@ -91,7 +91,7 @@ describe('dbhub mcp entry helpers', () => {
     expect(draft.type).toBe('local');
     expect(draft.command).toEqual(['npx', '-y', '@bytebase/dbhub@0.9.0', '--transport', 'stdio', '--readonly']);
     const env = Object.fromEntries(draft.environment.map((e) => [e.key, e.value]));
-    expect(env.DBHUB_DSN).toBe(buildDbDsn(fields()));
+    expect(env.DSN).toBe(buildDbDsn(fields()));
     expect(env.npm_config_registry).toBe('https://npm.mirror.local/');
   });
 
@@ -108,9 +108,9 @@ describe('dbhub mcp entry helpers', () => {
     ({ name: 'dbhub-orders', type: 'local', command, environment, scope: 'project' }) as McpServerWithScope;
 
   test('recognizes dbhub entries by command or env', () => {
-    expect(isDbhubServer(server(['npx', '-y', '@bytebase/dbhub'], { DBHUB_DSN: 'mysql://h/db' }))).toBe(true);
+    expect(isDbhubServer(server(['npx', '-y', '@bytebase/dbhub'], { DSN: 'mysql://h/db' }))).toBe(true);
     expect(isDbhubServer(server(['npx', '-y', '@bytebase/dbhub']))).toBe(true);
-    expect(isDbhubServer(server(['npx', '-y', 'other-server'], { DBHUB_DSN: 'mysql://h/db' }))).toBe(true);
+    expect(isDbhubServer(server(['npx', '-y', 'other-server'], { DSN: 'mysql://h/db' }))).toBe(true);
     expect(isDbhubServer(server(['npx', '-y', 'other-server']))).toBe(false);
     expect(isDbhubServer(({ name: 'x', type: 'remote', url: 'https://x' }) as unknown as McpServerWithScope)).toBe(false);
   });
@@ -118,7 +118,7 @@ describe('dbhub mcp entry helpers', () => {
   test('reads a binding spec back without the password', () => {
     const spec = readDbBindingSpec(server(
       ['npx', '-y', '@bytebase/dbhub@0.9.0', '--transport', 'stdio', '--readonly'],
-      { DBHUB_DSN: buildDbDsn(fields({ password: 'secret' })) },
+      { DSN: buildDbDsn(fields({ password: 'secret' })) },
     ));
     expect(spec).toMatchObject({
       alias: 'orders',

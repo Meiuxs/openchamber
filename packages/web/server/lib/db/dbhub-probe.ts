@@ -101,7 +101,7 @@ export const probeDbhubConnection = async (body: DbProbeFields): Promise<DbProbe
   const versionTag = fields.dbhubVersion && fields.dbhubVersion !== 'latest'
     ? `@bytebase/dbhub@${fields.dbhubVersion}`
     : '@bytebase/dbhub';
-  const env: Record<string, string> = { ...process.env as Record<string, string>, DBHUB_DSN: buildDsn(fields) };
+  const env: Record<string, string> = { ...process.env as Record<string, string>, DSN: buildDsn(fields) };
   const registry = readNpmRegistry();
   if (registry) env.npm_config_registry = registry;
 

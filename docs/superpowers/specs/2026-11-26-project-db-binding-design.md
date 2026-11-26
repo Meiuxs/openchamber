@@ -30,7 +30,7 @@ bytebase/dbhub(MIT,~4k stars):
 
 - 一个轻量 MCP 数据库网关,支持 PostgreSQL、MySQL、MariaDB、MSSQL、Oracle、ClickHouse、SQLite;
 - 默认仅 2 个工具 `execute_sql` + `search_objects`(合计 ~261 tokens,对上下文友好);
-- 支持 `--transport stdio`、`--dsn` / `DBHUB_DSN` 环境变量、`--readonly`、行数限制、查询超时、SSH 隧道、SSL;
+- 支持 `--transport stdio`、`--dsn` / `DSN` 环境变量、`--readonly`、行数限制、查询超时、SSH 隧道、SSL;
 - `npx @bytebase/dbhub@<version> --transport stdio` 即可作为本地 MCP 进程运行。
 
 与本项目"local stdio MCP"模型完全吻合,无需任何协议适配。
@@ -67,7 +67,7 @@ bytebase/dbhub(MIT,~4k stars):
 name: dbhub-<alias>            // alias 由用户命名,如 dbhub-orders
 type: local
 command: ["npx","-y","@bytebase/dbhub@<锁定版本>","--transport","stdio","--readonly"]
-environment: { DBHUB_DSN: "mysql://user:<password>@host:3306/dbname" }
+environment: { DSN: "mysql://user:<password>@host:3306/dbname" }
 timeout: { startup: 15000, execution: 30000 }
 ```
 
@@ -132,7 +132,7 @@ timeout: { startup: 15000, execution: 30000 }
 
 - **UI**:`packages/ui/src/components/sections/database/DatabasePage.tsx` 新设置页(slug `databases`,opencode 分组),复用 `SettingsCard*` / `SettingsProjectSelector` / `useMcpConfigStore` 全套既有模式;支持粘贴连接串(`mysql://` / `mariadb://` / `postgres://` / `postgresql://`,含 `jdbc:` 前缀)自动填充表单。
 - **DSN 工具**:`packages/ui/src/lib/db-bindings/dsn.ts`(+ 16 个单测):解析/构建 DSN、识别 dbhub 条目、组装 `McpDraft`。
-- **内网镜像**:DSN 走 `DBHUB_DSN` env;同时注入 `npm_config_registry`(取自全局 npm 镜像设置 `sessions.npm-registry`),npx 从内网镜像解析 dbhub;测试端点侧则用 server 的 `readNpmRegistry()`(策略文件 / 环境变量 / .npmrc)。
+- **内网镜像**:DSN 走 `DSN` env;同时注入 `npm_config_registry`(取自全局 npm 镜像设置 `sessions.npm-registry`),npx 从内网镜像解析 dbhub;测试端点侧则用 server 的 `readNpmRegistry()`(策略文件 / 环境变量 / .npmrc)。
 - **版本策略**:默认不锁版本(npx 拉 latest);表单"高级"区可填精确版本(如 `0.9.0`)写入 command 实现锁定;因条目就是普通 MCP 记录,后续升级即改版本号或清空回 latest。
 - **测试连接**:`POST /api/db/test`(server 一次性拉起 dbhub stdio,完成 MCP initialize + tools/list 握手后立即杀进程,不落盘)。
 - **i18n**:15 个 locale 全量翻译(`db-bindings.i18n.ts` + 各 locale 主字典 spread)。

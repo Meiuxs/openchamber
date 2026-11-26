@@ -2,7 +2,7 @@
  * Database binding helpers for the dbhub MCP preset.
  *
  * A binding is a project-scope local MCP entry whose stdio command runs
- * bytebase/dbhub and whose DSN travels in the DBHUB_DSN environment variable
+ * bytebase/dbhub and whose DSN travels in the DSN environment variable
  * (never on the command line, so passwords stay out of process lists).
  */
 import type { McpDraft, McpServerWithScope } from '@/stores/useMcpConfigStore';
@@ -28,7 +28,7 @@ export interface DbBindingSpec extends DbConnectionFields {
 
 export const DBHUB_PACKAGE = '@bytebase/dbhub';
 export const DEFAULT_DBHUB_VERSION = 'latest';
-export const DBHUB_DSN_ENV = 'DBHUB_DSN';
+export const DSN_ENV = 'DSN';
 
 export const DB_ENGINE_PORTS: Record<DbEngine, string> = {
   mysql: '3306',
@@ -90,7 +90,7 @@ export const parseDbConnectionUrl = (raw: string): DbConnectionFields | null => 
   };
 };
 
-/** Build the DSN dbhub receives through DBHUB_DSN. */
+/** Build the DSN dbhub receives through DSN. */
 export const buildDbDsn = (fields: DbConnectionFields): string => {
   const auth = fields.username
     ? `${encodeURIComponent(fields.username)}${fields.password ? `:${encodeURIComponent(fields.password)}` : ''}@`
@@ -103,18 +103,18 @@ export const buildDbDsn = (fields: DbConnectionFields): string => {
 
 const DBHUB_NAME_PREFIX = 'dbhub-';
 
-/** A dbhub preset MCP entry: command mentions @bytebase/dbhub and carries a DBHUB_DSN. */
+/** A dbhub preset MCP entry: command mentions @bytebase/dbhub and carries a DSN. */
 export const isDbhubServer = (server: McpServerWithScope): boolean => {
   if (server.type !== 'local') return false;
   const command = server.command ?? [];
   const mentionsDbhub = command.some((part) => part.includes(DBHUB_PACKAGE));
-  const hasDsn = Object.keys(server.environment ?? {}).includes(DBHUB_DSN_ENV);
+  const hasDsn = Object.keys(server.environment ?? {}).includes(DSN_ENV);
   return mentionsDbhub || hasDsn;
 };
 
 const dsnOfServer = (server: McpServerWithScope): string => {
   const env = server.environment ?? {};
-  return typeof env[DBHUB_DSN_ENV] === 'string' ? env[DBHUB_DSN_ENV] : '';
+  return typeof env[DSN_ENV] === 'string' ? env[DSN_ENV] : '';
 };
 
 const versionOfServer = (server: McpServerWithScope): string => {
@@ -162,7 +162,7 @@ export const buildDbhubMcpDraft = (
   const versionTag = spec.dbhubVersion.trim() && spec.dbhubVersion.trim() !== 'latest'
     ? `${DBHUB_PACKAGE}@${spec.dbhubVersion.trim()}`
     : DBHUB_PACKAGE;
-  const environment = [{ key: DBHUB_DSN_ENV, value: buildDbDsn(spec) }];
+  const environment = [{ key: DSN_ENV, value: buildDbDsn(spec) }];
   const registry = npmRegistry?.trim();
   if (registry) environment.push({ key: 'npm_config_registry', value: registry });
   return {
