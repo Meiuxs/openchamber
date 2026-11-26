@@ -164,6 +164,18 @@ export const readDbBindingSpec = (server: McpServerWithScope): DbBindingSpec | n
 export const bindingNameOf = (alias: string): string =>
   `${DBHUB_NAME_PREFIX}${alias.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'db'}`;
 
+/**
+ * The name without its `dbhub-` prefix, accepting either form. Callers that
+ * hold an entry name used to feed it back through `bindingNameOf`, which
+ * produced `dbhub-dbhub-…` and removed the wrong config file.
+ */
+export const bindingSlugOf = (aliasOrName: string): string => {
+  const alias = aliasOrName.startsWith(DBHUB_NAME_PREFIX)
+    ? aliasOrName.slice(DBHUB_NAME_PREFIX.length)
+    : aliasOrName;
+  return bindingNameOf(alias).slice(DBHUB_NAME_PREFIX.length);
+};
+
 /** Where the generated config lives, relative to the project directory. */
 export const bindingConfigRelativePathOf = (alias: string): string =>
   `.opencode/dbhub/${bindingNameOf(alias)}.toml`;

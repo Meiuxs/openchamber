@@ -47,6 +47,7 @@ import {
   DB_SSL_MODES,
   DEFAULT_DBHUB_VERSION,
   bindingNameOf,
+  bindingSlugOf,
   buildDbhubMcpDraft,
   buildDbhubToml,
   isDbhubServer,
@@ -148,8 +149,12 @@ const writeBindingToml = async (
   return { ok: false, error: payload?.error ?? `HTTP ${response.status}` };
 };
 
-const removeBindingToml = async (alias: string, directory: string | null): Promise<void> => {
-  const slug = bindingNameOf(alias).slice(DBHUB_NAME_PREFIX.length);
+/**
+ * Accepts either the alias or the full entry name: the rename path passes the
+ * entry name, and re-prefixing it silently removed nothing.
+ */
+const removeBindingToml = async (aliasOrName: string, directory: string | null): Promise<void> => {
+  const slug = bindingSlugOf(aliasOrName);
   await runtimeFetch(`/api/db/binding?alias=${encodeURIComponent(slug)}`, {
     method: 'DELETE',
     headers: directory ? { 'x-opencode-directory': directory } : {},

@@ -3,6 +3,7 @@ import {
   bindingNameOf,
   buildDbDsn,
   bindingConfigRelativePathOf,
+  bindingSlugOf,
   buildDbhubMcpDraft,
   buildDbhubToml,
   isBindingComplete,
@@ -185,6 +186,14 @@ describe('validation', () => {
     expect(bindingNameOf('Orders DB')).toBe('dbhub-orders-db');
     expect(bindingNameOf('--weird--')).toBe('dbhub-weird');
     expect(bindingNameOf('')).toBe('dbhub-db');
+  });
+
+  test('bindingSlugOf accepts the alias or the full entry name', () => {
+    expect(bindingSlugOf('orders-2')).toBe('orders-2');
+    // Feeds the delete/rename cleanup path: the entry name must not be prefixed twice.
+    expect(bindingSlugOf('dbhub-orders-2')).toBe('orders-2');
+    expect(bindingSlugOf('dbhub-Orders DB')).toBe('orders-db');
+    expect(bindingSlugOf('')).toBe('db');
   });
 
   test('suggestBindingAlias derives a free alias from the database name', () => {
