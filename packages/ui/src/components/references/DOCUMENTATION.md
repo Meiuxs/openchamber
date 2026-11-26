@@ -60,7 +60,8 @@ The menu first appeared wherever the preview had a refresh handler and a signed-
 | `referenceFilterPanel.tsx` | The filter panel the board, the picker dialog and the pull request pickers share: a trigger (the summary in full, or a bare icon), radio groups, a label section, an optional Clear filters row, and the phone sheet. Each caller supplies its own groups and summary. |
 | `useRepositoryLabelReader.ts` | Reading the filter's label choices, while its panel is open: the project the folder's repository is bound as, or the path its primary remote names for one nobody bound. |
 | `labelWrites.ts` | Label sets the app wrote, held over the lists for two minutes so a lagging search index cannot bring the old set back. |
-| `ReferencePickerDialog.tsx` | The picker around them: checked items, the diff switch, Enter/Shift+Enter, confirm. Desktop shows the list and a preview side by side; mobile opens the preview in place of the list. |
+| `ReferencePickerDialog.tsx` | The picker around them: checked items, the diff switch, Enter/Shift+Enter, confirm. Desktop shows the list and a preview side by side; mobile opens the preview in place of the list. With `nestedRepositories` it also owns the folder scope and its repository picker (*Nested repositories*). |
+| `pickerRepositoryScope.ts` | The pure mapping from a folder scope to the list's `directory`/`directories`, and from the picker's choice to the next scope. |
 | `usePreviewReturnScroll.ts` | The phone's in-place preview: keeps the list's scroll position while an item takes its place in the sheet's one scroll area, and starts each preview at its top. |
 | `ReferencePickerRow.tsx`, `ReferencePreview.tsx`, `ReferenceMetaEditors.tsx` | What a row and the preview show; `ReferenceMetaEditors.tsx` holds the meta row, the assignee row and the load-error line. State colours are the theme's PR tokens through the sidebar's rule (`lib/source-control/prVisualState.ts`). |
 | `useReferenceImagePreview.tsx` | Opening the preview's pictures in the chat's image viewer. |
@@ -137,6 +138,49 @@ descriptor (`sharedNumberSpace`) would have to thread descriptors into every
 caller that keys a selection (New Worktree, attach), while marking every change
 request `!` and every issue `#` keeps keys unique on any provider: where both
 share one number space only one of them can exist.
+
+## Nested repositories
+
+The composer's plus menu opens the picker with `nestedRepositories`; New
+Worktree does not, so its picker stays on the project directory. With it, the
+dialog resolves the folder through `useRepositoryScope`
+(`lib/source-control/repositoryScope.ts`), the same resolution the board's
+project picker uses, so both answer alike:
+
+- A directory that is a repository offers itself and its submodules
+  (`[root, ...nested]`); the root is chosen until another is picked, and there
+  is no "all", which would only repeat the root.
+- A directory that is not a repository discovers the repositories under it
+  (`ensureNestedRepos`) and, where `sourceControl.referencesAcross` exists,
+  offers "all" as the default; otherwise it lists the first. Releases with no
+  repository under them keep the `no-repo` state.
+- While discovery runs, or if it fails, the list area shows the board's
+  "Looking for Git repositories..." / "Could not scan..." message with a
+  Retry that forces `ensureNestedRepos`, instead of reading as `no-repo`.
+- The dialog starts on the repository the board remembers for the project
+  this directory belongs to (`useRememberedRepositoryChoice`), so both read
+  the same list instead of the picker re-reading every repository. A picker
+  choice made by hand stays for that open; it is not written back.
+- A checked item is stamped with the folder it was listed in
+  (`itemWithDirectory`), so switching the picker afterward cannot move it;
+  attaching reads each stamped folder through its own repository binding.
+- Only the repository source takes a scope; a tracker's dialog ignores the
+  directory, and never enters the across state (`pickerRepositoryScope.ts`).
+- Folders left out of an across list are named by `RepositoryAcrossNote`, the
+  same component the board shows.
+
+A checked item keeps the folder it was listed in (`itemWithDirectory`), so
+switching the picker to another repository neither drops it nor makes it read
+through the new one. Confirming writes that folder into the selection
+(`repositorySelection`); attaching reads each selection through its own
+folder's binding (`contextFor` in `useAttachReferences`), ordered by the
+provider descriptor's `order` exactly as the list picks its read context.
+
+`boardRepository.ts` imports `referencePickerItems`, so the shared resolution
+and the repository picker live outside the board:
+`lib/source-control/repositoryScope.ts` and
+`components/sourceControl/RepositoryPicker.tsx` / `RepositoryAcrossNote.tsx`.
+The board re-exports them under its old names.
 
 ## Discussions
 

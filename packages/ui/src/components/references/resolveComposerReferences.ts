@@ -20,6 +20,17 @@ export type ReferenceResolveDeps = {
     sourceControl: Pick<SourceControlAPI, 'issueGet' | 'issueComments' | 'changeRequestContext' | 'referenceDetail'>;
     context: SourceControlReadContext | null;
     /**
+     * The read contexts of repositories found under a session directory that is
+     * not itself a repository. A link reads through the first of these on its
+     * own provider and instance, so a subdirectory's issue still attaches.
+     */
+    contexts?: readonly SourceControlReadContext[];
+    /**
+     * The read context of one folder, for a selection checked while listing a
+     * repository other than the session's own.
+     */
+    contextFor?: (directory: string) => Promise<SourceControlReadContext | null>;
+    /**
      * A tracker item with its comments, by tracker, the tracker's id and the
      * container it was listed under (identifiers restart per container).
      */
@@ -153,7 +164,12 @@ async function readChangeRequest(
 async function resolveOne(selection: ReferencePickerSelection, deps: ReferenceResolveDeps): Promise<ComposerReference> {
     if (selection.source === 'tracker') return readTrackerItem(deps, selection.provider, selection.item.id, selection.item.container?.id ?? null);
 
-    const { sourceControl, context } = deps;
+    const { sourceControl } = deps;
+    // A checked item carries the folder it was listed in, so a picker across
+    // several repositories still reads each through its own binding.
+    const context = selection.directory && deps.contextFor
+        ? await deps.contextFor(selection.directory)
+        : deps.context;
     if (!context) throw new Error('The repository is not available here');
     const { reference } = selection;
     const project = { owner: reference.sourceRepo.owner, name: reference.sourceRepo.repo };
@@ -185,10 +201,23 @@ export type ReferenceLinkTarget =
     | ({ source: 'repository-url' } & RepositoryUrlResolver)
     | { source: 'tracker'; provider: string; identifier: string };
 
+const sameReadLocation = (context: SourceControlReadContext, target: { provider: string; instance: string }): boolean => (
+    context.provider === target.provider && context.instance === target.instance
+);
+
+/** The session's own repository when the link lives there, else a repository found under it. */
+const readContextFor = (
+    target: { provider: string; instance: string },
+    deps: ReferenceResolveDeps,
+): SourceControlReadContext | null => {
+    if (deps.context && sameReadLocation(deps.context, target)) return deps.context;
+    return deps.contexts?.find((candidate) => sameReadLocation(candidate, target)) ?? null;
+};
+
 export async function resolveReferenceLink(target: ReferenceLinkTarget, deps: ReferenceResolveDeps): Promise<ComposerReference | null> {
     if (target.source === 'tracker') return readTrackerItem(deps, target.provider, target.identifier);
-    const { context } = deps;
-    if (!context || context.provider !== target.provider || context.instance !== target.instance) {
+    const context = readContextFor(target, deps);
+    if (!context) {
         throw new Error('The repository is not available here');
     }
     if (target.source === 'repository-url') {

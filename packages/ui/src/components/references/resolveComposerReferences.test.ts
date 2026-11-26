@@ -1,8 +1,9 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 
-import type { RepositoryDiscussionReference, RepositoryItemRef, RepositoryReferenceDetail, SourceControlAPI, SourceControlReadContext } from '@/lib/api/types';
+import type { Issue, RepositoryDiscussionReference, RepositoryItemRef, RepositoryReferenceDetail, SourceControlAPI, SourceControlReadContext } from '@/lib/api/types';
 
 import { resolveComposerReferences, resolveReferenceLink } from './resolveComposerReferences';
+import { repositorySelection } from './referencePickerItems';
 import { createRepositoryUrlMatcher } from '@/lib/source-control/repositoryUrlMatcher';
 import { githubLikeDescriptor, gitlabLikeDescriptor } from '@/lib/source-control/providers/descriptor.fixture';
 import { createTrackerUrlMatcher } from '@/lib/trackers/matchTrackerUrl';
@@ -47,7 +48,55 @@ const detail: RepositoryReferenceDetail = {
     discussion: { canComment: true, canClose: false, canReopen: false },
 };
 
+const issueReference = {
+    kind: 'issue' as const, provider: 'github', number: 7, title: 'Nested issue',
+    url: 'https://github.com/acme/app/issues/7', state: 'open' as const,
+    body: '', bodyTruncated: false, createdAt: null, updatedAt: null, author: null,
+    labels: [], commentCount: 0, sourceRepo: { owner: 'acme', repo: 'app', source: 'origin' as const },
+};
+const repositoryItem = { source: 'repository' as const, reference: issueReference };
+const issueFrom = (through: SourceControlReadContext): Issue => ({
+    provider: through.provider, instance: through.instance, id: '7', number: 7,
+    project: { id: 'repo', owner: 'acme', name: 'app', provider: through.provider, instance: through.instance, url: 'https://github.com/acme/app' },
+    title: issueReference.title, url: issueReference.url, state: 'open',
+});
+
 describe('resolveComposerReferences', () => {
+    test('a selection stamped with a folder reads through that folder context', async () => {
+        const other: SourceControlReadContext = { ...context, directory: '/nested', repositoryId: 'nested' };
+        const askedDirectories: string[] = [];
+        const askedContexts: string[] = [];
+        const sourceControl = {
+            issueGet: async (through: SourceControlReadContext) => { askedContexts.push(through.directory); return issueFrom(through); },
+            issueComments: async () => [],
+            changeRequestContext: async () => { throw new Error('not a pull'); },
+            referenceDetail: async () => { throw new Error('not a discussion'); },
+        } as unknown as Pick<SourceControlAPI, 'issueGet' | 'issueComments' | 'changeRequestContext' | 'referenceDetail'>;
+        const result = await resolveComposerReferences([repositorySelection(repositoryItem, false, '/nested')], {
+            sourceControl, context,
+            contextFor: async (dir) => { askedDirectories.push(dir); return other; },
+            readTrackerDetail: async () => { throw new Error('unused'); },
+            trackerName: () => 'Tracker',
+        });
+        expect(result.failures).toEqual([]);
+        expect(askedDirectories).toEqual(['/nested']);
+        expect(askedContexts).toEqual(['/nested']);
+    });
+
+    test('a stamped folder without a context fails instead of falling back', async () => {
+        const result = await resolveComposerReferences([repositorySelection(repositoryItem, false, '/nested')], {
+            sourceControl: {
+                issueGet: async () => issueFrom(context), issueComments: async () => [],
+                changeRequestContext: async () => { throw new Error('x'); }, referenceDetail: async () => { throw new Error('x'); },
+            } as unknown as Pick<SourceControlAPI, 'issueGet' | 'issueComments' | 'changeRequestContext' | 'referenceDetail'>,
+            context,
+            contextFor: async () => null,
+            readTrackerDetail: async () => { throw new Error('unused'); },
+            trackerName: () => 'Tracker',
+        });
+        expect(result.failures[0]?.error).toContain('not available');
+    });
+
     test('attaches a discussion with its comments, their replies and which one is the answer', async () => {
         const asked: Array<RepositoryItemRef & { kind?: 'discussion' }> = [];
         const unexpected = () => Promise.reject(new Error('not read for a discussion'));
@@ -123,6 +172,41 @@ describe('resolveReferenceLink', () => {
     test('reads nothing for a link on another host than the project', async () => {
         const deps = { sourceControl: { issueGet: unexpected, issueComments: unexpected, changeRequestContext: unexpected, referenceDetail: unexpected }, context, readTrackerDetail: unexpected, trackerName: () => '' };
         await expect(resolveReferenceLink({ ...issueLink, provider: 'gitlab', instance: 'gitlab.com' }, deps)).rejects.toThrow('The repository is not available here');
+    });
+
+    test('reads a link through a repository found under a directory that is not one', async () => {
+        const reads: Array<{ linked: boolean; directory: string }> = [];
+        const nested: SourceControlReadContext = { ...context, directory: '/work/lib' };
+        const sourceControl: Pick<SourceControlAPI, 'issueGet' | 'issueComments' | 'changeRequestContext' | 'referenceDetail'> = {
+            issueGet: async (through, number) => {
+                reads.push({ linked: through.linked === true, directory: through.directory });
+                return {
+                    provider: 'github', instance: 'github.com', id: 'I_9', number, title: 'Crash', url: 'https://github.com/other/lib/issues/9', state: 'open',
+                    project: { provider: 'github', instance: 'github.com', id: 'other/lib', owner: 'other', name: 'lib', url: 'https://github.com/other/lib' },
+                    author: { provider: 'github', instance: 'github.com', id: '1', username: 'reporter' },
+                };
+            },
+            issueComments: async () => [],
+            changeRequestContext: unexpected,
+            referenceDetail: unexpected,
+        };
+        const reference = await resolveReferenceLink(issueLink, {
+            sourceControl, context: null, contexts: [nested], readTrackerDetail: unexpected, trackerName: () => '',
+        });
+        expect(reads).toEqual([{ linked: false, directory: '/work/lib' }]);
+        expect(reference).toMatchObject({ kind: 'repository-issue', number: 9, title: 'Crash' });
+    });
+
+    test('does not borrow a repository under the directory that sits on another instance', async () => {
+        const nested: SourceControlReadContext = { ...context, directory: '/work/lib', instance: 'ghe.example.com' };
+        const deps = {
+            sourceControl: { issueGet: unexpected, issueComments: unexpected, changeRequestContext: unexpected, referenceDetail: unexpected },
+            context: null,
+            contexts: [nested],
+            readTrackerDetail: unexpected,
+            trackerName: () => '',
+        };
+        await expect(resolveReferenceLink(issueLink, deps)).rejects.toThrow('The repository is not available here');
     });
 });
 

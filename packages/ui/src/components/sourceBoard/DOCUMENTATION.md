@@ -4,6 +4,8 @@
 
 This module owns the desktop board, the phone board page, their project and repository scope, item focus, and the actions offered for the previewed item. The neighbouring `references` module owns shared lists, previews, caches, and live item status. Runtime source-control and tracker APIs own host reads and writes; the Git screen owns its separate repository selection.
 
+The folder scope itself is shared with the composer's reference picker: `lib/source-control/repositoryScope.ts` holds the discovery and resolution, and `components/sourceControl/RepositoryPicker.tsx` / `RepositoryAcrossNote.tsx` hold the picker and its omission note. `boardRepository.ts` re-exports them under the board's names; `SourceBoardView` is unchanged.
+
 ## Invariants
 
 - The board remembers its own project and repository. Browsing a different scope leaves the app's current project and Git selection unchanged; opening work or Changes can move the app.

@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { Window } from 'happy-dom';
 import type { ChangeRequestContext, Issue, RuntimeAPIs, SourceControlReadContext } from '@/lib/api/types';
 import type { ReferencePickerSelection } from '@/components/references/referencePickerItems';
-import { acmeDescriptor } from '@/lib/source-control/providers/descriptor.fixture';
+import { acmeDescriptor, githubLikeDescriptor } from '@/lib/source-control/providers/descriptor.fixture';
 import type { ReferencePickerConfirmFailure } from '@/components/references/ReferencePickerDialog';
 
 const browser = new Window({ url: 'http://localhost/' });
@@ -66,10 +66,17 @@ const context: SourceControlReadContext = {
   provider: 'github', instance: 'github.com', directory: DIRECTORY, repositoryId: 'repo',
   accountId: 'account', bindingRevision: 1, primaryRemote: 'origin',
 };
-let readContext = context;
+let readContext: SourceControlReadContext | 'missing' = context;
+let nestedDirectories: readonly string[] = [];
+type NestedBindingState = { contexts: SourceControlReadContext[] };
+let nestedBindingStates: NestedBindingState[] = [];
 const referenceSources = await import('@/components/references/referenceSources');
 mock.module('@/components/references/referenceSources', () => ({
-  ...referenceSources, useRepositoryReadContext: () => readContext,
+  ...referenceSources, useRepositoryReadContext: () => readContext, useNestedRepositoryDirectories: () => nestedDirectories,
+}));
+const repositoryBinding = await import('@/lib/source-control/repository-binding');
+mock.module('@/lib/source-control/repository-binding', () => ({
+  ...repositoryBinding, useRepositoryBindings: () => nestedBindingStates,
 }));
 
 type Confirm = (selections: ReferencePickerSelection[]) => Promise<ReferencePickerConfirmFailure | null>;
@@ -482,3 +489,34 @@ for (const answer of ['remap', 'none'] as const) {
     }
   });
 }
+
+test('a link is read through a repository under a directory that is not a repository', async () => {
+  const previousRegistry = useSourceControlProviderRegistry.getState();
+  const github = githubLikeDescriptor();
+  useSourceControlProviderRegistry.setState({ ordered: [github], byId: new Map([[github.id, github]]), status: 'ready', holdsList: true });
+  const nested: SourceControlReadContext = { ...context, directory: `${DIRECTORY}/nested` };
+  readContext = 'missing';
+  nestedDirectories = [nested.directory];
+  nestedBindingStates = [{ contexts: [nested] }];
+  try {
+    await withComposer(async (container) => {
+      await act(async () => useConfigStore.setState({ currentProviderId: 'provider', currentModelId: 'model', isConnected: true, hasEverConnected: true }));
+      const content = container.querySelector<HTMLElement>('.cm-content');
+      const view = content ? EditorView.findFromDOM(content) : null;
+      if (!view || !content) throw new Error('Missing composer');
+      const clipboardData = new DataTransfer();
+      clipboardData.setData('text/plain', issue.url);
+      await act(async () => {
+        content.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+        if (!view.state.doc.toString().includes(issue.url)) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: issue.url }, userEvent: 'input.paste' });
+      });
+      expect(content.textContent).toContain('#7');
+      expect(content.textContent).toContain(issue.title);
+    });
+  } finally {
+    readContext = context;
+    nestedDirectories = [];
+    nestedBindingStates = [];
+    useSourceControlProviderRegistry.setState(previousRegistry);
+  }
+});
