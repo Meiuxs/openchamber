@@ -85,6 +85,24 @@ type TestState =
   | { kind: 'ok'; detail: string }
   | { kind: 'error'; detail: string };
 
+/**
+ * dbhub reports failures as a multi-line dump ending in a stack trace. Keep the
+ * distinct explanation lines so the dialog shows what actually went wrong
+ * (auth denied, unknown host, missing db) instead of 2 KB of " at …" frames.
+ */
+const summarizeDbError = (raw: string): string => {
+  const lines = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('at ') && !line.startsWith('Fatal error:'));
+  const unique: string[] = [];
+  for (const line of lines) {
+    if (!unique.includes(line)) unique.push(line);
+  }
+  const text = unique.slice(0, 3).join('\n');
+  return text.length > 400 ? `${text.slice(0, 400)}…` : text;
+};
+
 const runTestConnection = async (
   fields: DbConnectionFields,
   directory: string | null,
@@ -104,9 +122,9 @@ const runTestConnection = async (
     if (response.ok && payload?.ok) {
       return { kind: 'ok', detail: payload.detail ?? '' };
     }
-    return { kind: 'error', detail: payload?.error ?? `HTTP ${response.status}` };
+    return { kind: 'error', detail: summarizeDbError(payload?.error ?? `HTTP ${response.status}`) };
   } catch (error) {
-    return { kind: 'error', detail: error instanceof Error ? error.message : String(error) };
+    return { kind: 'error', detail: summarizeDbError(error instanceof Error ? error.message : String(error)) };
   }
 };
 
@@ -319,7 +337,7 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
               {t('settings.db.dialog.testOk', { detail: test.detail })}
             </div>
           ) : test.kind === 'error' ? (
-            <div className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <div className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {t('settings.db.dialog.testFailed', { detail: test.detail })}
             </div>
           ) : null}
