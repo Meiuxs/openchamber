@@ -348,8 +348,11 @@ export const DatabasePage: React.FC = () => {
     setSelectedMcp: s.setSelectedMcp,
     setMcpDraft: s.setMcpDraft,
   })));
-  const servers = useMcpConfigStore((state) =>
-    selectMcpServersForDirectory(state, settingsDirectory).filter(isDbhubServer));
+  // Select the store's stable array; filtering inside a selector would return a
+  // fresh array on every snapshot and spin React's useSyncExternalStore forever.
+  const allServers = useMcpConfigStore((state) =>
+    selectMcpServersForDirectory(state, settingsDirectory));
+  const servers = React.useMemo(() => allServers.filter(isDbhubServer), [allServers]);
   const mcpStatus = useMcpStore((state) => state.getStatusForDirectory(settingsDirectory));
   const refreshStatus = useMcpStore((state) => state.refresh);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
