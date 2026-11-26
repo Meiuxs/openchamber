@@ -136,6 +136,7 @@ timeout: { startup: 15000, execution: 30000 }
 - **版本策略**:默认不锁版本(npx 拉 latest);表单"高级"区可填精确版本(如 `0.9.0`)写入 command 实现锁定;因条目就是普通 MCP 记录,后续升级即改版本号或清空回 latest。
 - **测试连接**:`POST /api/db/test`(server 一次性拉起 dbhub stdio,完成 MCP initialize + tools/list 握手后立即杀进程,不落盘)。
 - **i18n**:15 个 locale 全量翻译(`db-bindings.i18n.ts` + 各 locale 主字典 spread)。
+- **表单 UX**(2026-11-27 打磨):粘贴的连接串保留在输入框,下方给出"已从连接串填充:引擎 · host:port/db"或"不是可识别的连接串"的即时反馈;名称(别名)在用户未手动修改时从库名自动派生并避让已有序号(`orders_archive` → `orders-archive`、`orders-2`);名称框下实时显示最终 MCP 条目名(`dbhub-orders-archive`);测试/保存按钮不再静默置灰,缺字段时点击给出"请先填写 …"提示;卡片点击直接进入编辑,右键菜单提供编辑/删除;失败提示由 dbhub 的整段堆栈压缩为单行原因(`connect ETIMEDOUT`、`Access denied …`),见 `summarizeDbhubError`。
 - 遗留(后续迭代):测试连接的集成测试、密码接入 safeStorage、共享远程 dbhub 网关(V2)。
 
 ## 9. V2 演进方向(不在本期)

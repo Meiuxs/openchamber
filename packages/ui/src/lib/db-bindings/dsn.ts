@@ -101,7 +101,7 @@ export const buildDbDsn = (fields: DbConnectionFields): string => {
   return `${scheme}://${auth}${fields.host.trim()}${port}/${encodeURIComponent(fields.database.trim())}${ssl}`;
 };
 
-const DBHUB_NAME_PREFIX = 'dbhub-';
+export const DBHUB_NAME_PREFIX = 'dbhub-';
 
 /** A dbhub preset MCP entry: command mentions @bytebase/dbhub and carries a DSN. */
 export const isDbhubServer = (server: McpServerWithScope): boolean => {
@@ -187,6 +187,43 @@ export const buildDbhubMcpDraft = (
 /** True when the alias is usable as an MCP server name suffix (spaces normalize to dashes). */
 export const isValidBindingAlias = (alias: string): boolean =>
   /^[a-z0-9]([a-z0-9- ]*[a-z0-9])?$/.test(alias.trim().toLowerCase());
+
+/**
+ * dbhub reports a failed probe as one run-on line that repeats the cause at the
+ * end, wrapped in stack frames. Pull the cause back out so the dialog can say
+ * "Access denied…" or "connect ETIMEDOUT" instead of 2 KB of " at …" frames.
+ */
+export const summarizeDbhubError = (raw: string): string => {
+  const flat = raw.replace(/\s+/g, ' ').trim();
+  const withoutFrames = flat
+    .replace(/ at (?:async )?[\w$.]+ ?\([^)]*\)/g, '')
+    .replace(/ at (?:async )?\S+/g, '')
+    .replace(/Fatal error:\s*/gi, '')
+    .trim();
+  const sqlMessage = withoutFrames.match(/sqlMessage:\s*"([^"]{1,300})"/i);
+  if (sqlMessage?.[1]) return sqlMessage[1];
+  const failed = withoutFrames.match(
+    /Failed to connect[^:]*:\s*(?:Error:\s*)?(.{1,300}?)(?=\s+(?:Error:|Fatal)|\s*\{|$)/i,
+  );
+  if (failed?.[1]?.trim()) return failed[1].trim();
+  const generic = withoutFrames.match(/(?:^|\s)(?:Error|error):\s*(.{1,300}?)(?:\s*\{|$)/);
+  if (generic?.[1]?.trim()) return generic[1].trim();
+  return withoutFrames.length > 300 ? `${withoutFrames.slice(0, 300)}…` : withoutFrames;
+};
+
+/**
+ * Propose a binding alias from a database (or host) name, kept clear of the
+ * aliases already bound in this project so pasting two URLs never collides.
+ */
+export const suggestBindingAlias = (source: string, taken: readonly string[]): string => {
+  const base =
+    source.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'db';
+  const used = new Set(taken.map((name) => name.trim().toLowerCase()));
+  if (!used.has(base)) return base;
+  let suffix = 2;
+  while (used.has(`${base}-${suffix}`)) suffix += 1;
+  return `${base}-${suffix}`;
+};
 
 /** Fields the save button requires before the binding can be built. */
 export const isBindingComplete = (spec: DbBindingSpec): boolean =>

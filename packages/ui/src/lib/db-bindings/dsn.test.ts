@@ -8,6 +8,8 @@ import {
   isValidBindingAlias,
   parseDbConnectionUrl,
   readDbBindingSpec,
+  suggestBindingAlias,
+  summarizeDbhubError,
   type DbConnectionFields,
 } from './dsn';
 import type { McpServerWithScope } from '@/stores/useMcpConfigStore';
@@ -154,5 +156,32 @@ describe('validation', () => {
     expect(bindingNameOf('Orders DB')).toBe('dbhub-orders-db');
     expect(bindingNameOf('--weird--')).toBe('dbhub-weird');
     expect(bindingNameOf('')).toBe('dbhub-db');
+  });
+
+  test('suggestBindingAlias derives a free alias from the database name', () => {
+    expect(suggestBindingAlias('orders_archive', [])).toBe('orders-archive');
+    expect(suggestBindingAlias('Orders.DB', [])).toBe('orders-db');
+    expect(suggestBindingAlias('', ['x'])).toBe('db');
+    expect(suggestBindingAlias('orders', ['orders'])).toBe('orders-2');
+    expect(suggestBindingAlias('orders', ['orders', 'orders-2'])).toBe('orders-3');
+    expect(suggestBindingAlias('Orders', ['orders'])).toBe('orders-2');
+  });
+
+  test('summarizeDbhubError keeps the cause and drops stack frames', () => {
+    const denied = [
+      'Configuration source: environment variable Connecting to 1 database source(s)...',
+      '- default: mysql://app@db.local:3306/orders',
+      'Failed to connect to MySQL database: Error: connect ECONNREFUSED 10.0.0.9:3306',
+      '    at _MySQLConnector.connect (file:///tmp/dbhub/dist/mysql.js:201:38)',
+      '    at async ConnectorManager.connectSource (file:///tmp/dbhub/dist/chunk.js:2324:7)',
+      'Fatal error: Error: connect ECONNREFUSED 10.0.0.9:3306',
+      '    at main (file:///tmp/dbhub/dist/index.js:1975:5)',
+    ].join('\n');
+    expect(summarizeDbhubError(denied)).toBe('connect ECONNREFUSED 10.0.0.9:3306');
+
+    const sqlMessage = 'boom ... { code: \'ER_ACCESS_DENIED_ERROR\', sqlMessage: "Access denied for user \'app\'@\'10.1.1.1\'" }';
+    expect(summarizeDbhubError(sqlMessage)).toBe("Access denied for user 'app'@'10.1.1.1'");
+
+    expect(summarizeDbhubError('Connection test timed out')).toBe('Connection test timed out');
   });
 });

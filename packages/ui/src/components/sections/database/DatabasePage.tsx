@@ -35,14 +35,17 @@ import { selectMcpServersForDirectory, useMcpConfigStore } from '@/stores/useMcp
 import { useMcpStore } from '@/stores/useMcpStore';
 import type { McpServerStatus } from '@/lib/opencode/model';
 import {
+  DBHUB_NAME_PREFIX,
   DB_ENGINE_PORTS,
   DEFAULT_DBHUB_VERSION,
+  bindingNameOf,
   buildDbhubMcpDraft,
-  isBindingComplete,
   isDbhubServer,
   isValidBindingAlias,
   parseDbConnectionUrl,
   readDbBindingSpec,
+  suggestBindingAlias,
+  summarizeDbhubError,
   type DbBindingSpec,
   type DbConnectionFields,
   type DbEngine,
@@ -85,24 +88,6 @@ type TestState =
   | { kind: 'ok'; detail: string }
   | { kind: 'error'; detail: string };
 
-/**
- * dbhub reports failures as a multi-line dump ending in a stack trace. Keep the
- * distinct explanation lines so the dialog shows what actually went wrong
- * (auth denied, unknown host, missing db) instead of 2 KB of " at …" frames.
- */
-const summarizeDbError = (raw: string): string => {
-  const lines = raw
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '' && !line.startsWith('at ') && !line.startsWith('Fatal error:'));
-  const unique: string[] = [];
-  for (const line of lines) {
-    if (!unique.includes(line)) unique.push(line);
-  }
-  const text = unique.slice(0, 3).join('\n');
-  return text.length > 400 ? `${text.slice(0, 400)}…` : text;
-};
-
 const runTestConnection = async (
   fields: DbConnectionFields,
   directory: string | null,
@@ -122,9 +107,9 @@ const runTestConnection = async (
     if (response.ok && payload?.ok) {
       return { kind: 'ok', detail: payload.detail ?? '' };
     }
-    return { kind: 'error', detail: summarizeDbError(payload?.error ?? `HTTP ${response.status}`) };
+    return { kind: 'error', detail: summarizeDbhubError(payload?.error ?? `HTTP ${response.status}`) };
   } catch (error) {
-    return { kind: 'error', detail: summarizeDbError(error instanceof Error ? error.message : String(error)) };
+    return { kind: 'error', detail: summarizeDbhubError(error instanceof Error ? error.message : String(error)) };
   }
 };
 
@@ -132,6 +117,7 @@ interface BindingDialogProps {
   open: boolean;
   spec: DbBindingSpec;
   existingName: string | null;
+  existingAliases: readonly string[];
   directory: string | null;
   npmRegistry: string;
   onClose: () => void;
@@ -141,6 +127,7 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
   open,
   spec,
   existingName,
+  existingAliases,
   directory,
   npmRegistry,
   onClose,
@@ -148,8 +135,11 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
   const { t } = useI18n();
   const [draft, setDraft] = React.useState<DbBindingSpec>(spec);
   const [test, setTest] = React.useState<TestState>({ kind: 'idle' });
+  const [parseNote, setParseNote] = React.useState<string | null>(null);
+  const [dsnInvalid, setDsnInvalid] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [dsnText, setDsnText] = React.useState('');
+  const aliasTouched = React.useRef(false);
   const { createMcp, updateMcp, deleteMcp, loadMcpConfigs } = useMcpConfigStore(useShallow((s) => ({
     createMcp: s.createMcp,
     updateMcp: s.updateMcp,
@@ -162,34 +152,73 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
       setDraft(spec);
       setTest({ kind: 'idle' });
       setDsnText('');
+      setParseNote(null);
+      setDsnInvalid(false);
+      aliasTouched.current = false;
     }
   }, [open, spec]);
 
   const patch = (changes: Partial<DbBindingSpec>) => setDraft((prev) => ({ ...prev, ...changes }));
 
   const applyDsn = (raw: string) => {
+    // Keep what was pasted: clearing the box made a successful parse look like
+    // nothing happened, and it hides the string the fields were derived from.
+    setDsnText(raw);
     const parsed = parseDbConnectionUrl(raw);
-    if (parsed) {
-      setDraft((prev) => ({ ...prev, ...parsed }));
-      setDsnText('');
-      setTest({ kind: 'idle' });
-    } else {
-      setDsnText(raw);
+    if (!parsed) {
+      setParseNote(null);
+      setDsnInvalid(raw.trim() !== '');
+      return;
     }
+    setDsnInvalid(false);
+    setDraft((prev) => ({
+      ...prev,
+      ...parsed,
+      alias:
+        prev.alias.trim() === '' && !aliasTouched.current
+          ? suggestBindingAlias(parsed.database || parsed.host, existingAliases)
+          : prev.alias,
+    }));
+    setParseNote(
+      t('settings.db.dialog.dsnParsed', {
+        engine: ENGINE_LABELS[parsed.engine],
+        host: parsed.host,
+        port: parsed.port || DB_ENGINE_PORTS[parsed.engine],
+        database: parsed.database,
+      }),
+    );
+    setTest({ kind: 'idle' });
   };
 
   const nextDraft = buildDbhubMcpDraft(draft, npmRegistry || null);
-  const complete = isBindingComplete(draft);
   const aliasError = draft.alias.trim() !== '' && !isValidBindingAlias(draft.alias);
 
+  const missingFields = (): string[] => {
+    const missing: string[] = [];
+    if (!isValidBindingAlias(draft.alias)) missing.push(t('settings.db.dialog.aliasLabel'));
+    if (draft.host.trim() === '') missing.push(t('settings.db.dialog.hostLabel'));
+    if (draft.database.trim() === '') missing.push(t('settings.db.dialog.databaseLabel'));
+    return missing;
+  };
+
+  // Keep the buttons live and say what is missing, instead of greying them out
+  // with no explanation.
+  const ensureComplete = (): boolean => {
+    const missing = missingFields();
+    if (missing.length === 0) return true;
+    toast.error(t('settings.db.dialog.missingFields', { fields: missing.join(' / ') }));
+    return false;
+  };
+
   const handleTest = async () => {
-    if (!complete) return;
+    if (!ensureComplete()) return;
     setTest({ kind: 'running' });
     setTest(await runTestConnection(draft, directory));
   };
 
   const handleSave = async () => {
-    if (!complete || saving) return;
+    if (saving) return;
+    if (!ensureComplete()) return;
     setSaving(true);
     try {
       const renamed = existingName !== null && existingName !== nextDraft.name;
@@ -237,6 +266,11 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
             spellCheck={false}
             aria-label={t('settings.db.dialog.dsnPasteLabel')}
           />
+          {parseNote ? (
+            <p className="typography-micro text-emerald-600 dark:text-emerald-400">{parseNote}</p>
+          ) : dsnInvalid ? (
+            <p className="typography-micro text-destructive">{t('settings.db.dialog.dsnUnrecognized')}</p>
+          ) : null}
 
           <div className="flex gap-2" role="group" aria-label={t('settings.db.dialog.engineLabel')}>
             {(Object.keys(ENGINE_LABELS) as DbEngine[]).map((engine) => (
@@ -257,12 +291,19 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
               <span className="typography-meta text-muted-foreground">{t('settings.db.dialog.aliasLabel')}</span>
               <Input
                 value={draft.alias}
-                onChange={(e) => patch({ alias: e.target.value })}
+                onChange={(e) => {
+                  aliasTouched.current = true;
+                  patch({ alias: e.target.value });
+                }}
                 placeholder="orders-db"
                 aria-invalid={aliasError}
               />
               {aliasError ? (
                 <span className="typography-micro text-destructive">{t('settings.db.dialog.aliasInvalid')}</span>
+              ) : draft.alias.trim() !== '' ? (
+                <span className="typography-micro font-mono text-muted-foreground">
+                  {bindingNameOf(draft.alias)}
+                </span>
               ) : null}
             </label>
             <label className="space-y-1">
@@ -344,10 +385,10 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" size="sm" onClick={handleTest} disabled={!complete || test.kind === 'running'}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void handleTest()} disabled={test.kind === 'running'}>
             {test.kind === 'running' ? t('settings.db.dialog.testing') : t('settings.db.dialog.test')}
           </Button>
-          <Button type="button" size="sm" onClick={() => void handleSave()} disabled={!complete || saving}>
+          <Button type="button" size="sm" onClick={() => void handleSave()} disabled={saving}>
             {saving ? t('settings.db.dialog.saving') : t('settings.db.dialog.save')}
           </Button>
         </DialogFooter>
@@ -360,17 +401,19 @@ export const DatabasePage: React.FC = () => {
   const { t } = useI18n();
   const settingsDirectory = useSettingsDirectory();
   const npmRegistry = useUIStore((state) => state.npmRegistry);
-  const { loadMcpConfigs, deleteMcp, setSelectedMcp, setMcpDraft } = useMcpConfigStore(useShallow((s) => ({
+  const { loadMcpConfigs, deleteMcp } = useMcpConfigStore(useShallow((s) => ({
     loadMcpConfigs: s.loadMcpConfigs,
     deleteMcp: s.deleteMcp,
-    setSelectedMcp: s.setSelectedMcp,
-    setMcpDraft: s.setMcpDraft,
   })));
   // Select the store's stable array; filtering inside a selector would return a
   // fresh array on every snapshot and spin React's useSyncExternalStore forever.
   const allServers = useMcpConfigStore((state) =>
     selectMcpServersForDirectory(state, settingsDirectory));
   const servers = React.useMemo(() => allServers.filter(isDbhubServer), [allServers]);
+  const existingAliases = React.useMemo(
+    () => servers.map((server) => (server.name.startsWith(DBHUB_NAME_PREFIX) ? server.name.slice(DBHUB_NAME_PREFIX.length) : server.name)),
+    [servers],
+  );
   const mcpStatus = useMcpStore((state) => state.getStatusForDirectory(settingsDirectory));
   const refreshStatus = useMcpStore((state) => state.refresh);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
@@ -414,11 +457,6 @@ export const DatabasePage: React.FC = () => {
       toast.error(t('settings.db.toast.deleteFailed'));
     }
     setIsDeleting(false);
-  };
-
-  const handleOpenInMcp = (name: string) => {
-    setMcpDraft(null);
-    setSelectedMcp(name);
   };
 
   return (
@@ -479,7 +517,7 @@ export const DatabasePage: React.FC = () => {
                   <SettingsCardChip>{t('settings.mcp.grid.scope.project')}</SettingsCardChip>
                 </>
               )}
-              onOpen={() => handleOpenInMcp(server.name)}
+              onOpen={() => handleEdit(server.name)}
               actionsLabel={t('settings.mcp.grid.actionsAria', { name: server.name })}
               actions={[
                 { label: t('settings.db.grid.action.edit'), icon: 'edit', onSelect: () => handleEdit(server.name) },
@@ -512,6 +550,7 @@ export const DatabasePage: React.FC = () => {
           open
           spec={dialogSpec}
           existingName={dialogExistingName}
+          existingAliases={existingAliases}
           directory={settingsDirectory}
           npmRegistry={npmRegistry}
           onClose={() => setDialogSpec(null)}
