@@ -1,4 +1,42 @@
-OpenChamber 2.10.5（2026-11-25）
+OpenChamber 2.10.6（2026-11-26）
+
+新功能
+  - 变更请求：可查看评审人并执行主机支持的评审动作；回复与解决评审线程；
+    发布评审草稿；变更请求分支可改基、更新与变基
+  - 聊天：工具调用分组、被后台更新替换的回复折叠；显示引用周围的上下文；
+    被引导的消息在等待智能体时显示状态；Markdown 预览可打开全屏图；侧栏聊天保留页面标注
+  - 侧栏：会话列表按时间分组的标题；固定会话可留在 In work；父会话徽标可打开等待中的隐藏子代理
+  - 手机：应用图标新增 Dictate 快捷方式，可从图标新建会话；打开会话时清除手机横幅
+  - 语音：自定义语音服务器可使用 OpenCode 提供方的密钥
+  - SDK：contributes.links.urls.origin 接受子域通配符
+
+改进
+  - Git：子模块 gitlink 在无分支包含时按 ID 抓取；HTTPS 远端 LFS 端点补 .git；
+    磁盘无响应时 worktree 仍可用；停止不会返回的 gpg agent 并在请求间共享
+  - 安全：VS Code 在全扩展宿主强制文件夹信任并加白桥接命令；Electron 仅自动打开 http(s) 链接；
+    HTML 文档按字节校验，避免新构建被 304 回答
+  - 设置：外部设置文件改动应用主题；读取仍含 legacy queueModeEnabled 的配置
+  - 同步/文件：FS 执行输出与保留结果设上限；丢弃畸形同步帧；本机无网络也能连到服务器
+  - 提供方：从网关模型列表读取 context_length/max_completion_tokens；停止从内部 API 读取 Google 配额；
+    Linear 显示全名
+  - OpenCode：符号链接的 TS 插件可加载自身导入；Windows 文件夹监听不再占满 CPU
+
+内网与低版本 Git 适配（本包定制）
+  - 沿用上一版的内网适配与定制能力，本次无新增变化
+
+说明
+  - 本次同步上游 70 个提交；桌面内置 OpenCode 组件保持 2.4.1
+  - 本包同时包含内网定制能力：本地议题系统、企业模式与用户目录 policy.json、
+    内网 Git HTTP 白名单、模型元数据内网地址、企业技能目录与隐藏内置技能库、
+    内网 npm 镜像、Git 2.20.x 低版本兼容、GitLab 老实例探测，
+    以及带中文注释的 policy.example.json 样例
+  - 随包安装的技能为 gitlab-issue-create，安装脚本把它放到用户级 skills 目录
+  - 本包安装脚本（install.ps1 / install.sh）全程无需管理员/root：策略文件与环境变量都写在
+    当前用户目录；npm 全局前缀若指向不可写的系统目录，脚本只复用已有的用户级 npm 目录，
+    不改写 .npmrc 等 npm 配置
+  - 安装、配置与启动命令见 INSTALL.txt。更新后需重启 OpenChamber 服务，旧进程仍运行旧代码
+
+上一版：OpenChamber 2.10.5（2026-11-25）
 
 新功能
   - Git 面板：Git 与 Diffs 合并为一个自适应界面，提交菜单、查找、文件步进和
