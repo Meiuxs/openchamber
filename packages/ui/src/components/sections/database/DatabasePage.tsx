@@ -5,6 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -37,9 +44,11 @@ import type { McpServerStatus } from '@/lib/opencode/model';
 import {
   DBHUB_NAME_PREFIX,
   DB_ENGINE_PORTS,
+  DB_SSL_MODES,
   DEFAULT_DBHUB_VERSION,
   bindingNameOf,
   buildDbhubMcpDraft,
+  buildDbhubToml,
   isDbhubServer,
   isValidBindingAlias,
   parseDbConnectionUrl,
@@ -47,9 +56,12 @@ import {
   suggestBindingAlias,
   summarizeDbhubError,
   type DbBindingSpec,
-  type DbConnectionFields,
   type DbEngine,
+  type DbSslMode,
 } from '@/lib/db-bindings/dsn';
+
+/** Radix selects reject an empty value, so "no sslmode" travels as this sentinel. */
+const SSL_DEFAULT = 'default';
 
 const emptySpec = (): DbBindingSpec => ({
   alias: '',
@@ -89,17 +101,19 @@ type TestState =
   | { kind: 'error'; detail: string };
 
 const runTestConnection = async (
-  fields: DbConnectionFields,
+  spec: DbBindingSpec,
   directory: string | null,
 ): Promise<Extract<TestState, { kind: 'ok' | 'error' }>> => {
   try {
+    // Send the same TOML the binding will run with: a config dbhub no longer
+    // accepts then fails here instead of only after the binding is saved.
     const response = await runtimeFetch('/api/db/test', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(directory ? { 'x-opencode-directory': directory } : {}),
       },
-      body: JSON.stringify(fields),
+      body: JSON.stringify({ toml: buildDbhubToml(spec), dbhubVersion: spec.dbhubVersion }),
     });
     const payload = (await response.json().catch(() => null)) as
       | { ok?: boolean; detail?: string; error?: string }
@@ -111,6 +125,35 @@ const runTestConnection = async (
   } catch (error) {
     return { kind: 'error', detail: summarizeDbhubError(error instanceof Error ? error.message : String(error)) };
   }
+};
+
+/** Persist the binding's dbhub.toml and return its absolute path. */
+const writeBindingToml = async (
+  spec: DbBindingSpec,
+  directory: string | null,
+): Promise<{ ok: true; path: string } | { ok: false; error: string }> => {
+  const alias = bindingNameOf(spec.alias).slice(DBHUB_NAME_PREFIX.length);
+  const response = await runtimeFetch('/api/db/binding', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(directory ? { 'x-opencode-directory': directory } : {}),
+    },
+    body: JSON.stringify({ alias, toml: buildDbhubToml(spec) }),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { ok?: boolean; path?: string; error?: string }
+    | null;
+  if (response.ok && payload?.ok && payload.path) return { ok: true, path: payload.path };
+  return { ok: false, error: payload?.error ?? `HTTP ${response.status}` };
+};
+
+const removeBindingToml = async (alias: string, directory: string | null): Promise<void> => {
+  const slug = bindingNameOf(alias).slice(DBHUB_NAME_PREFIX.length);
+  await runtimeFetch(`/api/db/binding?alias=${encodeURIComponent(slug)}`, {
+    method: 'DELETE',
+    headers: directory ? { 'x-opencode-directory': directory } : {},
+  }).catch(() => undefined);
 };
 
 interface BindingDialogProps {
@@ -158,7 +201,12 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
     }
   }, [open, spec]);
 
-  const patch = (changes: Partial<DbBindingSpec>) => setDraft((prev) => ({ ...prev, ...changes }));
+  // Any edit invalidates a previous test result — showing "connected" for a
+  // host the user just changed is worse than showing nothing.
+  const patch = (changes: Partial<DbBindingSpec>) => {
+    setDraft((prev) => ({ ...prev, ...changes }));
+    setTest({ kind: 'idle' });
+  };
 
   const applyDsn = (raw: string) => {
     // Keep what was pasted: clearing the box made a successful parse look like
@@ -190,7 +238,6 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
     setTest({ kind: 'idle' });
   };
 
-  const nextDraft = buildDbhubMcpDraft(draft, npmRegistry || null);
   const aliasError = draft.alias.trim() !== '' && !isValidBindingAlias(draft.alias);
 
   const missingFields = (): string[] => {
@@ -219,19 +266,29 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
   const handleSave = async () => {
     if (saving) return;
     if (!ensureComplete()) return;
+    const targetName = bindingNameOf(draft.alias);
+    const taken = existingAliases.some((alias) => bindingNameOf(alias) === targetName);
+    if (taken && existingName !== targetName) {
+      toast.error(t('settings.db.dialog.nameTaken'));
+      return;
+    }
     setSaving(true);
     try {
-      const renamed = existingName !== null && existingName !== nextDraft.name;
-      if (existingName !== null && !renamed) {
+      const written = await writeBindingToml(draft, directory);
+      if (!written.ok) throw new Error(written.error);
+      const nextDraft = buildDbhubMcpDraft(draft, npmRegistry || null, written.path);
+      if (existingName !== null && existingName === nextDraft.name) {
         const updated = await updateMcp(existingName, nextDraft, directory);
         if (!updated.ok) throw new Error(updated.message || 'update failed');
       } else {
-        if (renamed) {
-          const removed = await deleteMcp(existingName, directory);
-          if (!removed.ok) throw new Error(removed.message || 'delete failed');
-        }
+        // Create before deleting: the old order could lose the binding entirely
+        // when the new entry was rejected.
         const created = await createMcp(nextDraft, directory);
         if (!created.ok) throw new Error(created.message || 'create failed');
+        if (existingName !== null) {
+          const removed = await deleteMcp(existingName, directory);
+          if (removed.ok) await removeBindingToml(existingName, directory);
+        }
         if (created.requiresManualRestart) {
           toast.warning(created.message ?? t('settings.db.toast.savedManualRestart'));
         }
@@ -328,18 +385,25 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
                 type="password"
                 value={draft.password}
                 onChange={(e) => patch({ password: e.target.value })}
-                placeholder={existingName === null ? '' : t('settings.db.dialog.passwordUnchangedPlaceholder')}
                 autoComplete="new-password"
               />
             </label>
             <label className="space-y-1">
               <span className="typography-meta text-muted-foreground">{t('settings.db.dialog.sslLabel')}</span>
-              <Input
-                value={draft.sslMode}
-                onChange={(e) => patch({ sslMode: e.target.value as DbConnectionFields['sslMode'] })}
-                placeholder="require / disable"
-                spellCheck={false}
-              />
+              <Select
+                value={draft.sslMode === '' ? SSL_DEFAULT : draft.sslMode}
+                onValueChange={(value) => patch({ sslMode: value === SSL_DEFAULT ? '' : (value as DbSslMode) })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SSL_DEFAULT}>{SSL_DEFAULT}</SelectItem>
+                  {DB_SSL_MODES.filter((mode) => mode !== '').map((mode) => (
+                    <SelectItem key={mode} value={mode}>{mode}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </label>
           </div>
 
@@ -451,6 +515,11 @@ export const DatabasePage: React.FC = () => {
     setIsDeleting(true);
     const result = await deleteMcp(deleteTarget, settingsDirectory);
     if (result.ok) {
+      // The entry is gone; drop the dbhub.toml it pointed at as well.
+      const alias = deleteTarget.startsWith(DBHUB_NAME_PREFIX)
+        ? deleteTarget.slice(DBHUB_NAME_PREFIX.length)
+        : deleteTarget;
+      await removeBindingToml(alias, settingsDirectory);
       toast.success(result.message || t('settings.db.toast.deleted', { name: deleteTarget }));
       setDeleteTarget(null);
     } else {

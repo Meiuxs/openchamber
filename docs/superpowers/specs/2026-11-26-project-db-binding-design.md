@@ -130,6 +130,15 @@ timeout: { startup: 15000, execution: 30000 }
 
 ## 8. 实现记录(2026-11-27,方案 A 第一期落地)
 
+- **只读的实现方式(2026-11-27 修正)** dbhub 2.x 去掉了 `--readonly` 参数,启动即报 `ERROR: --readonly flag is no longer supported` 并 exit 1。现改为:**每个绑定生成一份 `<项目>/.opencode/dbhub/dbhub-<别名>.toml`**,命令变为
+  `npx -y @bytebase/dbhub[@版本] --config <绝对路径> --transport stdio`,
+  只读通过 `[[tools]] name = "execute_sql" readonly = true` 表达(2.x 的官方做法)。
+  DSN 同时写入 TOML 与 `DSN` 环境变量:TOML 生效,env 仅用于编辑表单回显;`OPENCHAMBER_DB_READONLY` 记录开关状态。
+  - 写文件走 `POST /api/db/binding`(路径固定为 `.opencode/dbhub/<slug>.toml`,slug 白名单校验),删除/改名走 `DELETE /api/db/binding`;
+  - **测试连接与保存共用同一份 TOML**,避免“测试通过、保存后起不来”;
+  - 改名采取**先建后删**,并在保存前做名称冲突检查,避免旧条目先被删掉后新条目创建失败。
+- **Windows 兼容**:服务端在 Node 下无法直接执行 `npx` 的 `.cmd` shim,探测改经 `cmd.exe /d /s /c` + 逐参数加引号(路径含空格时不截断),并在超时/结束时用 `taskkill /T` 杀掉整棵进程树。
+
 - **UI**:`packages/ui/src/components/sections/database/DatabasePage.tsx` 新设置页(slug `databases`,opencode 分组),复用 `SettingsCard*` / `SettingsProjectSelector` / `useMcpConfigStore` 全套既有模式;支持粘贴连接串(`mysql://` / `mariadb://` / `postgres://` / `postgresql://`,含 `jdbc:` 前缀)自动填充表单。
 - **DSN 工具**:`packages/ui/src/lib/db-bindings/dsn.ts`(+ 16 个单测):解析/构建 DSN、识别 dbhub 条目、组装 `McpDraft`。
 - **内网镜像**:DSN 走 `DSN` env;同时注入 `npm_config_registry`(取自全局 npm 镜像设置 `sessions.npm-registry`),npx 从内网镜像解析 dbhub;测试端点侧则用 server 的 `readNpmRegistry()`(策略文件 / 环境变量 / .npmrc)。

@@ -2,13 +2,21 @@
  * Database binding helpers for the dbhub MCP preset.
  *
  * A binding is a project-scope local MCP entry whose stdio command runs
- * bytebase/dbhub and whose DSN travels in the DSN environment variable
- * (never on the command line, so passwords stay out of process lists).
+ * bytebase/dbhub with a generated dbhub.toml. The TOML carries the DSN and the
+ * per-tool read-only setting: dbhub 2.x dropped the `--readonly` flag and now
+ * configures it as `[[tools]] name = "execute_sql" readonly = true`. The DSN is
+ * mirrored into the DSN environment variable so the edit form can read a
+ * binding back without touching the filesystem (dbhub prefers the TOML).
  */
 import type { McpDraft, McpServerWithScope } from '@/stores/useMcpConfigStore';
 import { MCP_DRAFT_OAUTH_UNSET } from '@/components/sections/mcp/mcpDraft';
 
 export type DbEngine = 'mysql' | 'postgresql';
+
+/** libpq-style sslmode values; anything else is dropped instead of guessed at. */
+export const DB_SSL_MODES = ['', 'disable', 'prefer', 'require', 'verify-ca', 'verify-full'] as const;
+
+export type DbSslMode = (typeof DB_SSL_MODES)[number];
 
 export interface DbConnectionFields {
   engine: DbEngine;
@@ -17,7 +25,7 @@ export interface DbConnectionFields {
   database: string;
   username: string;
   password: string;
-  sslMode: '' | 'disable' | 'require';
+  sslMode: DbSslMode;
 }
 
 export interface DbBindingSpec extends DbConnectionFields {
@@ -29,6 +37,8 @@ export interface DbBindingSpec extends DbConnectionFields {
 export const DBHUB_PACKAGE = '@bytebase/dbhub';
 export const DEFAULT_DBHUB_VERSION = 'latest';
 export const DSN_ENV = 'DSN';
+/** Marker the binding writes so the form can round-trip the read-only switch. */
+export const READONLY_ENV = 'OPENCHAMBER_DB_READONLY';
 
 export const DB_ENGINE_PORTS: Record<DbEngine, string> = {
   mysql: '3306',
@@ -42,8 +52,8 @@ const DB_ENGINE_BY_SCHEME: Record<string, DbEngine> = {
   'postgresql:': 'postgresql',
 };
 
-const isSslMode = (value: unknown): value is DbConnectionFields['sslMode'] =>
-  value === '' || value === 'disable' || value === 'require';
+const isSslMode = (value: unknown): value is DbSslMode =>
+  typeof value === 'string' && (DB_SSL_MODES as readonly string[]).includes(value.toLowerCase());
 
 const safeDecode = (value: string): string => {
   try {
@@ -75,9 +85,12 @@ export const parseDbConnectionUrl = (raw: string): DbConnectionFields | null => 
 
   const host = safeDecode(url.hostname);
   if (!host) return null;
-  const database = safeDecode(url.pathname.replace(/^\/+/, '')).split(/[?/]/)[0] ?? '';
+  // Split the still-encoded path first: a database named `my%2Fdb` decodes to
+  // `my/db` and must not be truncated at the decoded slash.
+  const encodedDatabase = url.pathname.replace(/^\/+/, '').split('/')[0] ?? '';
+  const database = safeDecode(encodedDatabase);
   const rawSsl = url.searchParams.get('sslmode') ?? '';
-  const sslMode = isSslMode(rawSsl) ? rawSsl : '';
+  const sslMode = isSslMode(rawSsl) ? (rawSsl.toLowerCase() as DbSslMode) : '';
 
   return {
     engine,
@@ -103,13 +116,10 @@ export const buildDbDsn = (fields: DbConnectionFields): string => {
 
 export const DBHUB_NAME_PREFIX = 'dbhub-';
 
-/** A dbhub preset MCP entry: command mentions @bytebase/dbhub and carries a DSN. */
+/** A dbhub preset MCP entry: a local command that runs @bytebase/dbhub. */
 export const isDbhubServer = (server: McpServerWithScope): boolean => {
   if (server.type !== 'local') return false;
-  const command = server.command ?? [];
-  const mentionsDbhub = command.some((part) => part.includes(DBHUB_PACKAGE));
-  const hasDsn = Object.keys(server.environment ?? {}).includes(DSN_ENV);
-  return mentionsDbhub || hasDsn;
+  return (server.command ?? []).some((part) => part.includes(DBHUB_PACKAGE));
 };
 
 const dsnOfServer = (server: McpServerWithScope): string => {
@@ -125,8 +135,10 @@ const versionOfServer = (server: McpServerWithScope): string => {
 
 /**
  * Read a binding spec back out of an existing MCP entry so the edit form can
- * prefill. The password is never echoed back — editing always
- * re-enters it.
+ * prefill. The password comes back with it: an empty box used to mean
+ * "leave it alone", but the draft rebuilds the DSN from the form, so an empty
+ * password silently wiped the stored one. Showing the masked value
+ * keeps "save without touching the password" lossless.
  */
 export const readDbBindingSpec = (server: McpServerWithScope): DbBindingSpec | null => {
   const dsn = dsnOfServer(server);
@@ -134,6 +146,7 @@ export const readDbBindingSpec = (server: McpServerWithScope): DbBindingSpec | n
   const alias = server.name.startsWith(DBHUB_NAME_PREFIX)
     ? server.name.slice(DBHUB_NAME_PREFIX.length)
     : server.name;
+  const env = server.environment ?? {};
   return {
     alias,
     engine: fields?.engine ?? 'mysql',
@@ -141,9 +154,9 @@ export const readDbBindingSpec = (server: McpServerWithScope): DbBindingSpec | n
     port: fields?.port ?? '',
     database: fields?.database ?? '',
     username: fields?.username ?? '',
-    password: '',
+    password: fields?.password ?? '',
     sslMode: fields?.sslMode ?? '',
-    readonly: (server.type === 'local' ? server.command ?? [] : []).includes('--readonly'),
+    readonly: env[READONLY_ENV] !== '0',
     dbhubVersion: versionOfServer(server),
   };
 };
@@ -151,32 +164,60 @@ export const readDbBindingSpec = (server: McpServerWithScope): DbBindingSpec | n
 export const bindingNameOf = (alias: string): string =>
   `${DBHUB_NAME_PREFIX}${alias.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'db'}`;
 
+/** Where the generated config lives, relative to the project directory. */
+export const bindingConfigRelativePathOf = (alias: string): string =>
+  `.opencode/dbhub/${bindingNameOf(alias)}.toml`;
+
 /**
- * Assemble the McpDraft the dbhub preset saves. The npm registry env is
+ * The dbhub.toml for one binding. dbhub 2.x configures read-only per tool, and
+ * defining `execute_sql` this way is what replaces the removed `--readonly`.
+ */
+export const buildDbhubToml = (spec: DbBindingSpec): string => {
+  const lines = [
+    '[[sources]]',
+    'id = "default"',
+    `dsn = ${JSON.stringify(buildDbDsn(spec))}`,
+    '',
+    '[[tools]]',
+    'name = "execute_sql"',
+    'source = "default"',
+    `readonly = ${spec.readonly ? 'true' : 'false'}`,
+    '',
+  ];
+  return lines.join('\n');
+};
+
+/**
+ * Assemble the McpDraft the dbhub preset saves. `configPath` is the absolute
+ * path of the TOML the server wrote for this binding; the npm registry env is
  * injected when an intranet mirror is configured so npx resolves against it.
  */
 export const buildDbhubMcpDraft = (
   spec: DbBindingSpec,
   npmRegistry: string | null,
+  configPath: string,
 ): McpDraft => {
   const versionTag = spec.dbhubVersion.trim() && spec.dbhubVersion.trim() !== 'latest'
     ? `${DBHUB_PACKAGE}@${spec.dbhubVersion.trim()}`
     : DBHUB_PACKAGE;
-  const environment = [{ key: DSN_ENV, value: buildDbDsn(spec) }];
+  const environment = [
+    { key: DSN_ENV, value: buildDbDsn(spec) },
+    { key: READONLY_ENV, value: spec.readonly ? '1' : '0' },
+  ];
   const registry = npmRegistry?.trim();
   if (registry) environment.push({ key: 'npm_config_registry', value: registry });
   return {
     name: bindingNameOf(spec.alias),
     scope: 'project',
     type: 'local',
-    command: ['npx', '-y', versionTag, '--transport', 'stdio', ...(spec.readonly ? ['--readonly'] : [])],
+    command: ['npx', '-y', versionTag, '--config', configPath, '--transport', 'stdio'],
     url: '',
     environment,
     headers: [],
     ...MCP_DRAFT_OAUTH_UNSET,
     oauthAuthServerMetadataUrl: '',
     protocol: 'legacy',
-    timeoutStartup: '15000',
+    timeoutStartup: '20000',
     timeoutCatalog: '',
     timeoutExecution: '30000',
     codemode: 'default',

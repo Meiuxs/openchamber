@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import {
   bindingNameOf,
   buildDbDsn,
+  bindingConfigRelativePathOf,
   buildDbhubMcpDraft,
+  buildDbhubToml,
   isBindingComplete,
   isDbhubServer,
   isValidBindingAlias,
@@ -87,13 +89,21 @@ describe('dbhub mcp entry helpers', () => {
     const draft = buildDbhubMcpDraft(
       { ...fields(), alias: 'Orders DB', readonly: true, dbhubVersion: '0.9.0' },
       'https://npm.mirror.local/',
+      'D:/proj/.opencode/dbhub/dbhub-orders-db.toml',
     );
     expect(draft.name).toBe('dbhub-orders-db');
     expect(draft.scope).toBe('project');
     expect(draft.type).toBe('local');
-    expect(draft.command).toEqual(['npx', '-y', '@bytebase/dbhub@0.9.0', '--transport', 'stdio', '--readonly']);
+    // dbhub 2.x dropped --readonly; the config file carries it now.
+    expect(draft.command).toEqual([
+      'npx', '-y', '@bytebase/dbhub@0.9.0',
+      '--config', 'D:/proj/.opencode/dbhub/dbhub-orders-db.toml',
+      '--transport', 'stdio',
+    ]);
+    expect(draft.command).not.toContain('--readonly');
     const env = Object.fromEntries(draft.environment.map((e) => [e.key, e.value]));
     expect(env.DSN).toBe(buildDbDsn(fields()));
+    expect(env.OPENCHAMBER_DB_READONLY).toBe('1');
     expect(env.npm_config_registry).toBe('https://npm.mirror.local/');
   });
 
@@ -101,25 +111,44 @@ describe('dbhub mcp entry helpers', () => {
     const draft = buildDbhubMcpDraft(
       { ...fields(), alias: 'analytics', readonly: false, dbhubVersion: 'latest' },
       null,
+      '/p/.opencode/dbhub/dbhub-analytics.toml',
     );
-    expect(draft.command).toEqual(['npx', '-y', '@bytebase/dbhub', '--transport', 'stdio']);
+    expect(draft.command).toEqual([
+      'npx', '-y', '@bytebase/dbhub',
+      '--config', '/p/.opencode/dbhub/dbhub-analytics.toml',
+      '--transport', 'stdio',
+    ]);
     expect(draft.environment.some((e) => e.key === 'npm_config_registry')).toBe(false);
+    expect(Object.fromEntries(draft.environment.map((e) => [e.key, e.value])).OPENCHAMBER_DB_READONLY).toBe('0');
+  });
+
+  test('writes the read-only switch into [[tools]] config', () => {
+    const ro = buildDbhubToml({ ...fields(), alias: 'orders', readonly: true, dbhubVersion: 'latest' });
+    expect(ro).toContain('[[sources]]');
+    expect(ro).toContain(`dsn = ${JSON.stringify(buildDbDsn(fields()))}`);
+    expect(ro).toContain('name = "execute_sql"');
+    expect(ro).toContain('readonly = true');
+
+    const rw = buildDbhubToml({ ...fields(), alias: 'orders', readonly: false, dbhubVersion: 'latest' });
+    expect(rw).toContain('readonly = false');
+    expect(bindingConfigRelativePathOf('Orders DB')).toBe('.opencode/dbhub/dbhub-orders-db.toml');
   });
 
   const server = (command: string[], environment: Record<string, string> = {}): McpServerWithScope =>
     ({ name: 'dbhub-orders', type: 'local', command, environment, scope: 'project' }) as McpServerWithScope;
 
-  test('recognizes dbhub entries by command or env', () => {
+  test('recognizes dbhub entries by command', () => {
     expect(isDbhubServer(server(['npx', '-y', '@bytebase/dbhub'], { DSN: 'mysql://h/db' }))).toBe(true);
     expect(isDbhubServer(server(['npx', '-y', '@bytebase/dbhub']))).toBe(true);
-    expect(isDbhubServer(server(['npx', '-y', 'other-server'], { DSN: 'mysql://h/db' }))).toBe(true);
+    // A third-party server that happens to use a DSN env var is not ours.
+    expect(isDbhubServer(server(['npx', '-y', 'other-server'], { DSN: 'mysql://h/db' }))).toBe(false);
     expect(isDbhubServer(server(['npx', '-y', 'other-server']))).toBe(false);
     expect(isDbhubServer(({ name: 'x', type: 'remote', url: 'https://x' }) as unknown as McpServerWithScope)).toBe(false);
   });
 
-  test('reads a binding spec back without the password', () => {
+  test('reads a binding spec back with the password so saving does not wipe it', () => {
     const spec = readDbBindingSpec(server(
-      ['npx', '-y', '@bytebase/dbhub@0.9.0', '--transport', 'stdio', '--readonly'],
+      ['npx', '-y', '@bytebase/dbhub@0.9.0', '--config', '/p/x.toml', '--transport', 'stdio'],
       { DSN: buildDbDsn(fields({ password: 'secret' })) },
     ));
     expect(spec).toMatchObject({
@@ -130,7 +159,7 @@ describe('dbhub mcp entry helpers', () => {
       database: 'orders',
       readonly: true,
       dbhubVersion: '0.9.0',
-      password: '',
+      password: 'secret',
     });
   });
 });
