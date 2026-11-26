@@ -39,12 +39,14 @@ const issue: RepositoryReference = {
 const listed: ReferencePickerItem = { source: 'repository', reference: issue };
 
 let scopeNow: Scope = READY_SCOPE;
+let remembered: RepositoryChoice = { path: null, all: undefined };
 let scopeArgs: Array<{ root: string | null; choice: RepositoryChoice }> = [];
 let browserOptions: { directory: string | null; directories: readonly string[] | null } | null = null;
 let retried = 0;
 
 mock.module('@/lib/source-control/repositoryScope', () => ({
     repositoryLabel: (repository: string) => repository,
+    useRememberedRepositoryChoice: () => remembered,
     useRepositoryScope: (root: string | null, choice: RepositoryChoice) => {
         scopeArgs.push({ root, choice });
         // The dialog asks with a null root when it does not scope the source.
@@ -133,6 +135,7 @@ let root: Root | null = null;
 
 beforeEach(() => {
     scopeNow = READY_SCOPE;
+    remembered = { path: null, all: undefined };
     scopeArgs = [];
     browserOptions = null;
     retried = 0;
@@ -184,6 +187,14 @@ describe('nested repositories in the reference picker', () => {
         expect(browserOptions?.directories).toEqual(['/work/a', '/work/b']);
         expect(browserOptions?.directory).toBe('/root');
         expect(button('repository-picker')?.dataset.selected).toBe('all');
+    });
+
+    test('starts on the repository the board remembers for the project', async () => {
+        remembered = { path: '/work/b', all: false };
+        await renderPicker();
+
+        expect(scopeArgs[0]?.choice).toEqual({ path: '/work/b', all: false });
+        expect(browserOptions?.directories).toBeNull();
     });
 
     test('a repository inside the folder is read alone, and switching it is a choice', async () => {

@@ -144,6 +144,10 @@ project picker uses, so both answer alike:
 - While discovery runs, or if it fails, the list area shows the board's
   "Looking for Git repositories..." / "Could not scan..." message with a
   Retry that forces `ensureNestedRepos`, instead of reading as `no-repo`.
+- The dialog starts on the repository the board remembers for the project
+  this directory belongs to (`useRememberedRepositoryChoice`), so both read
+  the same list instead of the picker re-reading every repository. A picker
+  choice made by hand stays for that open; it is not written back.
 - A checked item is stamped with the folder it was listed in
   (`itemWithDirectory`), so switching the picker afterward cannot move it;
   attaching reads each stamped folder through its own repository binding.

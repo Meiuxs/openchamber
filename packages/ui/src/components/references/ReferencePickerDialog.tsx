@@ -12,12 +12,12 @@ import { MobileOverlayPanel } from '@/components/ui/MobileOverlayPanel';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import type { RepositoryReferenceKind } from '@/lib/api/types';
 import { useI18n } from '@/lib/i18n';
-import { useRepositoryScope, type RepositoryChoice } from '@/lib/source-control/repositoryScope';
+import { useRememberedRepositoryChoice, useRepositoryScope, type RepositoryChoice } from '@/lib/source-control/repositoryScope';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/useUIStore';
 
 import { itemDirectory } from './acrossRepositories';
-import { DEFAULT_REPOSITORY_CHOICE, listDirectoriesOf, listDirectoryOf, repositoryChoiceFromPicker, scopesRepositories } from './pickerRepositoryScope';
+import { listDirectoriesOf, listDirectoryOf, repositoryChoiceFromPicker, scopesRepositories } from './pickerRepositoryScope';
 import { ReferenceBrowserList, ReferenceBrowserSearch, ReferenceBrowserTabs } from './ReferenceBrowser';
 import { usePreviewReturnScroll } from './usePreviewReturnScroll';
 import { IDLE_PULL_STATUS, useReferenceBrowser } from './useReferenceBrowser';
@@ -68,9 +68,16 @@ function ReferencePickerSurface({
     const [diffIncluded, setDiffIncluded] = React.useState<ReadonlySet<string>>(new Set());
     const [confirming, setConfirming] = React.useState(false);
     const [confirmError, setConfirmError] = React.useState<string | null>(null);
-    const [choice, setChoice] = React.useState<RepositoryChoice>(DEFAULT_REPOSITORY_CHOICE);
-
     const scoped = scopesRepositories(source, nestedRepositories);
+    // The board's choice for this project: start on the repository it lists,
+    // so opening here costs the same single read instead of every repository.
+    const rememberedChoice = useRememberedRepositoryChoice(scoped ? directory : null);
+    const [choice, setChoice] = React.useState<RepositoryChoice>(rememberedChoice);
+    const [repositoryChosen, setRepositoryChosen] = React.useState(false);
+    // A store hydrated after the dialog opened still seeds it, until the user picks.
+    React.useEffect(() => {
+        if (!repositoryChosen) setChoice(rememberedChoice);
+    }, [rememberedChoice, repositoryChosen]);
     const scope = useRepositoryScope(scoped ? directory : null, choice);
 
     const browser = useReferenceBrowser({
@@ -161,7 +168,10 @@ function ReferencePickerSurface({
             selected={scope.all ? null : scope.directory}
             root={directory}
             allAvailable={scope.allAvailable}
-            onSelect={(repository) => setChoice(repositoryChoiceFromPicker(repository))}
+            onSelect={(repository) => {
+                setRepositoryChosen(true);
+                setChoice(repositoryChoiceFromPicker(repository));
+            }}
             sheet={isMobile}
             size="inline"
         />

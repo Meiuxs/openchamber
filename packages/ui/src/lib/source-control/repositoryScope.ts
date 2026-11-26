@@ -3,10 +3,16 @@ import * as React from 'react';
 
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { discoversNestedRepos } from '@/lib/nestedRepositories';
+import { resolveProjectForSessionDirectory } from '@/lib/projectResolution';
+import { useSpaceProjectDirectory } from '@/lib/spaces/spaces-store';
 import { useGitStore, useIsGitRepo, useNestedRepos, type NestedRepoDiscovery } from '@/stores/useGitStore';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
+import { useProjectsStore } from '@/stores/useProjectsStore';
+import { useSourceBoardChoice } from '@/stores/useSourceBoardStore';
+import { useSessionUIStore } from '@/sync/session-ui-store';
 
 const NO_FOLDERS: string[] = [];
+const NO_REPOSITORY_CHOICE: RepositoryChoice = { path: null, all: undefined };
 
 export type RepositoryScope = {
     status: 'pending' | 'failed' | 'ready';
@@ -88,4 +94,31 @@ export function useRepositoryScope(root: string | null, choice: RepositoryChoice
         [acrossAvailable, choice.all, choice.path, nestedRepos, root, rootIsGitRepo],
     );
     return { ...resolution, retry, discoveryFailed: nestedRepos === null, discoveryPending: nestedRepos === undefined };
+}
+
+/** The board's remembered repository for a project, shaped for the shared resolution. */
+export const rememberedChoiceOf = (
+    remembered: { repositoryByProject: Record<string, string>; allRepositoriesByProject: Record<string, boolean> },
+    projectId: string | null,
+): RepositoryChoice => (
+    projectId
+        ? { path: remembered.repositoryByProject[projectId] ?? null, all: remembered.allRepositoriesByProject[projectId] }
+        : NO_REPOSITORY_CHOICE
+);
+
+/**
+ * The repository the board would list for the project this directory belongs
+ * to, so a picker opened elsewhere starts on the same one instead of reading
+ * every repository under the folder again.
+ */
+export function useRememberedRepositoryChoice(directory: string | null): RepositoryChoice {
+    const projects = useProjectsStore((state) => state.projects);
+    const worktreesByProject = useSessionUIStore((state) => state.availableWorktreesByProject);
+    const spaceProjectDirectory = useSpaceProjectDirectory(directory);
+    const choice = useSourceBoardChoice();
+    return React.useMemo(() => {
+        if (!directory) return NO_REPOSITORY_CHOICE;
+        const project = resolveProjectForSessionDirectory(projects, worktreesByProject, directory, spaceProjectDirectory);
+        return rememberedChoiceOf(choice, project?.id ?? null);
+    }, [choice, directory, projects, spaceProjectDirectory, worktreesByProject]);
 }

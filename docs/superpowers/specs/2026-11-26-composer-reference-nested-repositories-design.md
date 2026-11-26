@@ -22,7 +22,7 @@
 
 ## 非目标
 
-- 不持久化所选仓库。每次打开对话框使用默认值（根为仓库→根；根非仓库→全部）。板按 project 持久化，本次不搬。
+- 不持久化所选仓库：对话框只沿用板按 project 记住的选择，不写回、不另存。没有记录时用默认值（根为仓库→根；根非仓库→全部）。
 - 不改 `NewWorktreeDialog` 的选择器：它仍只读项目目录。
 - 不改变 VS Code 行为：VS Code 没有加号下拉，也没有板。
 - 不修复「根目录非仓库时粘贴 Issue 链接」的解析（`resolveReferenceLink` 仍只认会话目录），留作后续。
@@ -68,7 +68,7 @@
 
 Surface 内：
 
-- 本地状态 `choice = { path: string | null; all: boolean | undefined }`，初始 `{ path: null, all: undefined }`（即板的默认值）。
+- 本地状态 `choice = { path: string | null; all: boolean | undefined }`，初始为板对同一 project 记住的选择（`useRememberedRepositoryChoice`，目录→project 用 `resolveProjectForSessionDirectory`）；无记录时为 `{ path: null, all: undefined }`（即板的默认值）。用户手动切换后不再被覆盖，且不写回板。
 - `repositoryScoped = nestedRepositories && source === 'repository'`。
 - `scope = useRepositoryScope(repositoryScoped ? directory : null, choice)`。
 - `listDirectory = scope.directory ?? directory`。
@@ -110,7 +110,7 @@ Surface 内：
 ### 5. 已知取舍
 
 - 加号菜单文案仍由 `useRepositoryReferenceProvider(会话目录)` 决定；根非仓库时可能显示默认 provider 名称，点开后的对话框标题按实际 provider 显示。记为已知小瑕疵，本次不修。
-- 选择不持久化，每次打开回到默认值。
+- 选择不持久化，每次打开沿用板记住的仓库；用户本次切换只在本次打开内有效。
 
 ## 测试
 
