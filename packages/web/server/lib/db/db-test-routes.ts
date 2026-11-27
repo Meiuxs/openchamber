@@ -2,7 +2,12 @@ import type { Application, Request, Response } from '../shared/http-contracts.js
 import express from 'express';
 
 import { probeDbhubConnection, type DbProbeFields } from './dbhub-probe.js';
-import { removeBindingConfig, writeBindingConfig } from './binding-config.js';
+import {
+  readPrimaryBinding,
+  removeBindingConfig,
+  writeBindingConfig,
+  writePrimaryBinding,
+} from './binding-config.js';
 
 const directoryOf = (req: Request): string => {
   const raw = req.get('x-opencode-directory');
@@ -64,10 +69,44 @@ export const registerDbTestRoutes = (app: Application): void => {
     void (async () => {
       try {
         const alias = typeof req.query.alias === 'string' ? req.query.alias.trim().toLowerCase() : '';
-        const removed = await removeBindingConfig(directoryOf(req), alias);
+        const directory = directoryOf(req);
+        const removed = await removeBindingConfig(directory, alias);
+        // A deleted binding cannot stay the project default.
+        if (removed && (await readPrimaryBinding(directory)) === alias) {
+          await writePrimaryBinding(directory, null);
+        }
         res.json({ ok: true, removed });
       } catch (error) {
         res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'Could not remove the binding config' });
+      }
+    })();
+  });
+
+  app.get('/api/db/primary', (req: Request, res: Response) => {
+    void (async () => {
+      try {
+        res.json({ ok: true, alias: await readPrimaryBinding(directoryOf(req)) });
+      } catch (error) {
+        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'Could not read the primary binding' });
+      }
+    })();
+  });
+
+  app.put('/api/db/primary', express.json({ limit: '4kb' }), (req: Request, res: Response) => {
+    void (async () => {
+      try {
+        const body = (req.body ?? {}) as { alias?: unknown };
+        const alias = typeof body.alias === 'string' && body.alias.trim() !== ''
+          ? body.alias.trim().toLowerCase()
+          : null;
+        const result = await writePrimaryBinding(directoryOf(req), alias);
+        if (!result.ok) {
+          res.status(400).json(result);
+          return;
+        }
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'Could not save the primary binding' });
       }
     })();
   });

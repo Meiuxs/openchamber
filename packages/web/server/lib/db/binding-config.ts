@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 /**
@@ -44,4 +44,51 @@ export const removeBindingConfig = async (directory: string, alias: string): Pro
   } catch {
     return false;
   }
+};
+
+/**
+ * The project's default binding lives next to the TOMLs instead of inside the
+ * MCP entry: changing it must not rewrite any entry, because every entry change
+ * restarts the project's opencode instance.
+ */
+const PRIMARY_FILE_NAME = 'primary.json';
+
+export const primaryConfigPathOf = (directory: string): string | null => {
+  if (!path.isAbsolute(directory)) return null;
+  return path.join(bindingDirectoryOf(directory), PRIMARY_FILE_NAME);
+};
+
+export const readPrimaryBinding = async (directory: string): Promise<string | null> => {
+  const target = primaryConfigPathOf(directory);
+  if (!target) return null;
+  try {
+    const parsed = JSON.parse(await readFile(target, 'utf8')) as { alias?: unknown };
+    const alias = typeof parsed.alias === 'string' ? parsed.alias.trim().toLowerCase() : '';
+    return ALIAS_SLUG.test(alias) ? alias : null;
+  } catch {
+    return null;
+  }
+};
+
+export const writePrimaryBinding = async (
+  directory: string,
+  alias: string | null,
+): Promise<{ ok: true; alias: string | null } | { ok: false; error: string }> => {
+  const target = primaryConfigPathOf(directory);
+  if (!target) return { ok: false, error: 'A primary binding needs an absolute project directory' };
+  if (alias === null) {
+    await rm(target, { force: true });
+    return { ok: true, alias: null };
+  }
+  if (!ALIAS_SLUG.test(alias)) return { ok: false, error: 'Invalid binding name' };
+  const tomlPath = bindingConfigPathOf(directory, alias);
+  if (!tomlPath) return { ok: false, error: 'A primary binding needs an absolute project directory' };
+  try {
+    await stat(tomlPath);
+  } catch {
+    return { ok: false, error: 'That binding does not exist' };
+  }
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, JSON.stringify({ alias }), { encoding: 'utf8', mode: 0o600 });
+  return { ok: true, alias };
 };
