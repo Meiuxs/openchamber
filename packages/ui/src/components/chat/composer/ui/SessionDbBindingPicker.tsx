@@ -48,6 +48,11 @@ export const SessionDbBindingPicker: React.FC<SessionDbBindingPickerProps> = Rea
   if (!effective) return null;
 
   const label = effective.spec.alias.trim() || effective.entryName;
+  const hasPrimary = Boolean(primaryEntry && bindings.some((binding) => binding.entryName === primaryEntry));
+  const usingDefault = !selectedEntry || !bindings.some((binding) => binding.entryName === selectedEntry);
+  const defaultAlias = (hasPrimary
+    ? bindings.find((binding) => binding.entryName === primaryEntry)?.spec.alias
+    : bindings[0]?.spec.alias) || effective.entryName;
 
   return (
     <DropdownMenu>
@@ -65,30 +70,29 @@ export const SessionDbBindingPicker: React.FC<SessionDbBindingPickerProps> = Rea
       <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuLabel>{t('settings.db.picker.label')}</DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => setSelection(sessionId, null)}>
-          <span className="flex min-w-0 flex-col">
-            <span className="truncate">{t('settings.db.picker.defaultOption')}</span>
-            <span className="typography-micro text-muted-foreground">
-              {primaryEntry
-                ? (bindings.find((binding) => binding.entryName === primaryEntry)?.spec.alias || primaryEntry)
-                : (bindings[0]?.spec.alias || bindings[0]?.entryName)}
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate">
+              {hasPrimary || bindings.length === 1
+                ? t('settings.db.picker.defaultOption')
+                : t('settings.db.picker.fallbackOption')}
             </span>
+            <span className="typography-micro text-muted-foreground">{defaultAlias}</span>
           </span>
+          {usingDefault ? <Icon name="check" className="ms-2 size-3.5 shrink-0" /> : null}
         </DropdownMenuItem>
         {bindings.map((binding) => {
-          const isSelected = effective.entryName === binding.entryName && selectedEntry === binding.entryName;
+          const isSelected = !usingDefault && effective.entryName === binding.entryName;
           return (
             <DropdownMenuItem key={binding.entryName} onSelect={() => setSelection(sessionId, binding.entryName)}>
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate">
-                  {binding.spec.alias || binding.entryName}
-                  {isSelected ? ' ✓' : ''}
-                </span>
+                <span className="truncate">{binding.spec.alias || binding.entryName}</span>
                 <span className="truncate typography-micro text-muted-foreground">
                   {binding.spec.host}:{binding.spec.port}/{binding.spec.database}
                   {' · '}
                   {binding.spec.readonly ? t('settings.db.grid.readonly') : t('settings.db.grid.readwrite')}
                 </span>
               </span>
+              {isSelected ? <Icon name="check" className="ms-2 size-3.5 shrink-0" /> : null}
             </DropdownMenuItem>
           );
         })}

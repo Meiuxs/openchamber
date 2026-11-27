@@ -169,6 +169,8 @@ interface BindingDialogProps {
   existingAliases: readonly string[];
   directory: string | null;
   npmRegistry: string;
+  isPrimary: boolean;
+  showPrimarySwitch: boolean;
   onClose: () => void;
 }
 
@@ -179,6 +181,8 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
   existingAliases,
   directory,
   npmRegistry,
+  isPrimary,
+  showPrimarySwitch,
   onClose,
 }) => {
   const { t } = useI18n();
@@ -188,6 +192,8 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
   const [dsnInvalid, setDsnInvalid] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [dsnText, setDsnText] = React.useState('');
+  const [revealPassword, setRevealPassword] = React.useState(false);
+  const [makePrimary, setMakePrimary] = React.useState(isPrimary);
   const aliasTouched = React.useRef(false);
   const { createMcp, updateMcp, deleteMcp, loadMcpConfigs } = useMcpConfigStore(useShallow((s) => ({
     createMcp: s.createMcp,
@@ -203,9 +209,11 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
       setDsnText('');
       setParseNote(null);
       setDsnInvalid(false);
+      setRevealPassword(false);
+      setMakePrimary(isPrimary);
       aliasTouched.current = false;
     }
-  }, [open, spec]);
+  }, [open, spec, isPrimary]);
 
   // Any edit invalidates a previous test result — showing "connected" for a
   // host the user just changed is worse than showing nothing.
@@ -270,6 +278,14 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
 
   const aliasError = draft.alias.trim() !== '' && !isValidBindingAlias(draft.alias);
 
+  const portInvalid = (() => {
+    const port = draft.port.trim();
+    if (port === '') return false;
+    if (!/^\d{1,5}$/.test(port)) return true;
+    const value = Number(port);
+    return value < 1 || value > 65535;
+  })();
+
   const missingFields = (): string[] => {
     const missing: string[] = [];
     if (!isValidBindingAlias(draft.alias)) missing.push(t('settings.db.dialog.aliasLabel'));
@@ -281,6 +297,10 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
   // Keep the buttons live and say what is missing, instead of greying them out
   // with no explanation.
   const ensureComplete = (): boolean => {
+    if (portInvalid) {
+      toast.error(t('settings.db.dialog.portInvalid'));
+      return false;
+    }
     const missing = missingFields();
     if (missing.length === 0) return true;
     toast.error(t('settings.db.dialog.missingFields', { fields: missing.join(' / ') }));
@@ -324,6 +344,14 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
         }
       }
       await loadMcpConfigs({ force: true, directory });
+      // A rename would otherwise leave primary.json pointing at a gone alias,
+      // and the primary choice made in this dialog is what new sessions start from.
+      const desiredPrimary = showPrimarySwitch ? makePrimary : isPrimary;
+      if (desiredPrimary) {
+        await useDbBindingStore.getState().setPrimary(directory, nextDraft.name);
+      } else if (isPrimary) {
+        await useDbBindingStore.getState().setPrimary(directory, null);
+      }
       toast.success(t('settings.db.toast.saved', { name: nextDraft.name }));
       onClose();
     } catch (error) {
@@ -399,7 +427,10 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
             </label>
             <label className="space-y-1">
               <span className="typography-meta text-muted-foreground">{t('settings.db.dialog.portLabel')}</span>
-              <Input value={draft.port} onChange={(e) => patch({ port: e.target.value })} placeholder={DB_ENGINE_PORTS[draft.engine]} spellCheck={false} />
+              <Input value={draft.port} onChange={(e) => patch({ port: e.target.value })} placeholder={DB_ENGINE_PORTS[draft.engine]} spellCheck={false} aria-invalid={portInvalid} />
+              {portInvalid ? (
+                <span className="block typography-micro text-destructive">{t('settings.db.dialog.portInvalid')}</span>
+              ) : null}
             </label>
             <label className="space-y-1">
               <span className="typography-meta text-muted-foreground">{t('settings.db.dialog.databaseLabel')}</span>
@@ -411,12 +442,27 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
             </label>
             <label className="space-y-1">
               <span className="typography-meta text-muted-foreground">{t('settings.db.dialog.passwordLabel')}</span>
-              <Input
-                type="password"
-                value={draft.password}
-                onChange={(e) => patch({ password: e.target.value })}
-                autoComplete="new-password"
-              />
+              <span className="relative block">
+                <Input
+                  type={revealPassword ? 'text' : 'password'}
+                  value={draft.password}
+                  onChange={(e) => patch({ password: e.target.value })}
+                  autoComplete="new-password"
+                  className="pe-8"
+                  data-bwignore="true"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                />
+                <button
+                  type="button"
+                  onClick={() => setRevealPassword((value) => !value)}
+                  className="absolute inset-e-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  title={revealPassword ? t('settings.db.dialog.passwordHide') : t('settings.db.dialog.passwordShow')}
+                  aria-label={revealPassword ? t('settings.db.dialog.passwordHide') : t('settings.db.dialog.passwordShow')}
+                >
+                  <Icon name={revealPassword ? 'eye-off' : 'eye'} className="h-3.5 w-3.5" />
+                </button>
+              </span>
             </label>
             <label className="space-y-1">
               <span className="typography-meta text-muted-foreground">{t('settings.db.dialog.sslLabel')}</span>
@@ -451,9 +497,24 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
             <div className="min-w-0">
               <div className="text-sm font-medium">{t('settings.db.dialog.readonlyLabel')}</div>
               <div className="typography-micro text-muted-foreground">{t('settings.db.dialog.readonlyHint')}</div>
+              {!draft.readonly ? (
+                <div className="mt-1 typography-micro text-amber-600 dark:text-amber-400">
+                  {t('settings.db.dialog.readonlyWarning')}
+                </div>
+              ) : null}
             </div>
             <Switch checked={draft.readonly} onCheckedChange={(checked) => patch({ readonly: checked })} />
           </div>
+
+          {showPrimarySwitch ? (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+              <div className="min-w-0">
+                <div className="text-sm font-medium">{t('settings.db.dialog.primaryLabel')}</div>
+                <div className="typography-micro text-muted-foreground">{t('settings.db.dialog.primaryHint')}</div>
+              </div>
+              <Switch checked={makePrimary} onCheckedChange={setMakePrimary} />
+            </div>
+          ) : null}
 
           <details className="group">
             <summary className="typography-micro text-muted-foreground cursor-pointer select-none hover:text-foreground">
@@ -584,6 +645,9 @@ export const DatabasePage: React.FC = () => {
         ? deleteTarget.slice(DBHUB_NAME_PREFIX.length)
         : deleteTarget;
       await removeBindingToml(alias, settingsDirectory);
+      if (deleteTarget === effectivePrimary) {
+        await setPrimary(settingsDirectory, null);
+      }
       toast.success(result.message || t('settings.db.toast.deleted', { name: deleteTarget }));
       setDeleteTarget(null);
     } else {
@@ -619,6 +683,10 @@ export const DatabasePage: React.FC = () => {
 
       {servers.length === 0 ? (
         <p className="py-6 typography-meta text-muted-foreground">{t('settings.db.grid.empty')}</p>
+      ) : servers.length > 1 && !effectivePrimary ? (
+        <p className="pb-2 typography-micro text-muted-foreground">
+          {t('settings.db.grid.noPrimaryHint', { name: (servers[0] && readDbBindingSpec(servers[0])?.alias) || servers[0]?.name || '' })}
+        </p>
       ) : null}
 
       <div className={SETTINGS_CARD_GRID_CLASS}>
@@ -693,6 +761,8 @@ export const DatabasePage: React.FC = () => {
           existingAliases={existingAliases}
           directory={settingsDirectory}
           npmRegistry={npmRegistry}
+          isPrimary={dialogExistingName !== null && effectivePrimary === dialogExistingName}
+          showPrimarySwitch={dialogExistingName === null ? servers.length > 0 : servers.length > 1}
           onClose={() => setDialogSpec(null)}
         />
       ) : null}
