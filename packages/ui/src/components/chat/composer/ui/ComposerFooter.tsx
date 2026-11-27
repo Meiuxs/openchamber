@@ -32,6 +32,7 @@ import { ComposerActionButtons } from './ComposerActionButtons';
 import { ComposerAttachmentControls, type ComposerTrackerPicker } from './ComposerAttachmentControls';
 import { ComposerEnhanceButton } from './ComposerEnhanceButton';
 import { PermissionAutoAcceptButton } from './PermissionAutoAcceptButton';
+import { SessionDbBindingPicker } from './SessionDbBindingPicker';
 import type { PermissionMode } from '@/stores/utils/permissionAutoAccept';
 import type { BtwSelection } from '@/stores/useBtwStore';
 
@@ -306,6 +307,12 @@ function ComposerFooterView(props: ComposerFooterProps) {
                             footerIconButtonClass={footerIconButtonClass}
                             iconSizeClass={iconSizeClass}
                             withTooltip
+                        /> : null}
+                        {!isBtw && !parallelRun ? <SessionDbBindingPicker
+                            directory={directory}
+                            sessionId={currentSessionId}
+                            footerIconButtonClass={footerIconButtonClass}
+                            iconSizeClass={iconSizeClass}
                         /> : null}
                         {!isBtw ? <SessionGoalObjectiveCounter length={messageLength} /> : null}
                     </div>
