@@ -554,6 +554,20 @@ The server (`packages/web/server/lib/fs/ripgrep.js`) looks for ripgrep in this o
   in the window that shows its instance and raises that window; the
   receiving window is brought forward first only when it already shows the
   same instance, so the local window does not jump in front of a remote one.
+  A pull request notification (`itemUrl`, an http(s) address, and `directory`;
+  main checks the address and opens nothing itself) waits in main
+  (`notification-tracker-item.mjs`), the newest one only and for a minute at
+  most, and main sends the main window `openchamber:tracker-item-waiting`, which
+  carries nothing, unless the window is loading: a page on its way out must not
+  take the click. The listener (`useDesktopTrackerItemClicks`) takes the click
+  with `desktop_take_pending_tracker_item` on that nudge and whenever it mounts,
+  so a click made while the main window is missing, loading, on a startup or
+  recovery screen or remounting its main view opens once a listener is there.
+  A Mini Chat has no Tracker and takes none. A missing main window is opened. The
+  renderer hands a notification of another instance to
+  `desktop_open_host_tracker_item`, which opens it in that instance's window,
+  reusing an open one, the way `desktop_open_host_session` does for sessions;
+  a new window starts on the web route `?item=&itemDir=`.
 - User-confirmed local folder selection. The shared UI supplies the requested directory as the picker `defaultPath`; confirmation is required before filesystem access is retried.
 - Theme-file selection uses the local `~/.vscode/extensions` directory when present.
   The local-page-gated `desktop_pick_theme_file` command returns only the selected
@@ -606,7 +620,13 @@ The server (`packages/web/server/lib/fs/ripgrep.js`) looks for ripgrep in this o
   form posted into a new window is not repeated and keeps Electron's agent.
   Chromium reports `window.open(url)` without window features as a new tab, the
   same as a target=_blank link, so the session's preload (`browser-panel-preload.cjs`, exposes nothing) marks every
-  `window.open` that keeps its opener as a popup. A link aimed at a new tab is
+  `window.open` that keeps its opener as a popup. A popup that is not a POST
+  and opens while an agent's click, hover, typing or dialog answer runs on
+  the page, or within 5 seconds after that action (`browser-panel-agent-actions.mjs`), becomes a background panel tab
+  owned by the acting session instead, without `window.opener`, so the agent
+  can drive and close it; it keeps the sign-ins of the page that opened it; the user's own key, mouse or touch press on the page ends
+  that window early. The panel tells main which session acts through
+  `desktop_browser_agent_action`. A link aimed at a new tab is
   noopener by default and becomes a panel tab
   (`openchamber:browser-panel-open-tab` to the renderer). The event carries
   Electron's referrer URL and policy for the new tab's first load; a renderer

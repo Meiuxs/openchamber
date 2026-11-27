@@ -108,29 +108,12 @@ export function folderOfRepository(
     return folders.find((folder) => folder.remotes?.some(names))?.directory ?? 'none';
 }
 
-export type LinkRepository = {
-    status: 'pending' | 'failed' | 'ready';
-    directory: string;
-    owned: boolean;
-    retry: () => void;
-};
-
-export function useLinkRepository(root: string, url: string, options: { enabled?: boolean } = {}): LinkRepository {
-    const { enabled = true } = options;
+export function useFolderOfRepository(candidates: readonly string[]): (repositoryUrl: string) => string | 'none' | null {
     const { sourceControl } = useRuntimeAPIs();
-    const { rootIsGitRepo, nestedRepos, retry } = useFolderRepositories(root);
-    const discovered = Array.isArray(nestedRepos) ? nestedRepos : NO_FOLDERS;
-    const candidates = React.useMemo(
-        () => (!enabled ? NO_FOLDERS : rootIsGitRepo === true ? [root, ...discovered] : discovered),
-        [discovered, enabled, root, rootIsGitRepo],
-    );
     const bindings = useRepositoryBindings(candidates, sourceControl);
     const knownIdentities = useSourceControlAuthStore((state) => state.identities);
     const descriptors = useSourceControlProviders();
-    const urls = useRepositoryUrlMatcher();
-    const repositoryUrl = repositoryUrlOfItemLink(url, urls);
-    const match = React.useMemo(() => {
-        if (!enabled || !repositoryUrl || candidates.length === 0) return 'none';
+    return React.useMemo(() => {
         const folders = candidates.map((directory, index): FolderRemotes => {
             const binding = bindings[index];
             if (binding?.read) {
@@ -141,8 +124,30 @@ export function useLinkRepository(root: string, url: string, options: { enabled?
             }
             return { directory, remotes: binding?.status === 'error' ? [] : null };
         });
-        return folderOfRepository(repositoryUrl, folders, [...knownIdentities, ...defaultSourceControlIdentities(descriptors)], descriptors);
-    }, [bindings, candidates, descriptors, enabled, knownIdentities, repositoryUrl]);
+        const identities = [...knownIdentities, ...defaultSourceControlIdentities(descriptors)];
+        return (repositoryUrl) => (folders.length === 0 ? 'none' : folderOfRepository(repositoryUrl, folders, identities, descriptors));
+    }, [bindings, candidates, descriptors, knownIdentities]);
+}
+
+export type LinkRepository = {
+    status: 'pending' | 'failed' | 'ready';
+    directory: string;
+    owned: boolean;
+    retry: () => void;
+};
+
+export function useLinkRepository(root: string, url: string, options: { enabled?: boolean } = {}): LinkRepository {
+    const { enabled = true } = options;
+    const { rootIsGitRepo, nestedRepos, retry } = useFolderRepositories(root);
+    const discovered = Array.isArray(nestedRepos) ? nestedRepos : NO_FOLDERS;
+    const candidates = React.useMemo(
+        () => (!enabled ? NO_FOLDERS : rootIsGitRepo === true ? [root, ...discovered] : discovered),
+        [discovered, enabled, root, rootIsGitRepo],
+    );
+    const folderOf = useFolderOfRepository(candidates);
+    const urls = useRepositoryUrlMatcher();
+    const repositoryUrl = repositoryUrlOfItemLink(url, urls);
+    const match = enabled && repositoryUrl ? folderOf(repositoryUrl) : 'none';
 
     if (!enabled) return { status: 'ready', directory: root, owned: false, retry };
     if (rootIsGitRepo === null) return { status: 'pending', directory: root, owned: false, retry };

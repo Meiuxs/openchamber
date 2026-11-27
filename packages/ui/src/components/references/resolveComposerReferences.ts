@@ -30,11 +30,13 @@ export type ReferenceResolveDeps = {
      * repository other than the session's own.
      */
     contextFor?: (directory: string) => Promise<SourceControlReadContext | null>;
+    /** The same lookup when the caller already holds its folder contexts. */
+    contextOf?: (directory: string) => SourceControlReadContext | null;
     /**
      * A tracker item with its comments, by tracker, the tracker's id and the
      * container it was listed under (identifiers restart per container).
      */
-    readTrackerDetail: (provider: string, itemId: string, containerId: string | null) => Promise<TrackerItem>;
+    readTrackerDetail: (provider: string, itemId: string, containerId?: string | null) => Promise<TrackerItem>;
     /** The tracker's name for the agent's context header (`Linear`). */
     trackerName: (provider: string) => string;
 };
@@ -167,8 +169,10 @@ async function resolveOne(selection: ReferencePickerSelection, deps: ReferenceRe
     const { sourceControl } = deps;
     // A checked item carries the folder it was listed in, so a picker across
     // several repositories still reads each through its own binding.
-    const context = selection.directory && deps.contextFor
-        ? await deps.contextFor(selection.directory)
+    const context = selection.directory
+        ? (deps.contextFor
+            ? await deps.contextFor(selection.directory)
+            : (deps.contextOf ? deps.contextOf(selection.directory) : deps.context))
         : deps.context;
     if (!context) throw new Error('The repository is not available here');
     const { reference } = selection;

@@ -426,7 +426,16 @@ server announces both ends of that wait (`openchamber.session-assist`,
 or dropped by a new turn; the end re-checks the waiting directory at once. A
 wait whose end this client never hears stops holding the directory after five
 minutes. With the recap and the suggestion off nothing waits. A directory
-without a store is left to OpenCode's own sweep. The directory the user is in
+without a store is left to OpenCode's own sweep. When the window finds nothing,
+it asks OpenCode before releasing (`lib/opencode/location-work.ts`): a session
+in a turn or a running background job there (a subagent counts for its parent
+and its child) holds the directory the same way, re-checked at its delay, and
+the window's own checks run once more on the answer. The reads are global
+routes (`session.active`, `experimental.job.list`, `session.get`), sent without
+a directory outside isolated spaces, so they start no location and skip the
+folder trust check. A job list OpenCode does not have (before 2.3) counts as no
+jobs, and a session deleted meanwhile is skipped; any other failed read
+releases nothing. The directory the user is in
 is never released, and the server's reads without a directory of their own go
 to that same directory (`noteCurrentDirectory` in the server lifecycle), so a
 left project is not started again by them. Another client still showing the directory gets
@@ -434,6 +443,20 @@ left project is not started again by them. Another client still showing the dire
 failed release is ignored: OpenCode's own sweep still applies. The rule is the
 same on every surface; VS Code includes managed Chats in windows without a
 workspace folder.
+
+### Why the release asks OpenCode and not only the window
+
+A release disposes the location for every client, and OpenCode cancels what
+still runs there: a waiting question or permission ends as "Interaction
+cancelled because the location shut down". The window's stores hold only what
+it has seen, so work another client started, or work whose events this window
+missed, looked idle. OpenCode's own sweep keeps a location for exactly the
+active executions and running background jobs, and the release now reads the
+same two lists before it evicts. Leaving the release to OpenCode's hour-long
+sweep alone was rejected: every chat, worktree and project opened would keep
+its MCP servers for that hour. The window's checks stay first, because they
+also hold for OpenChamber's own waits OpenCode does not know about, and they
+skip the server reads while the window already sees work.
 
 ## Committing a revert
 
@@ -478,6 +501,25 @@ request can reach the server and still reject when its response is lost, so the
 next input re-reads the session before it can use the marker, whether or not the
 runtime changed. A failed read keeps that reconciliation pending. Stale revert completions do not restore composer drafts.
 
+OpenCode restores the files a reverted turn changed only from the snapshot that
+turn recorded when it started, and a turn records none in a folder outside Git or
+before Git was initialized there. `revertToMessage` returns OpenCode's staged
+revert. `revert-outcome.ts` warns that the files stayed as they were when that
+answer lists no restored file and a reverted turn has no snapshot; a revert that
+restored files, or whose turns all have snapshots and edited nothing, stays silent
+about files.
+
+### Why the reverted turns are read again from OpenCode
+
+The loaded messages come from pages the OpenChamber server strips of snapshots
+(`message-shells.ts`), so the store cannot tell a turn without a snapshot from a
+shelled one. The check reads OpenCode's own pages, newest first, down to the cut,
+and only when the staged revert lists no restored file. The staged revert's own
+`snapshot` decides alone only when the cut is no longer listed or that read
+fails: a revert without one cannot have restored anything. It does not decide
+otherwise, because a snapshot that failed at revert time still restores every
+turn that has one.
+
 ### Why input waits for a revert to finish
 
 The optimistic marker appears before descendant reverts and the server's stage
@@ -504,6 +546,14 @@ A failed read of the parent and a failed fork (an empty parent: OpenCode refuses
 ### Why the next turn boundary and not the next record
 
 The records between an answer and that boundary belong to the answer's turn. One of them is the `idle` record that OpenCode writes when a turn ends. The store gets that record only from a transcript read, never from a live event. A cut at the next record would leave it out of a fork made after a reload and keep it in a fork made from the live transcript.
+
+## Stop before the model answers takes the prompt back
+
+The composer's Stop and Esc go through `stopCurrentOperation` (`prompt-take-back.ts`). When the latest prompt has no answer yet (no answer text and no tool call after it; reasoning does not count, and no shell, compaction, synthetic or skill record ran since, `unanswered-prompt.ts`), the stop interrupts, waits up to 5 seconds for the live status to go idle (no take-back when it does not), rereads the tail, checks that the same prompt is still the unanswered one, then stages and at once commits a revert at that prompt's transcript cut with `files: false` and puts its text, files and context chips back into the composer. Every other stop (a subagent, a goal, an operator, the read-only banner, a revert's own abort) keeps `abortCurrentOperation`. The take-back is skipped for a subagent session, a session with a staged revert, a non-empty follow-up queue, a prompt still waiting in OpenCode's inbox, or a composer that already holds text, files or comments, so it never overwrites what the user is typing.
+
+### Why the Reverted bar stays hidden for a take-back
+
+The prompt is already back in the composer, so a bar offering to restore it would undo the take-back. Staging emits `session.revert.staged` before the commit clears it, so the bar would flash; `revert-bar-visibility.ts` hides it for that one session and cut. The cut's message is deleted by the commit, so the entry never matches again; a failed commit shows the bar again and clears the staged revert.
 
 ## An interruption whose reason is `shutdown`
 

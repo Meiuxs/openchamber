@@ -11,6 +11,7 @@ export interface RouteState {
    * what a copied `?reference=` link carries (`referenceLink.ts`).
    */
   reference: string | null;
+  trackerItem: { url: string; directory: string | null; newTab: boolean } | null;
 }
 
 export type RouteTab = 'chat' | 'git' | 'diff' | 'terminal' | 'files';
@@ -33,4 +34,7 @@ export const ROUTE_PARAMS = {
   SETTINGS: 'settings',
   FILE: 'file',
   REFERENCE: 'reference',
+  ITEM: 'item',
+  ITEM_DIRECTORY: 'itemDir',
+  ITEM_TAB: 'itemTab',
 } as const;

@@ -60,11 +60,16 @@ export const repositoryLabel = (repository: string, root: string): string => {
     return repository.startsWith(prefix) ? repository.slice(prefix.length) : repository;
 };
 
-export function useFolderRepositories(root: string | null) {
+/** Which folders a scope searches: `underRepository: false` scans only a folder that is not itself a repository. */
+export type FolderSearch = {
+    underRepository?: boolean;
+};
+
+export function useFolderRepositories(root: string | null, { underRepository = true }: FolderSearch = {}) {
     const { git } = useRuntimeAPIs();
     const homeDirectory = useDirectoryStore((state) => state.homeDirectory);
-    const searchesNested = root !== null && discoversNestedRepos(root, homeDirectory);
     const rootIsGitRepo = useIsGitRepo(root);
+    const searchesNested = root !== null && discoversNestedRepos(root, homeDirectory) && (underRepository || rootIsGitRepo === false);
     const nestedRepos = useNestedRepos(root);
     const ensureStatus = useGitStore((state) => state.ensureStatus);
     const ensureNestedRepos = useGitStore((state) => state.ensureNestedRepos);
@@ -85,10 +90,14 @@ export function useFolderRepositories(root: string | null) {
     return { rootIsGitRepo, nestedRepos: searchesNested ? nestedRepos : NO_FOLDERS, retry };
 }
 
-export function useRepositoryScope(root: string | null, choice: RepositoryChoice): RepositoryScope & { retry: () => void; discoveryFailed: boolean; discoveryPending: boolean } {
+export function useRepositoryScope(
+    root: string | null,
+    choice: RepositoryChoice,
+    search: FolderSearch = {},
+): RepositoryScope & { retry: () => void; discoveryFailed: boolean; discoveryPending: boolean } {
     const { sourceControl } = useRuntimeAPIs();
     const acrossAvailable = Boolean(sourceControl.referencesAcross);
-    const { rootIsGitRepo, nestedRepos, retry } = useFolderRepositories(root);
+    const { rootIsGitRepo, nestedRepos, retry } = useFolderRepositories(root, search);
     const resolution = React.useMemo(
         () => resolveRepositoryScope(root, rootIsGitRepo, nestedRepos, { path: choice.path, all: choice.all }, acrossAvailable),
         [acrossAvailable, choice.all, choice.path, nestedRepos, root, rootIsGitRepo],

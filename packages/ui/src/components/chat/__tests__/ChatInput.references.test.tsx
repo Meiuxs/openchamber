@@ -72,7 +72,10 @@ type NestedBindingState = { contexts: SourceControlReadContext[] };
 let nestedBindingStates: NestedBindingState[] = [];
 const referenceSources = await import('@/components/references/referenceSources');
 mock.module('@/components/references/referenceSources', () => ({
-  ...referenceSources, useRepositoryReadContext: () => readContext, useNestedRepositoryDirectories: () => nestedDirectories,
+  ...referenceSources,
+  useRepositoryReadContext: () => readContext,
+  useNestedRepositoryDirectories: () => nestedDirectories,
+  useRepositoryFolderReadContexts: (folders: readonly string[]) => folders.map((directory) => ({ directory, context: readContext })),
 }));
 const repositoryBinding = await import('@/lib/source-control/repository-binding');
 mock.module('@/lib/source-control/repository-binding', () => ({

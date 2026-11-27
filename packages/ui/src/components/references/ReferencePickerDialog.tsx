@@ -40,6 +40,7 @@ type ReferencePickerDialogProps = {
     purpose: ReferencePreviewPurpose;
     selection: 'multiple' | 'single';
     directory: string | null;
+    directories?: readonly string[] | null;
     initialGitHubKind?: RepositoryReferenceKind;
     /** Discover the repositories under a directory that is not one, and offer them beside it. */
     nestedRepositories?: boolean;
@@ -58,6 +59,7 @@ function ReferencePickerSurface({
     purpose,
     selection,
     directory,
+    directories = null,
     initialGitHubKind,
     nestedRepositories = false,
     onConfirm,
@@ -83,7 +85,7 @@ function ReferencePickerSurface({
     const browser = useReferenceBrowser({
         source,
         directory: listDirectoryOf(scope, directory),
-        directories: listDirectoriesOf(scope),
+        directories: scoped ? listDirectoriesOf(scope) : directories,
         isMobile,
         initialGitHubKind,
         retainedItems: checked,

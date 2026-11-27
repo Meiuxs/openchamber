@@ -195,7 +195,8 @@ import { createInsideSpaceTaskNaming, SPACE_TASK_TITLE_ROUTE } from './lib/space
 import { dockerHostOf } from './lib/spaces/places/ssh-host.js';
 import { SPACE_IDLE_EXIT_CODE } from './lib/spaces/layout.js';
 import { createSwitchController, registerSpaceRoutes } from './lib/spaces/routes.js';
-import { getCheckedOutBranch, getWorktreeBootstrapGateStatus, getWorktrees, isWorktreeDirectoryPinned, readRenameableGeneratedBranch, renameGeneratedWorktreeBranch, resolvePrimaryWorktreeRoot, setWorktreeTaskTitle } from './lib/git/service.js';
+import { getCheckedOutBranch, getWorktreeBootstrapGateStatus, getWorktrees, isWorktreeDirectoryPinned, readRenameableGeneratedBranch, renameGeneratedWorktreeBranch, resolvePrimaryWorktreeRoot } from './lib/git/service.js';
+import { followRenamedSession, setLinkedTaskTitle } from './lib/git/task-title-session.js';
 import { createEnvironmentStore } from './lib/environment/store.js';
 import { configureIntegrateSessions, readProjectPaths } from './lib/git/integrate-sessions.js';
 import { composeEnvironmentRuntime } from './lib/environment/composition.js';
@@ -221,7 +222,7 @@ import { createManagedConfigRuntime, retireClaudePlugin } from './lib/opencode/m
 import { createSharedOpenCodeServiceConnector, resolveServiceCliBinary } from './lib/opencode/shared-service.js';
 import { createAdaptivePluginSwitchStore, createGlobalConfigPluginSwitchStore } from './lib/opencode/global-plugin-switches.js';
 import { openCodePluginDelivery } from './lib/guests/opencode-plugin.js';
-import { createSessionDirectoryCanonicalizer } from './lib/opencode/directory-canonicalization.js';
+import { createSessionDirectoryCanonicalizer, relocateSessionsFromDriveTargets } from './lib/opencode/directory-canonicalization.js';
 import { createLimitFailoverRuntime } from './lib/limit-failover/runtime.js';
 import { createServerRateGateRuntime } from './lib/rate-gate/server-runtime.js';
 import { prepareInstanceDir } from './lib/opencode/instance-dir.js';
@@ -1494,10 +1495,9 @@ globalMessageStreamHub.subscribeStatus((status) => {
 
 console.log('[session-assist] listening for session events');
 globalMessageStreamHub.subscribeEvent((event) => {
-  const directory = isString(event?.directory) && event.directory && event.directory !== 'global'
-    ? event.directory
-    : '';
+  const directory = isString(event?.directory) && event.directory && event.directory !== 'global' ? event.directory : '';
   for (const payload of event?.translated?.() ?? []) {
+    followRenamedSession(payload, (sessionID) => openCodeSessionClient().session.get({ sessionID }));
     agentToolRuntime?.processSessionEvent(payload);
     sessionLineage.observe(payload);
     turnDurationRecorder.processPayload(payload, directory || payload.properties?.directory || '');
@@ -2260,7 +2260,7 @@ const openChamberControlService = createOpenChamberControlService({
   workNaming: {
     nameSpaceTask: (directory, title) => insideSpaceTaskNaming?.name(directory, title) ?? null,
     listWorktrees: getWorktrees,
-    setWorktreeTaskTitle,
+    setWorktreeTaskTitle: setLinkedTaskTitle,
     readPlaceholderBranch: (directory) => readRenameableGeneratedBranch(directory),
     renamePlaceholderBranch: renameGeneratedWorktreeBranch,
   },
@@ -2301,12 +2301,11 @@ const finishOpenCodeBootstrap = () => {
   void ensureGlobalWatcherStarted().catch((error) => {
     console.warn(`Global event watcher startup failed: ${error?.message || error}`);
   });
-  void waitForOpenCodeReady()
-    .then(() => sessionMetadataStore.migrateLegacy())
-    .catch((error) => console.warn('[openchamber-sessions] session metadata migration failed:', error?.message ?? error));
-  void waitForOpenCodeReady()
-    .then(() => openChamberSessionService.sessionArchive.migrateLegacy())
-    .catch((error) => console.warn('[openchamber-sessions] session archive migration failed:', error?.message ?? error));
+  for (const [name, migrate] of [
+    ['session metadata migration', () => sessionMetadataStore.migrateLegacy()],
+    ['session archive migration', () => openChamberSessionService.sessionArchive.migrateLegacy()],
+    ['mapped drive session repair', async () => getSessionDirectoryCanonicalizer() && relocateSessionsFromDriveTargets({ projects: await readProjectPaths(() => readSettingsFromDiskMigrated())(), client: openCodeSessionClient() })],
+  ] as const) void waitForOpenCodeReady().then(migrate).catch((error) => console.warn(`[openchamber-sessions] ${name} failed:`, error?.message ?? error));
 };
 const killProcessOnPort: typeof openCodeLifecycleRuntime.killProcessOnPort = (...args) => openCodeLifecycleRuntime.killProcessOnPort(...args);
 const waitForPortRelease: typeof openCodeLifecycleRuntime.waitForPortRelease = (...args) => openCodeLifecycleRuntime.waitForPortRelease(...args);

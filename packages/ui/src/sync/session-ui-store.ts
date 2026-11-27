@@ -46,6 +46,7 @@ import { isCheckoutRoot } from "@/lib/worktrees/integrateCheckouts"
 import type { ReadOnlySessionAssociation } from "@/lib/worktrees/readOnlySessionAssociation"
 import { admitSession, confirmNestedSessionTrust, isSessionAdmitted, nestedLineageProject, resolveAdmittedSessionProject, resolveProjectRefForWorktreeDirectory, withAdmittedLineage } from "./session-admission"
 import { isSessionDirectoryAdmitted } from "./session-admission-rule"
+import { revertAndReportFiles } from "./revert-outcome"
 import {
   getSyncSessions,
   getAllSyncSessions,
@@ -440,7 +441,7 @@ export type SessionUIState = {
   unarchiveSession: (id: string) => Promise<boolean>
   unarchiveSessions: (ids: string[], options?: UnarchiveSessionsOptions) => Promise<{ restoredIds: string[]; failedIds: string[] }>
   updateSessionTitle: (sessionId: string, title: string) => Promise<void>
-  revertToMessage: (sessionId: string, messageId: string, options?: { skipRedoPush?: boolean }) => Promise<void>
+  revertToMessage: (sessionId: string, messageId: string) => Promise<{ filesUnchanged: boolean }>
   forkFromMessage: (sessionId: string, messageId: string) => Promise<void>
   forkAfterMessage: (sessionId: string, messageId: string) => Promise<void>
   handleSlashUndo: (sessionId: string) => Promise<void>
@@ -2125,9 +2126,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
     await updateSessionTitleAction(sessionId, title, { byUser: true })
   },
 
-  revertToMessage: async (sessionId, messageId) => {
-    await revertToMessageAction(sessionId, messageId, { refresh: true })
-  },
+  revertToMessage: (sessionId, messageId) => revertAndReportFiles(sessionId, messageId),
 
   handleSlashUndo: async (sessionId) => {
     const messages = getSyncMessages(sessionId)
@@ -2154,7 +2153,8 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
       ? String(textPart.text).slice(0, 50) + (textPart.text.length > 50 ? "..." : "")
       : "[No text]"
 
-    await get().revertToMessage(sessionId, targetMessage.id)
+    const { filesUnchanged } = await get().revertToMessage(sessionId, targetMessage.id)
+    if (filesUnchanged) return
 
     const { toast } = await import("sonner")
     const { useI18nStore, formatMessage } = await import("@/lib/i18n/store")
@@ -2175,7 +2175,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
     const targetMessage = revertIndex >= 0 ? userMessages[revertIndex + 1] : undefined
 
     if (targetMessage) {
-      await get().revertToMessage(sessionId, targetMessage.id, { skipRedoPush: true })
+      await revertToMessageAction(sessionId, targetMessage.id, { refresh: true })
       const { toast } = await import("sonner")
       const { useI18nStore, formatMessage } = await import("@/lib/i18n/store")
       const { dictionary } = useI18nStore.getState()

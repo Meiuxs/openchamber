@@ -4,6 +4,7 @@ import { handleStandardGitBridgeMessage } from './bridge-git-runtime';
 import { handleSmallModelBridgeMessage, readOpenCodeSmallModelCatalog } from './bridge-small-model-runtime';
 import { handleFsBridgeMessage } from './bridge-fs-runtime';
 import { handleConfigBridgeMessage } from './bridge-config-runtime';
+import { handleMcpSkillsBridgeMessage } from './bridge-mcp-skills-runtime';
 import { handleSystemBridgeMessage } from './bridge-system-runtime';
 import { handleProxyBridgeMessage } from './bridge-proxy-runtime';
 import { waitForWorktreeRemoval } from './gitService';
@@ -13,6 +14,7 @@ import { createSessionStateStore, getOpenChamberDataDir } from './openchamberSes
 import { openCodeTrust } from './opencodeTrust';
 import {
   fetchOpenCodeSkillsFromApi,
+  loadSkillBody,
   persistSettings,
   readSettings,
   magicPrompts,
@@ -92,6 +94,10 @@ export async function handleBridgeMessage(message: BridgeRequest, ctx?: BridgeCo
     if (smallModelResponse) {
       return smallModelResponse;
     }
+    const mcpSkillsResponse = await handleMcpSkillsBridgeMessage({ id, type, payload }, ctx);
+    if (mcpSkillsResponse) {
+      return mcpSkillsResponse;
+    }
     const projectSetupResponse = await handleProjectSetupBridgeMessage({ id, type, payload }, projectSetupStore);
     if (projectSetupResponse) {
       return projectSetupResponse;
@@ -120,6 +126,7 @@ export async function handleBridgeMessage(message: BridgeRequest, ctx?: BridgeCo
         persistSettings,
         handleMagicPromptRequest: magicPrompts.handle,
         fetchOpenCodeSkillsFromApi,
+        loadSkillBody,
         clientReloadDelayMs: CLIENT_RELOAD_DELAY_MS,
       },
     );

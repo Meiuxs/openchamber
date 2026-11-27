@@ -124,6 +124,7 @@ export type OpenchamberNotification = {
   kind?: string
   sessionId?: string
   directory?: string
+  itemUrl?: string
   title?: string
   body?: string
   tag?: string

@@ -21,6 +21,19 @@ export function parseRoute(searchParams?: URLSearchParams): RouteState {
     settingsPath: parseSettingsPath(params),
     diffFile: parseDiffFile(params),
     reference: parseReference(params),
+    trackerItem: parseTrackerItem(params),
+  };
+}
+
+function parseTrackerItem(params: URLSearchParams): RouteState['trackerItem'] {
+  const url = params.get(ROUTE_PARAMS.ITEM)?.trim() ?? '';
+  if (!url) {
+    return null;
+  }
+  return {
+    url,
+    directory: params.get(ROUTE_PARAMS.ITEM_DIRECTORY)?.trim() || null,
+    newTab: params.get(ROUTE_PARAMS.ITEM_TAB) === '1',
   };
 }
 
@@ -165,7 +178,8 @@ export function hasRouteParams(): boolean {
       params.has(ROUTE_PARAMS.TAB) ||
       params.has(ROUTE_PARAMS.SETTINGS) ||
       params.has(ROUTE_PARAMS.FILE) ||
-      params.has(ROUTE_PARAMS.REFERENCE)
+      params.has(ROUTE_PARAMS.REFERENCE) ||
+      params.has(ROUTE_PARAMS.ITEM)
     );
   } catch {
     return false;

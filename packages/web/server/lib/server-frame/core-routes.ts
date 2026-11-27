@@ -1187,8 +1187,7 @@ export const registerCommonRequestMiddleware = (app: Application, dependencies: 
       req.path.startsWith('/api/config/mcp') ||
       req.path.startsWith('/api/config/snippets') ||
       req.path.startsWith('/api/config/settings') ||
-      req.path.startsWith('/api/config/skills') ||
-      req.path === '/api/config/skill-switch' ||
+      req.path.startsWith('/api/config/skill') ||
       req.path.startsWith('/api/config/plugins') ||
       req.path.startsWith('/api/config/websearch') ||
       req.path.startsWith('/api/config/warming') ||

@@ -28,7 +28,9 @@ OpenChamber's own server features live beside it: settings persistence in `../se
 - Message shells keep subagent results whole because older OpenCode versions put the child-session reference there. File-edit results also stay whole because their useful diff is already in metadata and shelling their short text saves no meaningful bytes. Shelled OpenChamber envelopes retain the outcome as well as the action so failed calls cannot read as successful actions.
 - Pending permissions and forms are seeded from the upstream stream because reading a directory's pending list can initialize that location. Replies without a request ID clear that kind's unverifiable pending request; turn end clears permissions and waiting pages, and restart clears all pending requests.
 - Running-image checks stop counting jobs older than OpenCode's image timeout plus a minute. An interrupted generation can remain listed after an OpenCode restart and otherwise hold a goal indefinitely.
-- Skill-list fetch failure remains distinct from an authoritative empty list. Partial local discovery reports its incompleteness, and process-level discovery flags travel with the list because browsers cannot infer which external roots OpenCode enables. The flags are read from the environment the managed OpenCode was started with (`getManagedOpenCodeProcessEnv()`), which includes variables from Settings and `opencode service set env` that OpenChamber's own process never has; with an external OpenCode, whose environment is unknown, they fall back to OpenChamber's own. Built-in skill IDs remain separate from display names because policy statements use IDs.
+- Skill-list fetch failure remains distinct from an authoritative empty list. Partial local discovery reports its incompleteness, and process-level discovery flags travel with the list because browsers cannot infer which external roots OpenCode enables. The flags are read from the environment the managed OpenCode was started with (`getManagedOpenCodeProcessEnv()`), which includes variables from Settings and `opencode service set env` that OpenChamber's own process never has; with an external OpenCode, whose environment is unknown, the list carries no flags and the UI hides nothing, because OpenChamber's own environment can differ from that server's and a hidden skill the agent does load is the worse mistake. Flag values follow OpenCode's parser: `1` or `true` in any case, nothing else. The VS Code bridge reports them the same way from its managed OpenCode's launch environment. Built-in skill IDs remain separate from display names because policy statements use IDs.
+- A skill an MCP server serves (OpenCode's `mcp_skills` flag) arrives with a `skill://` path and an empty body. The list keeps it on the `<built-in>` path, which is what makes every editing, renaming and file surface treat it as read-only; the UI tells it from OpenCode's own built-ins by the `:` in its name (`mcpSkillServer` in `skillLocations.ts`), since built-in skills carry no server. The detail route reads the body of any `<built-in>` skill listed without one through `experimental.skill.file` (`skill-body.ts`), so listing never asks an MCP server for files; a failed read leaves the body empty and the page still opens. The VS Code bridge does the same.
+- The Skills sidebar's "Skills from MCP servers" box writes `experimental.mcp_skills` to the user's global `opencode.json` (`PUT /api/config/skill-mcp`, `api:config/skill-mcp` in VS Code), so it works the same for a managed and an external OpenCode. OpenCode reads the flag once, when it builds a location's MCP layer, so the write is followed by `applyMcpSkillsFlag` (`mcp-skills-apply.ts`): for every running location it waits until OpenCode's own config shows the new value, then evicts the location so the next request rebuilds it. Evicting before that confirmation lost the race whenever the open UI's next request rebuilt the location before OpenCode's file watcher reread the config, and that build kept the old flag. Eviction runs the location's shutdown, which rejects pending permission requests, cancels forms and ends OpenCode terminals, so a location with a running session, a pending request or form, or a terminal is left alone and checked again every 15 seconds for up to an hour; a newer toggle cancels the older wait. A project `opencode.json` that sets any `experimental` key hides the global one for that project, because OpenCode takes `experimental` from one document only.
 - Skill installation provenance refines the Installed badge; provenance-write failure cannot fail a completed installation or deletion. Roots discovered in both user and project scope share disk reads while retaining discovery order and project precedence.
 - Skill supporting-file walks and repeated ancestor probes stay out of list enrichment because bundled environments can contain thousands of files. Skill mutation serialization and exclusive creation protect the check-then-write interval against concurrent requests and processes.
 - Installer options come only from host-owned callers. Commands, destinations, versions, URLs, and environments are never request-controlled, and installer output is discarded because it can contain registry or environment secrets. Windows extraction uses the system `tar.exe` because Git Bash tar interprets a drive-letter path as a remote host.
@@ -132,6 +134,10 @@ Login-shell rc files, PowerShell profiles, and PATH entries on unavailable netwo
 ### Why clearing a binary setting preserves a user's environment override
 
 The empty-string setting clears only a previously applied settings selection. An `OPENCODE_BINARY` supplied by the user's environment remains explicit configuration and survives that clear.
+
+### Why the Windows Desktop app is recognized by its files and not its install folder
+
+OpenCode Desktop is an Electron app, and its executable cannot run as the OpenCode server, so every binary candidate is checked against it. On Windows the check is a `.exe` with `resources\app.asar` beside it. The install folder name says nothing reliable: the installer updates in place and keeps the folder name of the first install, so official installs live in `Programs\OpenCode` and also in older names such as `Programs\@opencode-aidesktop` (#7734). Current Desktop builds ship no `opencode-cli.exe`, so that file cannot be the marker. A CLI kept inside an older Desktop install, `resources\opencode-cli.exe`, still passes, because its own folder has no `resources\app.asar`. `../../../../vscode/src/opencodeCliDiscovery.ts` has the same check for the VS Code extension.
 
 ### Why Windows binary resolution prefers a baseline executable
 
@@ -254,7 +260,28 @@ What stays outside this rule:
   own bridge (`packages/vscode/src/bridge-proxy-runtime.ts`), not through this
   proxy, so it is outside this rule.
 - Sessions already stored under an alias spelling are not migrated in bulk; a
-  later move through any of the paths above stores the real path.
+  later move through any of the paths above stores the real path. The one
+  exception is the mapped drive repair below.
+
+### Why sessions resolve with the JS `realpath` and not `fs.promises.realpath`
+
+A session directory has to come out in the spelling project paths get, because
+the sidebar, the project tree and search match the two as strings. Project
+paths resolve with Node's JS `realpath` (`settings/canonical-paths.ts`), which
+follows symlinks and junctions and keeps a mapped or `subst` drive letter. On
+Windows `fs.promises.realpath` and `realpathSync.native` answer with the
+drive's target instead: `R:\work` becomes `\\server\share\work`, which no
+project matches, so a session stored that way vanishes from the sidebar.
+
+Sessions 2.8.1 stored with the native one are moved back once OpenCode is ready
+after each start (`relocateSessionsFromDriveTargets`, Windows and a local
+OpenCode only): for each project whose native target differs from its own
+spelling, sessions stored under that target move under the project path; with
+nested targets the deepest one decides. A session already inside a registered
+project stays, such as one in a project added by its network path, and a
+running session waits for the next start. The repair cannot tell who stored a
+session there, so one the OpenCode CLI created in the network path moves too:
+it then shows up in OpenChamber, and the CLI sees it under the drive letter.
 
 ## Entrypoints and structure
 - `packages/web/server/lib/opencode/index.js`: public entrypoint (currently baseline placeholder).
@@ -316,7 +343,7 @@ in that user's sessions. On the fallback path the same rules are merged into
 `OPENCODE_CONFIG_CONTENT` (`appendManagedPermissions`).
 - `packages/web/server/lib/opencode/model-discovery.js`: bounded custom-provider `/models` discovery and optional models.dev enrichment. It accepts only http(s), does not follow redirects, filters transport headers, never returns credentials, and treats models.dev failure as unenriched success. Edit requests may name the provider so the host can fall back to a stored credential when the form leaves the key blank — the key from OpenCode's credential store or, failing that, the provider's stored config entry (`settings.apiKey`, else the first `env` variable name that is set in the server environment) — but only while the form's base URL still matches the saved one, so a changed URL never receives the stored credential; an explicitly entered replacement key wins.
 - `packages/web/server/lib/opencode/skill-routes.ts`: route registration for skill config CRUD, supporting files, and skills catalog scan/install flows.
-- `packages/web/server/lib/opencode/external-skill-switches.ts`: reads OpenCode's switches that turn off `.claude` and external skill roots from a given environment.
+- `packages/web/server/lib/opencode/external-skill-switches.ts`: builds the skill-list response, with the switch that turns off `.claude` skills read from the managed OpenCode's launch environment, for the web route and the VS Code bridge alike.
 - `packages/web/server/lib/opencode/proxy.js`: OpenCode API/SSE forwarding and readiness-gate route registration.
 - `packages/web/server/lib/opencode/session-runtime.js`: session status/activity runtime for OpenCode SSE events.
 - `packages/web/server/lib/opencode/watcher.js`: global SSE watcher runtime for push/session event fanout.
@@ -495,7 +522,7 @@ configured name.
 - `getConfigPaths(workingDirectory)`, `readConfigLayers(workingDirectory)`, `readConfig(workingDirectory)`: Config file operations with layer merging (user, project, custom). `readConfigLayers` isolates `INVALID_JSONC` per layer: a broken file is omitted from the merge (`{}` for that layer only), recorded on `layerErrors`, and does not block valid sibling layers. Writes still refuse to overwrite the broken file.
 - `readConfigFile(filePath)`: Reads one config file. Missing, whitespace-only, and comment-only files return `{}`; a comment-only file is recognized by `ValueExpected` being the only parse error. A `jsonc-parser` error that produces a partial or non-object tree throws `INVALID_JSONC` — partial parse trees must never be treated as authoritative (avoids rewriting a `$schema`-only stub over a full config). Content that yields no JSON value for any other reason (YAML, plain text) also throws instead of reading as empty.
 - `readConfigLayer(filePath)`: Same parse as `readConfigFile`, but isolates `INVALID_JSONC` to `{ config: {}, error }` so plugin/MCP/agent readers can skip one broken layer without aborting valid siblings. Writes still refuse to overwrite the broken file.
-- `writeConfig(config, filePath)`: Writes config with automatic backup, replacing the file atomically through `writeFileAtomic` so a watcher or a crash never sees a partial config. Refuses to overwrite an existing non-empty file that fails the same JSONC parse check. Existing files are edited structurally, so comments, formatting, and line endings outside the changed values survive. Equal-length arrays are diffed by index, including objects and nested arrays, unless a retained value moves between changed positions; an array that only grew at its end or only lost elements is edited per element, and other resized arrays are replaced whole. Comment-only files keep their comments with the serialized config appended below, and the edited text must re-parse to exactly the intended config or the write falls back to a normalized rewrite.
+- `writeConfig(config, filePath)`: Writes config with automatic backup, replacing the file atomically through `writeFileAtomic` so a watcher or a crash never sees a partial config. Refuses to overwrite an existing non-empty file that fails the same JSONC parse check. A file it may not write (EACCES, EPERM, EROFS) is refused before the backup with `code: 'CONFIG_READ_ONLY'` and its `path`; the backup replaces an older one, which `copyFileSync` would have left read-only for a read-only config. Existing files are edited structurally, so comments, formatting, and line endings outside the changed values survive. Equal-length arrays are diffed by index, including objects and nested arrays, unless a retained value moves between changed positions; an array that only grew at its end or only lost elements is edited per element, and other resized arrays are replaced whole. Comment-only files keep their comments with the serialized config appended below, and the edited text must re-parse to exactly the intended config or the write falls back to a normalized rewrite.
 - `getJsonEntrySource(layers, sectionKind, entryName)`: Resolves which config layer provides an entry. `sectionKind` is `agents`, `commands`, `providers`, or `mcp`, and both the v2 and the v1 spelling are searched (v2 wins). The result carries `sectionKey` (the spelling that actually held the entry) and `legacy`, so a writer can rewrite the same file in v2 shape. A failed custom or user layer throws `INVALID_JSONC` instead of treating that file as empty. A failed project layer is skipped so a valid user/custom entry can still be found.
 - `getJsonWriteTarget(layers, preferredScope)`: Determines write target for config updates. Throws `INVALID_JSONC` when the chosen target file is the unparseable layer.
 - `getFolderConfigPaths(workingDirectory)`: Every `opencode.json(c)` and `.opencode/opencode.json(c)` OpenCode 2 finds walking up from the project folder to the filesystem root, lowest priority first in OpenCode's order (`core/src/config/discovery.ts`): plain files outermost folder first, `.jsonc` after `.json`, then the `.opencode/` files the same way. Global config files are left out. Only MCP reads use it so far; agents, commands and providers still read the single project file.
@@ -1790,15 +1817,22 @@ does not spawn OpenCode and cannot pass `OPENCODE_CONFIG` or callback env vars.
     (`../session-knowledge/DOCUMENTATION.md`, *Whether the agent has the
     tools*); the token never leaves the plugin.
   - `GET /api/config/external-opencode-plugin?directory=` answers the same
-    check as `loadedInDirectory` (null when not asked, not registered, or
-    unknown), so the Settings banner can say when the config lists the plugin
-    but OpenCode has not loaded it for the open project. The UI passes the
+    check as `loadedInDirectory` (null when not asked or unknown), so the
+    Settings banner can say when the config lists the plugin but OpenCode has
+    not loaded it for the open project, and offers nothing when OpenCode loaded
+    it without an entry in the global config (its `plugins/` folder, a project
+    config). The check runs whether or not the global config lists the plugin,
+    since the plugin answers wherever OpenCode found it. The UI passes the
     directory the user works in and nothing else, since every check starts
     that location; the route waits out a worktree removal in progress there
     first, as the proxy does. The banner reads the registration without a
     directory first and the folder check second, so a cold location never
-    holds back Add, Remove or Copy path, and it reads both again when the
-    window regains focus.
+    holds back Remove or Copy path for a registered plugin; without an entry
+    the Add offer waits for the folder check, because it decides whether there
+    is anything to add. It reads both again when the window regains focus.
+  - Adding or removing the entry answers 409 `config-read-only` with the file's
+    `path` when `writeConfig` refuses a config it may not write, so the toast
+    names that file.
 - **Why one bridge file + dynamic `tools.remove` instead of per-message metadata
   isolation:** Filtering per turn via message metadata breaks Code Mode catalog
   hiding and requires tagging every background prompt sender. Treating the
