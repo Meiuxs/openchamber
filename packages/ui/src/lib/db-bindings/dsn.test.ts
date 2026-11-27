@@ -269,4 +269,17 @@ describe('session binding choice', () => {
     expect(dbBindingPromptFor({ ...input, announcedEntry: 'dbhub-orders' })).toBeNull();
     expect(dbBindingPromptFor({ ...input, bindings: [] })).toBeNull();
   });
+
+  test('uses the localized template and mode labels', () => {
+    const bindings = listDbBindings([srv('dbhub-orders', 'db.a')]);
+    const note = dbBindingPromptFor({
+      bindings,
+      primaryName: null,
+      selectedEntry: null,
+      announcedEntry: null,
+      template: 'Session DB: {name} ({entry}) at {target} [{mode}]',
+      modeLabel: { readonly: 'read-only', readwrite: 'read-write' },
+    });
+    expect(note?.text).toBe('Session DB: orders (dbhub-orders) at db.a:3306/orders [read-only]');
+  });
 });

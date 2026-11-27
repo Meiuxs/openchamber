@@ -36,6 +36,9 @@ import { loadMagicPrompts } from '@/lib/magicPrompts';
 import { captureRuntimeInstance, getRuntimeKey } from '@/lib/runtime-switch';
 import { createChatDraftIdentity, getChatDraftIdentityKey, type ChatDraftIdentity } from '@/lib/chatDraftPersistence';
 import { useBtwStore } from '@/stores/useBtwStore';
+import { useDbBindingStore } from '@/stores/useDbBindingStore';
+import { selectMcpServersForDirectory, useMcpConfigStore } from '@/stores/useMcpConfigStore';
+import { dbBindingPromptFor, listDbBindings } from '@/lib/db-bindings/dsn';
 import { buildBtwSyntheticTexts, btwPendingComposerKey, preparePendingBtwSend, startBtwSession } from '@/lib/btw';
 import { parseAgentMentions } from '@/lib/messages/agentMentions';
 import { toast } from '@/components/ui';
@@ -469,6 +472,23 @@ export function useComposerSubmission({
         const sentComposerText = !queuedOnly && inputSnapshot.hasContent ? inputSnapshot.message : '';
         const linkedReferencesToSend = await withRegisteredSharedPages(withReferencesFromText(referencesLinkedIn(sentComposerText, linkedReferences), referenceLinksIn(sentComposerText)));
 
+        // Point the session at its chosen database once, and again after a change.
+        const dbBindingNote = isBtwActive || !currentSessionId ? null : (() => {
+            const bindingStore = useDbBindingStore.getState();
+            const bindings = listDbBindings(selectMcpServersForDirectory(useMcpConfigStore.getState(), currentDirectory ?? null));
+            return dbBindingPromptFor({
+                bindings,
+                primaryName: currentDirectory ? (bindingStore.primaryByDirectory[currentDirectory] ?? null) : null,
+                selectedEntry: bindingStore.selectionBySession[currentSessionId] ?? null,
+                announcedEntry: bindingStore.announcedBySession[currentSessionId] ?? null,
+                template: t('settings.db.prompt.binding'),
+                modeLabel: {
+                    readonly: t('settings.db.grid.readonly'),
+                    readwrite: t('settings.db.grid.readwrite'),
+                },
+            });
+        })();
+
         const outgoing = buildOutgoingMessage({
             queued: queuedMessagesToSend,
             composerText: !queuedOnly && inputSnapshot.hasContent ? withoutSharedPageLinks(inputSnapshot.message, linkedReferencesToSend) : null,
@@ -477,6 +497,7 @@ export function useComposerSubmission({
             syntheticTexts: [
                 ...buildBtwSyntheticTexts({ isBtwActive, isPromotedBtwSession }),
                 ...(syntheticParts?.map((part) => part.text) ?? []),
+                ...(dbBindingNote ? [dbBindingNote.text] : []),
             ],
             references: isBtwActive ? [] : linkedReferencesToSend.map(toContextReference).concat(
                 !queuedOnly && inputSnapshot.hasContent ? sessionMentionsIn(inputSnapshot.message) : [],
@@ -680,6 +701,10 @@ export function useComposerSubmission({
                 void sessionActions.deferQuestionsAfterSend(deferredQuestions, sent);
             }
             if (isBtwActive) return;
+            // Only after the message went out: a failed send must announce again.
+            if (dbBindingNote && currentSessionId) {
+                useDbBindingStore.getState().markAnnounced(currentSessionId, dbBindingNote.entryName);
+            }
             const sessionState = useSessionUIStore.getState();
             const linkTargetSessionId = currentSessionId ?? sessionState.currentSessionId;
             const linkTargetDirectory = currentSessionId
