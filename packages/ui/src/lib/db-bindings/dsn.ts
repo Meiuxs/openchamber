@@ -312,16 +312,30 @@ export const resolveEffectiveBinding = (
   return byName(selectedEntry) ?? byName(primaryName) ?? bindings[0] ?? null;
 };
 
+/** Default wording for {@link buildDbBindingPrompt}; callers pass the localized template. */
+export const DB_BINDING_PROMPT_TEMPLATE =
+  '本会话数据库：{name}（{entry}，{target}，{mode}）。未明确指定其它库时请使用它；查库优先调用 {entry}_execute_sql / {entry}_search_objects。';
+
 /**
  * Tells the session which database it is meant to use. This is a preference,
  * not a restriction: every other binding's tools stay available.
  */
-export const buildDbBindingPrompt = (choice: DbBindingChoice): string => {
+export const buildDbBindingPrompt = (
+  choice: DbBindingChoice,
+  template: string = DB_BINDING_PROMPT_TEMPLATE,
+  modeLabel?: { readonly: string; readwrite: string },
+): string => {
   const { spec, entryName } = choice;
   const name = spec.alias.trim() || entryName.slice(DBHUB_NAME_PREFIX.length);
   const target = `${spec.host.trim()}:${spec.port.trim()}/${spec.database.trim()}`;
-  const mode = spec.readonly ? '只读' : '读写';
-  return `本会话数据库：${name}（${entryName}，${target}，${mode}）。未明确指定其它库时请使用它；查库优先调用 ${entryName}_execute_sql / ${entryName}_search_objects。`;
+  const mode = spec.readonly
+    ? (modeLabel?.readonly ?? '只读')
+    : (modeLabel?.readwrite ?? '读写');
+  return template
+    .replaceAll('{name}', name)
+    .replaceAll('{entry}', entryName)
+    .replaceAll('{target}', target)
+    .replaceAll('{mode}', mode);
 };
 
 /**
@@ -333,8 +347,13 @@ export const dbBindingPromptFor = (input: {
   primaryName: string | null;
   selectedEntry: string | null;
   announcedEntry: string | null;
+  template?: string;
+  modeLabel?: { readonly: string; readwrite: string };
 }): { entryName: string; text: string } | null => {
   const choice = resolveEffectiveBinding(input.bindings, input.primaryName, input.selectedEntry);
   if (!choice || choice.entryName === input.announcedEntry) return null;
-  return { entryName: choice.entryName, text: buildDbBindingPrompt(choice) };
+  return {
+    entryName: choice.entryName,
+    text: buildDbBindingPrompt(choice, input.template, input.modeLabel),
+  };
 };

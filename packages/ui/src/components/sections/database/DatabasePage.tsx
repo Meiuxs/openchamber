@@ -38,6 +38,7 @@ import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { useUIStore } from '@/stores/useUIStore';
+import { useDbBindingStore } from '@/stores/useDbBindingStore';
 import { selectMcpServersForDirectory, useMcpConfigStore } from '@/stores/useMcpConfigStore';
 import { useMcpStore } from '@/stores/useMcpStore';
 import type { McpServerStatus } from '@/lib/opencode/model';
@@ -243,6 +244,30 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
     setTest({ kind: 'idle' });
   };
 
+  /**
+   * Each SSL option is one localized string "名称 — 说明"; the dropdown splits it
+   * so the list still reads as short names, and the selected one shows the full
+   * sentence underneath.
+   */
+  const sslOptionText = (value: string): string => {
+    switch (value) {
+      case 'disable': return t('settings.db.dialog.sslOption.disable');
+      case 'prefer': return t('settings.db.dialog.sslOption.prefer');
+      case 'require': return t('settings.db.dialog.sslOption.require');
+      case 'verify-ca': return t('settings.db.dialog.sslOption.verify-ca');
+      case 'verify-full': return t('settings.db.dialog.sslOption.verify-full');
+      default: return t('settings.db.dialog.sslOption.default');
+    }
+  };
+  const splitSslOption = (text: string): { name: string; description: string } => {
+    const at = text.indexOf('—');
+    return at < 0
+      ? { name: text.trim(), description: '' }
+      : { name: text.slice(0, at).trim(), description: text.slice(at + 1).trim() };
+  };
+  const sslValues = [SSL_DEFAULT, ...DB_SSL_MODES.filter((mode) => mode !== '')];
+  const selectedSsl = draft.sslMode === '' ? SSL_DEFAULT : draft.sslMode;
+
   const aliasError = draft.alias.trim() !== '' && !isValidBindingAlias(draft.alias);
 
   const missingFields = (): string[] => {
@@ -396,19 +421,29 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
             <label className="space-y-1">
               <span className="typography-meta text-muted-foreground">{t('settings.db.dialog.sslLabel')}</span>
               <Select
-                value={draft.sslMode === '' ? SSL_DEFAULT : draft.sslMode}
+                value={selectedSsl}
                 onValueChange={(value) => patch({ sslMode: value === SSL_DEFAULT ? '' : (value as DbSslMode) })}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue>{splitSslOption(sslOptionText(selectedSsl)).name}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={SSL_DEFAULT}>{SSL_DEFAULT}</SelectItem>
-                  {DB_SSL_MODES.filter((mode) => mode !== '').map((mode) => (
-                    <SelectItem key={mode} value={mode}>{mode}</SelectItem>
-                  ))}
+                  {sslValues.map((value) => {
+                    const option = splitSslOption(sslOptionText(value));
+                    return (
+                      <SelectItem key={value} value={value}>
+                        <span className="flex flex-col">
+                          <span>{option.name}</span>
+                          <span className="typography-micro text-muted-foreground">{option.description}</span>
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
+              <span className="block typography-micro text-muted-foreground">
+                {splitSslOption(sslOptionText(selectedSsl)).description || t('settings.db.dialog.sslHint')}
+              </span>
             </label>
           </div>
 
@@ -433,6 +468,9 @@ const BindingDialog: React.FC<BindingDialogProps> = ({
                   placeholder={DEFAULT_DBHUB_VERSION}
                   spellCheck={false}
                 />
+                <span className="block typography-micro text-muted-foreground">
+                  {t('settings.db.dialog.versionHint')}
+                </span>
               </label>
             </div>
             {npmRegistry.trim() ? (
@@ -485,6 +523,10 @@ export const DatabasePage: React.FC = () => {
   );
   const mcpStatus = useMcpStore((state) => state.getStatusForDirectory(settingsDirectory));
   const refreshStatus = useMcpStore((state) => state.refresh);
+  const primaryEntry = useDbBindingStore((state) =>
+    settingsDirectory ? (state.primaryByDirectory[settingsDirectory] ?? null) : null);
+  const loadPrimary = useDbBindingStore((state) => state.loadPrimary);
+  const setPrimary = useDbBindingStore((state) => state.setPrimary);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [dialogSpec, setDialogSpec] = React.useState<DbBindingSpec | null>(null);
   const [dialogExistingName, setDialogExistingName] = React.useState<string | null>(null);
@@ -494,6 +536,23 @@ export const DatabasePage: React.FC = () => {
   React.useEffect(() => {
     void loadMcpConfigs({ directory: settingsDirectory });
   }, [loadMcpConfigs, settingsDirectory]);
+
+  React.useEffect(() => {
+    void loadPrimary(settingsDirectory);
+  }, [loadPrimary, settingsDirectory]);
+
+  // With a single binding there is nothing to choose from, so it is the primary
+  // without anything being written to disk.
+  const effectivePrimary = React.useMemo(() => {
+    if (servers.length === 1) return servers[0]?.name ?? null;
+    if (!primaryEntry) return null;
+    return servers.some((server) => server.name === primaryEntry) ? primaryEntry : null;
+  }, [servers, primaryEntry]);
+
+  const handleSetPrimary = async (name: string | null) => {
+    const result = await setPrimary(settingsDirectory, name);
+    if (!result.ok) toast.error(t('settings.db.grid.primaryFailed'));
+  };
 
   const handleRefresh = () => {
     if (isRefreshing) return;
@@ -572,6 +631,7 @@ export const DatabasePage: React.FC = () => {
         {servers.map((server) => {
           const spec = readDbBindingSpec(server);
           const enabled = server.disabled !== true;
+          const isPrimary = effectivePrimary === server.name;
           return (
             <SettingsCard
               key={server.name}
@@ -581,6 +641,7 @@ export const DatabasePage: React.FC = () => {
               badges={(
                 <>
                   <SettingsCardChip>{ENGINE_LABELS[spec?.engine ?? 'mysql']}</SettingsCardChip>
+                  {isPrimary ? <SettingsCardPill tone="info">{t('settings.db.grid.primaryBadge')}</SettingsCardPill> : null}
                   <StatusPill status={mcpStatus[server.name]?.status.status} enabled={enabled} />
                 </>
               )}
@@ -595,6 +656,11 @@ export const DatabasePage: React.FC = () => {
               actionsLabel={t('settings.mcp.grid.actionsAria', { name: server.name })}
               actions={[
                 { label: t('settings.db.grid.action.edit'), icon: 'edit', onSelect: () => handleEdit(server.name) },
+                ...(servers.length > 1
+                  ? [isPrimary
+                    ? { label: t('settings.db.grid.action.clearPrimary'), icon: 'star-fill' as const, onSelect: () => void handleSetPrimary(null) }
+                    : { label: t('settings.db.grid.action.makePrimary'), icon: 'star' as const, onSelect: () => void handleSetPrimary(server.name) }]
+                  : []),
                 { label: t('settings.common.actions.delete'), icon: 'delete-bin', destructive: true, onSelect: () => setDeleteTarget(server.name) },
               ]}
             />
