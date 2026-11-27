@@ -281,3 +281,60 @@ export const suggestBindingAlias = (source: string, taken: readonly string[]): s
 /** Fields the save button requires before the binding can be built. */
 export const isBindingComplete = (spec: DbBindingSpec): boolean =>
   isValidBindingAlias(spec.alias) && spec.host.trim() !== '' && spec.database.trim() !== '';
+
+/** Where the project's default binding is recorded (see the server's binding-config). */
+export const PRIMARY_CONFIG_RELATIVE_PATH = '.opencode/dbhub/primary.json';
+
+export interface DbBindingChoice {
+  entryName: string;
+  spec: DbBindingSpec;
+}
+
+/** Every dbhub preset entry in this project, in config order. */
+export const listDbBindings = (servers: readonly McpServerWithScope[]): DbBindingChoice[] =>
+  servers
+    .filter(isDbhubServer)
+    .map((server) => ({ entryName: server.name, spec: readDbBindingSpec(server) }))
+    .filter((choice): choice is DbBindingChoice => choice.spec !== null);
+
+/**
+ * The binding a session should use: an explicit per-session pick wins, then the
+ * project's primary, then the first binding. A stale name (deleted binding) is
+ * ignored instead of leaving the session pointing at nothing.
+ */
+export const resolveEffectiveBinding = (
+  bindings: readonly DbBindingChoice[],
+  primaryName: string | null,
+  selectedEntry: string | null,
+): DbBindingChoice | null => {
+  const byName = (name: string | null) =>
+    name ? bindings.find((binding) => binding.entryName === name) ?? null : null;
+  return byName(selectedEntry) ?? byName(primaryName) ?? bindings[0] ?? null;
+};
+
+/**
+ * Tells the session which database it is meant to use. This is a preference,
+ * not a restriction: every other binding's tools stay available.
+ */
+export const buildDbBindingPrompt = (choice: DbBindingChoice): string => {
+  const { spec, entryName } = choice;
+  const name = spec.alias.trim() || entryName.slice(DBHUB_NAME_PREFIX.length);
+  const target = `${spec.host.trim()}:${spec.port.trim()}/${spec.database.trim()}`;
+  const mode = spec.readonly ? '只读' : '读写';
+  return `本会话数据库：${name}（${entryName}，${target}，${mode}）。未明确指定其它库时请使用它；查库优先调用 ${entryName}_execute_sql / ${entryName}_search_objects。`;
+};
+
+/**
+ * The prompt to inject before a send, or null when this session already saw the
+ * same binding announced (so a long conversation does not repeat it).
+ */
+export const dbBindingPromptFor = (input: {
+  bindings: readonly DbBindingChoice[];
+  primaryName: string | null;
+  selectedEntry: string | null;
+  announcedEntry: string | null;
+}): { entryName: string; text: string } | null => {
+  const choice = resolveEffectiveBinding(input.bindings, input.primaryName, input.selectedEntry);
+  if (!choice || choice.entryName === input.announcedEntry) return null;
+  return { entryName: choice.entryName, text: buildDbBindingPrompt(choice) };
+};

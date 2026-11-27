@@ -6,13 +6,17 @@ import {
   bindingSlugOf,
   buildDbhubMcpDraft,
   buildDbhubToml,
+  dbBindingPromptFor,
   isBindingComplete,
   isDbhubServer,
   isValidBindingAlias,
+  listDbBindings,
   parseDbConnectionUrl,
   readDbBindingSpec,
+  resolveEffectiveBinding,
   suggestBindingAlias,
   summarizeDbhubError,
+  buildDbBindingPrompt,
   type DbConnectionFields,
 } from './dsn';
 import type { McpServerWithScope } from '@/stores/useMcpConfigStore';
@@ -205,8 +209,7 @@ describe('validation', () => {
     expect(suggestBindingAlias('Orders', ['orders'])).toBe('orders-2');
   });
 
-  test('summarizeDbhubError keeps the cause and drops stack frames', () => {
-    const denied = [
+  test('summarizeDbhubError keeps the cause and drops stack frames', () => {    const denied = [
       'Configuration source: environment variable Connecting to 1 database source(s)...',
       '- default: mysql://app@db.local:3306/orders',
       'Failed to connect to MySQL database: Error: connect ECONNREFUSED 10.0.0.9:3306',
@@ -221,5 +224,49 @@ describe('validation', () => {
     expect(summarizeDbhubError(sqlMessage)).toBe("Access denied for user 'app'@'10.1.1.1'");
 
     expect(summarizeDbhubError('Connection test timed out')).toBe('Connection test timed out');
+  });
+});
+
+describe('session binding choice', () => {
+  const srv = (name: string, host: string) => ({
+    name,
+    type: 'local',
+    scope: 'project',
+    command: ['npx', '-y', '@bytebase/dbhub'],
+    environment: { DSN: `mysql://u@${host}:3306/orders`, OPENCHAMBER_DB_READONLY: '1' },
+  }) as unknown as McpServerWithScope;
+
+  test('lists only dbhub entries and resolves primary/selection', () => {
+    const all = [
+      srv('dbhub-orders', 'db.a'),
+      srv('dbhub-archive', 'db.b'),
+      { name: 'x', type: 'remote', url: 'https://x' } as unknown as McpServerWithScope,
+    ];
+    const list = listDbBindings(all);
+    expect(list.map((binding) => binding.entryName)).toEqual(['dbhub-orders', 'dbhub-archive']);
+    expect(resolveEffectiveBinding(list, 'dbhub-archive', null)?.entryName).toBe('dbhub-archive');
+    expect(resolveEffectiveBinding(list, 'dbhub-archive', 'dbhub-orders')?.entryName).toBe('dbhub-orders');
+    // A stale primary or a stale selection falls back to the first binding.
+    expect(resolveEffectiveBinding(list, 'dbhub-gone', null)?.entryName).toBe('dbhub-orders');
+    expect(resolveEffectiveBinding(list, null, 'dbhub-gone')?.entryName).toBe('dbhub-orders');
+    expect(resolveEffectiveBinding([], null, null)).toBeNull();
+  });
+
+  test('builds a prompt with name, target and mode only', () => {
+    const list = listDbBindings([srv('dbhub-orders', 'db.a')]);
+    const text = buildDbBindingPrompt(list[0]!);
+    expect(text).toContain('dbhub-orders');
+    expect(text).toContain('db.a:3306/orders');
+    expect(text).toContain('只读');
+    expect(text).toContain('dbhub-orders_execute_sql');
+    expect(text).not.toContain('hunter2');
+  });
+
+  test('announces once per binding', () => {
+    const bindings = listDbBindings([srv('dbhub-orders', 'db.a')]);
+    const input = { bindings, primaryName: null, selectedEntry: null, announcedEntry: null };
+    expect(dbBindingPromptFor(input)?.entryName).toBe('dbhub-orders');
+    expect(dbBindingPromptFor({ ...input, announcedEntry: 'dbhub-orders' })).toBeNull();
+    expect(dbBindingPromptFor({ ...input, bindings: [] })).toBeNull();
   });
 });
