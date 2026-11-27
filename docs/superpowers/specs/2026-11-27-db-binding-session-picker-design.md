@@ -120,3 +120,12 @@
 - **软约束**:AI 仍可能选错库。提示文本尽量明确;后续若需要硬隔离,升级为按绑定生成 agent。
 - 主选文件与 MCP 条目可能短暂不一致(条目被手工删除)→ 读取时以“条目存在”为准,不存在则视为无主选。
 - 多客户端同时改主选 → 后写覆盖,下一轮刷新可见。
+
+## 11. 实现记录(2026-11-27)
+
+- 服务端:`binding-config.ts` 增加 `primaryConfigPathOf/readPrimaryBinding/writePrimaryBinding`;`db-test-routes.ts` 增加 `GET/PUT /api/db/primary`,并在删除绑定时清空指向它的主选。
+- 客户端:`dsn.ts` 增加 `listDbBindings/resolveEffectiveBinding/buildDbBindingPrompt/dbBindingPromptFor`;提示模板默认中文,调用方传入 i18n 模板(`settings.db.prompt.binding`)与只读/读写标签。
+- 状态:`stores/useDbBindingStore.ts`(zustand persist),主选与会话选择都存条目名;切换选择会清除已公告标记,确保重新注入。
+- 设置页:主选徽标 + 右键「设为主选 / 取消主选」;SSL 六项改为「中文名 + 说明」两行下拉,选中项下方显示完整说明;dbhub 版本补一行 hint。
+- 会话:输入框底部左侧新增数据库选择器(`SessionDbBindingPicker`),仅在已有会话且项目有绑定时出现;发送时通过 synthetic context 注入一次。
+- 已知取舍:新会话草稿阶段(session 尚未创建)不显示选择器,首条消息按主选注入;会话创建后可切换。
