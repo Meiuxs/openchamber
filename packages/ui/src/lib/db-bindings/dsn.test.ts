@@ -252,6 +252,12 @@ describe('session binding choice', () => {
     expect(resolveEffectiveBinding([], null, null)).toBeNull();
   });
 
+  test('skips disabled bindings', () => {
+    const disabled = { ...srv('dbhub-archive', 'db.b'), disabled: true } as unknown as McpServerWithScope;
+    const list = listDbBindings([srv('dbhub-orders', 'db.a'), disabled]);
+    expect(list.map((binding) => binding.entryName)).toEqual(['dbhub-orders']);
+  });
+
   test('builds a prompt with name, target and mode only', () => {
     const list = listDbBindings([srv('dbhub-orders', 'db.a')]);
     const text = buildDbBindingPrompt(list[0]!);

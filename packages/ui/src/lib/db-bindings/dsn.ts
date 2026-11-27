@@ -290,10 +290,12 @@ export interface DbBindingChoice {
   spec: DbBindingSpec;
 }
 
-/** Every dbhub preset entry in this project, in config order. */
+/** Every enabled dbhub preset entry in this project, in config order. */
 export const listDbBindings = (servers: readonly McpServerWithScope[]): DbBindingChoice[] =>
   servers
-    .filter(isDbhubServer)
+    // A disabled entry's tools are not registered, so pointing a session at it
+    // would name a call that fails.
+    .filter((server) => isDbhubServer(server) && server.disabled !== true)
     .map((server) => ({ entryName: server.name, spec: readDbBindingSpec(server) }))
     .filter((choice): choice is DbBindingChoice => choice.spec !== null);
 

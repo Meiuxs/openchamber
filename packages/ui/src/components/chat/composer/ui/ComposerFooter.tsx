@@ -235,6 +235,12 @@ function ComposerFooterView(props: ComposerFooterProps) {
                                 iconSizeClass={iconSizeClass}
                             /> : null}
                             {!isBtw ? <SessionGoalObjectiveCounter length={messageLength} /> : null}
+                            {!isBtw && !parallelRun ? <SessionDbBindingPicker
+                                directory={directory}
+                                sessionId={currentSessionId}
+                                footerIconButtonClass={footerIconButtonClass}
+                                iconSizeClass={iconSizeClass}
+                            /> : null}
                         </div>
                         <div className="flex items-center min-w-0 gap-x-1 justify-end">
                             {waitingForOpenCode ? <OpenCodeStartupNote /> : null}

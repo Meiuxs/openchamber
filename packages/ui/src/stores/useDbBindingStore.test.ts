@@ -34,4 +34,16 @@ describe('useDbBindingStore', () => {
     expect(useDbBindingStore.getState().selectionBySession.s1).toBeUndefined();
     expect(useDbBindingStore.getState().announcedBySession.s1).toBeUndefined();
   });
+
+  test('loads the alias from the server and stores the entry name', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ ok: true, alias: 'orders' }), { status: 200 })) as typeof fetch;
+    try {
+      await useDbBindingStore.getState().loadPrimary('/tmp/project');
+      expect(useDbBindingStore.getState().primaryByDirectory['/tmp/project']).toBe('dbhub-orders');
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
 });

@@ -127,6 +127,13 @@ export function useComposerSubmission({
     } = sessionScope;
     const { parallel } = parallelRun;
     const { sessionPhase, autoReviewRunning } = sessionLifecycle;
+
+    // The primary lives on disk; the composer has to read it even when the
+    // settings page (the other reader) was never opened in this client.
+    const dbBindingDirectory = currentSessionDirectoryForSync ?? currentDirectory ?? null;
+    React.useEffect(() => {
+        if (dbBindingDirectory) void useDbBindingStore.getState().loadPrimary(dbBindingDirectory);
+    }, [dbBindingDirectory]);
     const { messageQueueTarget, takeForSend } = queueState;
     const {
         effectiveBtwSelection, currentProviderId, currentModelId, currentAgentName, currentVariant,
@@ -473,14 +480,17 @@ export function useComposerSubmission({
         const linkedReferencesToSend = await withRegisteredSharedPages(withReferencesFromText(referencesLinkedIn(sentComposerText, linkedReferences), referenceLinksIn(sentComposerText)));
 
         // Point the session at its chosen database once, and again after a change.
-        const dbBindingNote = isBtwActive || !currentSessionId ? null : (() => {
+        // A brand-new draft has no session yet, so the first message carries the
+        // project primary; it is not marked as announced (nothing to mark).
+        const sendDirectory = currentSessionDirectoryForSync ?? currentDirectory ?? null;
+        const dbBindingNote = isBtwActive ? null : (() => {
             const bindingStore = useDbBindingStore.getState();
-            const bindings = listDbBindings(selectMcpServersForDirectory(useMcpConfigStore.getState(), currentDirectory ?? null));
+            const bindings = listDbBindings(selectMcpServersForDirectory(useMcpConfigStore.getState(), sendDirectory));
             return dbBindingPromptFor({
                 bindings,
-                primaryName: currentDirectory ? (bindingStore.primaryByDirectory[currentDirectory] ?? null) : null,
-                selectedEntry: bindingStore.selectionBySession[currentSessionId] ?? null,
-                announcedEntry: bindingStore.announcedBySession[currentSessionId] ?? null,
+                primaryName: sendDirectory ? (bindingStore.primaryByDirectory[sendDirectory] ?? null) : null,
+                selectedEntry: currentSessionId ? (bindingStore.selectionBySession[currentSessionId] ?? null) : null,
+                announcedEntry: currentSessionId ? (bindingStore.announcedBySession[currentSessionId] ?? null) : null,
                 template: t('settings.db.prompt.binding'),
                 modeLabel: {
                     readonly: t('settings.db.grid.readonly'),
@@ -589,6 +599,9 @@ export function useComposerSubmission({
                         sendMessageOptions,
                     );
                     if (currentSessionId) actionsNote?.commit(currentSessionId);
+                    if (dbBindingNote && currentSessionId) {
+                        useDbBindingStore.getState().markAnnounced(currentSessionId, dbBindingNote.entryName);
+                    }
                 } catch (error) {
                     restoreConsumedInput();
                     toast.error(getSubmitErrorMessage(error, t(command.errorToastKey)));
@@ -701,12 +714,13 @@ export function useComposerSubmission({
                 void sessionActions.deferQuestionsAfterSend(deferredQuestions, sent);
             }
             if (isBtwActive) return;
-            // Only after the message went out: a failed send must announce again.
-            if (dbBindingNote && currentSessionId) {
-                useDbBindingStore.getState().markAnnounced(currentSessionId, dbBindingNote.entryName);
-            }
             const sessionState = useSessionUIStore.getState();
             const linkTargetSessionId = currentSessionId ?? sessionState.currentSessionId;
+            // Only after the message went out: a failed send must announce again.
+            // A draft's first message is announced against the session it created.
+            if (dbBindingNote && linkTargetSessionId) {
+                useDbBindingStore.getState().markAnnounced(linkTargetSessionId, dbBindingNote.entryName);
+            }
             const linkTargetDirectory = currentSessionId
                 ? currentSessionDirectoryForSync ?? currentDirectory
                 : sessionState.currentSessionDirectory
