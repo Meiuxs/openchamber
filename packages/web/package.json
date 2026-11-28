@@ -81,7 +81,8 @@
   },
   "bundleDependencies": [
     "bun-pty",
-    "zod"
+    "zod",
+    "@openchamber/sdk"
   ],
   "devDependencies": {
     "@base-ui/react": "^1.9.0",
@@ -143,8 +144,5 @@
     "public",
     "package.json",
     "README.md"
-  ],
-  "bundledDependencies": [
-    "@openchamber/sdk"
   ]
 }

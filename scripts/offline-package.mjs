@@ -110,8 +110,10 @@ for (const [target, prefix] of keep) {
 // 打包阶段不应该再依赖一次重建。
 //
 // 内网机器上内部 registry 未必收录 @openchamber/sdk，所以打包时显式给 web 声明
-// bundledDependencies，让 SDK 以 package/node_modules/@openchamber/sdk 的形式
-// 进包（只有声明了才会打进去；不声明时产物取决于源 package.json 的历史状态）。
+// bundleDependencies，让 SDK 以 package/node_modules/@openchamber/sdk 的形式进包。
+// 注意必须写标准键 `bundleDependencies`：npm 安装时只认它；`bundledDependencies`
+// 这个别名如果和标准键并存，npm 会忽略别名，包里的 SDK 就形同虚设，装包时
+// 仍会去 registry 解析 SDK 并报 ETARGET。
 // 打包后再把两个源 manifest 还原，工作区保持干净。
 const webManifestPath = path.join(repoRoot, 'packages/web/package.json');
 const packTargets = [path.join(repoRoot, 'packages/sdk/package.json'), webManifestPath];
@@ -129,9 +131,13 @@ process.on('exit', restoreManifests);
 process.once('SIGINT', () => restoreAndExit(130));
 process.once('SIGTERM', () => restoreAndExit(143));
 const webManifest = JSON.parse(beforePack.get(webManifestPath));
-const bundled = Array.isArray(webManifest.bundledDependencies) ? webManifest.bundledDependencies : [];
+// `bundledDependencies` 是 `bundleDependencies` 的历史别名，两者并存时以标准键为准。
+const bundled = Array.isArray(webManifest.bundleDependencies)
+  ? webManifest.bundleDependencies
+  : (Array.isArray(webManifest.bundledDependencies) ? webManifest.bundledDependencies : []);
 if (!bundled.includes('@openchamber/sdk')) {
-  webManifest.bundledDependencies = [...bundled, '@openchamber/sdk'];
+  webManifest.bundleDependencies = [...bundled, '@openchamber/sdk'];
+  delete webManifest.bundledDependencies;
   fs.writeFileSync(webManifestPath, `${JSON.stringify(webManifest, null, 2)}\n`);
 }
 run('bun pm pack --ignore-scripts --cwd packages/sdk');
@@ -152,7 +158,23 @@ if (webTarballList.status !== 0) {
   fail(`无法列出 web tarball 内容（需要 tar）：${webTarballList.error?.message ?? webTarballList.stderr}`);
 }
 if (!webTarballList.stdout.includes('package/node_modules/@openchamber/sdk/package.json')) {
-  fail('web tarball 里没有 @openchamber/sdk，离线安装会去 registry 解析 SDK；请检查 packages/web/package.json 的 bundledDependencies。');
+  fail('web tarball 里没有 @openchamber/sdk，离线安装会去 registry 解析 SDK；请检查 packages/web/package.json 的 bundleDependencies。');
+}
+// 光把 SDK 塞进包还不够：npm 安装时只认标准键 `bundleDependencies`。如果 manifest
+// 里写的是别名 `bundledDependencies`（或两键并存被标准键盖掉），npm 会无视包内
+// SDK 照样去 registry 解析并报 ETARGET。这里直接检查 tarball 内的 manifest。
+const webManifestInTar = spawnSync('tar', ['-xOf', path.basename(webTgz), 'package/package.json'], {
+  cwd: path.dirname(webTgz), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
+});
+if (webManifestInTar.status !== 0) {
+  fail(`无法读取 web tarball 内的 package.json：${webManifestInTar.error?.message ?? webManifestInTar.stderr}`);
+}
+const tarManifest = JSON.parse(webManifestInTar.stdout);
+const tarBundled = Array.isArray(tarManifest.bundleDependencies)
+  ? tarManifest.bundleDependencies
+  : (Array.isArray(tarManifest.bundledDependencies) ? tarManifest.bundledDependencies : []);
+if (!tarBundled.includes('@openchamber/sdk') || tarManifest.bundledDependencies !== undefined) {
+  fail('web tarball 的 manifest 未用标准键 bundleDependencies 声明 @openchamber/sdk，npm 安装时会去 registry 解析并报 ETARGET；请检查打包逻辑。');
 }
 
 const zipPath = path.join(repoRoot, `openchamber-intranet-${version}.zip`);
