@@ -52,6 +52,7 @@ export const createPreferenceActions: UIStoreSlice<
   | 'setDiffHideWhitespace'
   | 'setWalkthroughTocWidth'
   | 'setGitChangesViewMode'
+  | 'setLastGitPanelScope'
   | 'setToolJsonViewMode'
   | 'setInputBarOffset'
   | 'setMobileKeyboardMode'
@@ -74,6 +75,7 @@ export const createPreferenceActions: UIStoreSlice<
   | 'setSelectionApprovalText'
   | 'setCopyMessagesAsPlainText'
   | 'setShowToolFileIcons'
+  | 'setShowLiveActivityPreview'
   | 'setShowTurnChangedFiles'
   | 'setKeepEarlierReplies'
   | 'setTimeFormatPreference'
@@ -88,6 +90,7 @@ export const createPreferenceActions: UIStoreSlice<
   | 'setShowSplitAssistantMessageActions'
   | 'setAllowPromptingSubagentSessions'
   | 'setSavePastedImagesAsFiles'
+  | 'setKeepModelOnAgentSwitch'
   | 'setReportUsage'
   | 'setShortcutOverride'
   | 'clearShortcutOverride'
@@ -302,6 +305,10 @@ export const createPreferenceActions: UIStoreSlice<
     set({ gitChangesViewMode: mode });
   },
 
+  setLastGitPanelScope: (scope) => {
+    set({ lastGitPanelScope: scope });
+  },
+
   setToolJsonViewMode: (mode) => {
     set({ toolJsonViewMode: mode });
   },
@@ -390,6 +397,10 @@ export const createPreferenceActions: UIStoreSlice<
     set({ showToolFileIcons: value });
   },
 
+  setShowLiveActivityPreview: (value) => {
+    set({ showLiveActivityPreview: value });
+  },
+
   setKeepEarlierReplies: (value) => {
     set({ keepEarlierReplies: value });
   },
@@ -444,6 +455,10 @@ export const createPreferenceActions: UIStoreSlice<
 
   setSavePastedImagesAsFiles: (value) => {
     set({ savePastedImagesAsFiles: value });
+  },
+
+  setKeepModelOnAgentSwitch: (value) => {
+    set({ keepModelOnAgentSwitch: value });
   },
 
   setReportUsage: (value) => {

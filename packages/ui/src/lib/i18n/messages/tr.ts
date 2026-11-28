@@ -68,6 +68,7 @@ import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
 import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { gitlabRunsI18n } from './gitlab-runs.i18n';
+import { diffReviewedI18n } from './diff-reviewed.i18n';
 import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
@@ -136,13 +137,12 @@ export const dict = {
   'commitComparison.loadError': 'Commitler yüklenemedi',
   'commitComparison.noCommits': 'Commit bulunamadı',
   'commitComparison.emptyDiff': 'Bu committe değişiklik yok',
-  'chat.liveActivity.title': 'Etkinlik',
-  'chat.liveActivity.moreRows': '+{count} daha',
   'chat.liveActivity.changedFile': '{count} dosya değiştirildi',
   'chat.liveActivity.changedFiles': '{count} dosya değiştirildi',
-  'chat.liveActivity.explored': 'Kod tabanı incelendi',
+  'chat.liveActivity.working': 'Çalışıyor…',
   'chat.liveActivity.ranCommand': '{count} komut çalıştırıldı',
   'chat.liveActivity.ranCommands': '{count} komut çalıştırıldı',
+  'chat.liveActivity.explored': 'Kod tabanı incelendi',
   'chat.liveActivity.researched': 'Web araştırması yapıldı',
   'chat.liveActivity.usedSubagent': '{count} alt agent kullanıldı',
   'chat.liveActivity.usedSubagents': '{count} alt agent kullanıldı',
@@ -217,6 +217,7 @@ export const dict = {
   ...diffFindI18n['tr'],
   ...gitlabIssueI18n['tr'],
   ...gitlabRunsI18n['tr'],
+  ...diffReviewedI18n['tr'],
   ...contextWindowI18n['tr'],
   ...markdownOutlineI18n['tr'],
   ...markdownGithubI18n['tr'],

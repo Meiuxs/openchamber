@@ -44,6 +44,7 @@ export interface OpenCodeRouteDependencies<Settings extends { opencodeBinary?: u
   installOpenCodeV2: () => Promise<void>;
   formatSettingsResponse: (settings: Settings) => SettingsResponse;
   readSettingsFromDiskMigrated: (options?: { surface?: SettingsSurface | null }) => Promise<Settings>;
+  takeSetAsideSettingsFiles: () => string[];
   persistSettings: (update: JsonObject, options?: { surface?: SettingsSurface | null }) => Promise<SettingsResponse>;
   resolveProjectDirectory: ReturnType<typeof createProjectDirectoryRuntime>['resolveProjectDirectory'];
   getProviderSources: typeof getProviderSources;
@@ -96,6 +97,7 @@ export const registerOpenCodeRoutes = <Settings extends { opencodeBinary?: unkno
     installOpenCodeV2,
     formatSettingsResponse,
     readSettingsFromDiskMigrated,
+    takeSetAsideSettingsFiles,
     persistSettings,
     resolveProjectDirectory,
     getProviderSources,
@@ -155,7 +157,8 @@ export const registerOpenCodeRoutes = <Settings extends { opencodeBinary?: unkno
   app.get('/api/config/settings', async (req, res) => {
     try {
       const settings = await readSettingsFromDiskMigrated({ surface: settingsSurfaceOf(req) });
-      res.json(formatSettingsResponse(settings));
+      const setAside = takeSetAsideSettingsFiles();
+      res.json(setAside.length > 0 ? { ...formatSettingsResponse(settings), settingsFilesSetAside: setAside } : formatSettingsResponse(settings));
     } catch (error) {
       console.error('Failed to read settings:', error);
       res.status(500).json({ error: 'Failed to read settings' });
@@ -582,7 +585,15 @@ export const registerOpenCodeRoutes = <Settings extends { opencodeBinary?: unkno
     }
   });
 
-  app.delete('/api/provider/:providerId/auth', async (req, res) => {
+  const removeProviderFromAllLayers = (providerId: string, directory: string | null) => {
+    let removed = false;
+    while (removeProviderConfig(providerId, directory, 'user')) removed = true;
+    if (directory && removeProviderConfig(providerId, directory, 'project')) removed = true;
+    if (removeProviderConfig(providerId, directory, 'custom')) removed = true;
+    return removed;
+  };
+
+  app.delete('/api/provider/:providerId/auth', refuseInEnterpriseMode, async (req, res) => {
     try {
       const { providerId } = req.params;
       if (!providerId) {
@@ -619,10 +630,7 @@ export const registerOpenCodeRoutes = <Settings extends { opencodeBinary?: unkno
       } else if (scope === 'user' || scope === 'project' || scope === 'custom') {
         removed = removeProviderConfig(providerId, directory, scope);
       } else if (scope === 'all') {
-        const userRemoved = removeProviderConfig(providerId, directory, 'user');
-        const projectRemoved = directory ? removeProviderConfig(providerId, directory, 'project') : false;
-        const customRemoved = removeProviderConfig(providerId, directory, 'custom');
-        removed = userRemoved || projectRemoved || customRemoved;
+        removed = removeProviderFromAllLayers(providerId, directory);
       } else {
         return res.status(400).json({ error: 'Invalid scope' });
       }

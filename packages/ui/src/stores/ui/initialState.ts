@@ -163,6 +163,7 @@ export const createInitialUIState = (): Pick<UIStore,
   | 'modelRateLimitRequests'
   | 'modelRateLimitWindowMinutes'
   | 'modelRateLimitGateways'
+  | 'lastGitPanelScope'
   | 'toolJsonViewMode'
   | 'isTimelineDialogOpen'
   | 'isPromptNavigatorPanelOpen'
@@ -230,6 +231,7 @@ export const createInitialUIState = (): Pick<UIStore,
   | 'copyMessagesAsPlainText'
   | 'selectionApprovalText'
   | 'showToolFileIcons'
+  | 'showLiveActivityPreview'
   | 'showTurnChangedFiles'
   | 'keepEarlierReplies'
   | 'timeFormatPreference'
@@ -244,6 +246,7 @@ export const createInitialUIState = (): Pick<UIStore,
   | 'showSplitAssistantMessageActions'
   | 'allowPromptingSubagentSessions'
   | 'savePastedImagesAsFiles'
+  | 'keepModelOnAgentSwitch'
   | 'draftStartersVisible'
   | 'isExpandedInput'
   | 'reportUsage'
@@ -404,6 +407,7 @@ export const createInitialUIState = (): Pick<UIStore,
   modelRateLimitRequests: 100,
   modelRateLimitWindowMinutes: 10,
   modelRateLimitGateways: '',
+  lastGitPanelScope: 'working',
   toolJsonViewMode: 'summary',
   isTimelineDialogOpen: false,
   isPromptNavigatorPanelOpen: false,
@@ -476,6 +480,7 @@ export const createInitialUIState = (): Pick<UIStore,
   copyMessagesAsPlainText: true,
   selectionApprovalText: '',
   showToolFileIcons: true,
+  showLiveActivityPreview: true,
   showTurnChangedFiles: false,
   keepEarlierReplies: false,
   timeFormatPreference: 'auto',
@@ -490,6 +495,7 @@ export const createInitialUIState = (): Pick<UIStore,
   showSplitAssistantMessageActions: false,
   allowPromptingSubagentSessions: false,
   savePastedImagesAsFiles: false,
+  keepModelOnAgentSwitch: false,
   draftStartersVisible: true,
   isExpandedInput: false,
   reportUsage: true,

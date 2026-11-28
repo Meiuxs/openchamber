@@ -127,6 +127,7 @@ import { createServerStartupRuntime } from './lib/server-frame/server-startup-ru
 import { createTunnelWiringRuntime, type TunnelWiringDependencies } from './lib/tunnels/tunnel-wiring-runtime.js';
 import { createStartupPipelineRuntime } from './lib/server-frame/startup-pipeline-runtime.js';
 import { createHiddenSessionRegistry } from './lib/opencode/hidden-sessions.js';
+import { createQuietCompaction } from './lib/event-stream/quiet-compaction.js';
 import { runCliEntryIfMain } from './lib/server-frame/cli-entry-runtime.js';
 import { registerNotificationRoutes } from './lib/notifications/routes.js';
 import { createNotificationEmitterRuntime } from './lib/notifications/emitter-runtime.js';
@@ -234,6 +235,7 @@ import { createOpenCodeClient } from './lib/openchamber-sessions/opencode-client
 import { createScheduledTaskService } from './lib/scheduled-tasks/service.js';
 import { createModelCatalogReader } from './lib/scheduled-tasks/model-catalog.js';
 import { createOpenChamberControlService, type ControlOptions, type SessionActionResult } from './lib/openchamber-control/service.js';
+import { createSessionFoldersStore } from './lib/session-folders/store.js';
 import { createPluginNotificationEmitter } from './lib/notifications/emit-route.js';
 import { OpenChamberControlError } from './lib/openchamber-control/error.js';
 import { createSessionLinker } from './lib/openchamber-sessions/session-link.js';
@@ -1159,6 +1161,7 @@ const openCodeSessionClient = (directory?: string) => createOpenCodeClient({
   baseUrl: buildOpenCodeUrl('/', '').replace(/\/$/, ''), headers: getOpenCodeAuthHeaders(), directory,
 });
 configureIntegrateSessions({ client: () => openCodeSessionClient(), listProjects: readProjectPaths(() => readSettingsFromDiskMigrated()) });
+const quietCompaction = createQuietCompaction({ client: () => openCodeSessionClient(), unreadSince: () => unreadBaseline.get(), onSettled: (sessionID) => messageQueueRuntime.release(sessionID) });
 
 const guestInstructions = createGuestInstructions({ dataDir: OPENCHAMBER_DATA_DIR });
 const guestAgentContext = createGuestAgentContext({
@@ -1175,7 +1178,7 @@ const sessionLead = createSessionLeadServer({
   executeControl: (...args) => openChamberControlService.execute(...args),
   readWorkflowSettings: () => readWorkflowSettings(),
   createError: (message, status) => new OpenChamberControlError(message, status),
-  buildOpenCodeUrl: (route, directory) => buildOpenCodeUrl(route, directory), getOpenCodeAuthHeaders: () => getOpenCodeAuthHeaders(),
+  buildOpenCodeUrl: (route, directory) => buildOpenCodeUrl(route, directory), getOpenCodeAuthHeaders: () => getOpenCodeAuthHeaders(), quiet: quietCompaction,
   isSessionWarm: (sessionID, cacheLifetimeMs) => sessionWarmingRuntime.isSessionWarm(sessionID, cacheLifetimeMs),
   registerResult: (entry) => dispatchResultsRuntime.register(entry),
 });
@@ -1242,7 +1245,7 @@ const extensionServiceLifetime = createServiceLifetime({
 const hiddenSessions = createHiddenSessionRegistry();
 
 const globalMessageStreamHub = createGlobalMessageStreamHub({
-  isHiddenPayload: hiddenSessions.isHiddenPayload,
+  isHiddenPayload: hiddenSessions.isHiddenPayload, admitPayload: quietCompaction.admit,
   buildOpenCodeUrl,
   getOpenCodeAuthHeaders,
   upstreamStallTimeoutMs: getUpstreamStallTimeoutMs,
@@ -1455,7 +1458,7 @@ const chatDirectoryCleanupRuntime = createChatDirectoryCleanupRuntime({
 const desktopUpdateSessions = createDesktopUpdateActiveSessionReadiness({
   readStatuses: () => createSessionActivityProbe({ buildOpenCodeUrl, getOpenCodeAuthHeaders }).fetchActiveSessionStatuses(),
   isConnected: () => globalMessageStreamHub.isConnected(),
-  adoptRunning: (ids, readAt) => sessionRuntime.adoptRunningSessions(ids, readAt),
+  adoptRunning: (ids, readAt) => sessionRuntime.adoptRunningSessions(ids.filter((id) => !quietCompaction.isQuiet(id)), readAt),
 });
 const openCodeWatcherRuntime = createOpenCodeWatcherRuntime({
   waitForOpenCodePort: (...args) => waitForOpenCodePort(...args),
@@ -1484,7 +1487,9 @@ globalMessageStreamHub.subscribeEvent((event) => {
 globalMessageStreamHub.subscribeStatus((status) => {
   if (status?.type === 'connect') {
     openCodeTrust.followLocations(true);
+    quietCompaction.reset();
     void sessionGoalRuntime.recoverActiveGoals();
+    void sessionLead.resumeSleep();
     void hiddenSessions.seed(async (cursor): Promise<JsonValue> => {
       const query = cursor ? `?limit=200&cursor=${encodeURIComponent(cursor)}` : '?limit=200';
       const response = await fetch(buildOpenCodeUrl(`/api/session${query}`, ''), { headers: getOpenCodeAuthHeaders() });
@@ -2172,7 +2177,9 @@ function executeServiceControl(action: string, input?: ControlInput, contextDire
 }
 
 const browserUploadStore = createUploadStore();
+const sessionFoldersStore = createSessionFoldersStore({ fsPromises, path, openchamberDataDir: OPENCHAMBER_DATA_DIR, onChanged: (updatedAt) => broadcastOpenChamberUiEvent({ type: 'openchamber:session-folders-changed', properties: { updatedAt } }) });
 const openChamberControlService = createOpenChamberControlService({
+  sessionFoldersStore,
   isHiddenSession: (sessionID, record) => hiddenSessions.has(sessionID, record),
   chatsScope: scheduledChatsScope,
   chatRoots: [path.join(OPENCHAMBER_USER_CONFIG_ROOT, 'chats'), OPENCHAMBER_CHATS_DIR],
@@ -2205,18 +2212,9 @@ const openChamberControlService = createOpenChamberControlService({
     }
     return delivered;
   },
-  isKnowledgeToolEnabled: async () => {
-    const settings = await readSettingsFromDiskMigrated().catch(() => null);
-    return settings?.agentKnowledgeToolEnabled !== false;
-  },
-  isRenderToolEnabled: async () => {
-    const settings = await readSettingsFromDiskMigrated().catch(() => null);
-    return settings?.agentRenderToolEnabled !== false;
-  },
-  isSecretToolEnabled: async () => {
-    const settings = await readSettingsFromDiskMigrated().catch(() => null);
-    return settings?.agentSecretToolEnabled !== false;
-  },
+  isKnowledgeToolEnabled: async () => (await readSettingsFromDiskMigrated().catch(() => null))?.agentKnowledgeToolEnabled !== false,
+  isRenderToolEnabled: async () => (await readSettingsFromDiskMigrated().catch(() => null))?.agentRenderToolEnabled !== false,
+  isSecretToolEnabled: async () => (await readSettingsFromDiskMigrated().catch(() => null))?.agentSecretToolEnabled !== false,
   secretFiles, savedSecrets: savesSecrets ? createSavedSecrets({ store: environmentStore, projectIdFor: environmentRuntime.projectIdFor }) : null,
   onPageWaitChange: (change) => {
     sessionRuntime.trackWaitingPage(change);
@@ -2892,6 +2890,7 @@ async function main(options: WebUiServerOptions = {}) {
     logger: console,
   });
 
+  quietCompaction.registerRoutes(app);
   registerSessionProjectRoutes(app, {
     validateDirectoryPath,
     openCodeTrust,
@@ -2926,6 +2925,7 @@ async function main(options: WebUiServerOptions = {}) {
     resolveGitBinaryForSpawn,
     createFsSearchRuntime: createFsSearchRuntimeFactory,
     openchamberDataDir: OPENCHAMBER_DATA_DIR,
+    sessionFoldersStore,
     openchamberVersion: OPENCHAMBER_VERSION,
     onGuestDeactivated: async (event) => {
       guestSurfaceRuntime?.endForGuest(event.guestId);

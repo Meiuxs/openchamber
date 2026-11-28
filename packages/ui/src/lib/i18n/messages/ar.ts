@@ -69,6 +69,7 @@ import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
 import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { gitlabRunsI18n } from './gitlab-runs.i18n';
+import { diffReviewedI18n } from './diff-reviewed.i18n';
 import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
@@ -136,13 +137,12 @@ export const dict: Record<I18nKey, string> = {
   'commitComparison.loadError': 'تعذّر تحميل الإيداعات',
   'commitComparison.noCommits': 'لم يُعثر على إيداعات',
   'commitComparison.emptyDiff': 'لا توجد تغييرات في هذا الإيداع',
-  'chat.liveActivity.title': 'النشاط',
-  'chat.liveActivity.moreRows': '+{count} أخرى',
   'chat.liveActivity.changedFile': 'تغيير {count} ملف',
   'chat.liveActivity.changedFiles': 'تغيير {count} ملفات',
-  'chat.liveActivity.explored': 'استكشاف قاعدة الشيفرة',
+  'chat.liveActivity.working': 'جارٍ العمل…',
   'chat.liveActivity.ranCommand': 'تشغيل {count} أمر',
   'chat.liveActivity.ranCommands': 'تشغيل {count} أوامر',
+  'chat.liveActivity.explored': 'استكشاف قاعدة الشيفرة',
   'chat.liveActivity.researched': 'البحث في الويب',
   'chat.liveActivity.usedSubagent': 'استخدام {count} وكيل فرعي',
   'chat.liveActivity.usedSubagents': 'استخدام {count} وكلاء فرعيين',
@@ -4069,6 +4069,7 @@ export const dict: Record<I18nKey, string> = {
   ...diffFindI18n['ar'],
   ...gitlabIssueI18n['ar'],
   ...gitlabRunsI18n['ar'],
+  ...diffReviewedI18n['ar'],
   ...contextWindowI18n['ar'],
   ...markdownOutlineI18n['ar'],
   ...markdownGithubI18n['ar'],

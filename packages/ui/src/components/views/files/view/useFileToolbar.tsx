@@ -26,7 +26,7 @@ import { renderFileToolbarPath } from './renderFileToolbarPath';
 import { type OpenWithMenu } from '../useOpenWithMenu';
 
 export function useFileToolbar({ fileAssets, draft, fileKinds, canvasState, viewModes, diagram, editor, fileDocument, filePreviewModes, externalActions, fileSaving, markdownPreview, tabs, fileComments, files, isMobile, runtime, t, openWith }: {
-  fileAssets: Pick<ReturnType<typeof useFileAssets>, 'annotateWhenLoadedRef' | 'canAnnotateHtmlPreview' | 'exportDocument' | 'htmlPreviewAnnotation' | 'htmlPreviewUnreachable'>;
+  fileAssets: Pick<ReturnType<typeof useFileAssets>, 'annotateWhenLoadedRef' | 'canAnnotateHtmlPreview' | 'exportDocument' | 'htmlPreviewAnnotation'>;
   draft: Pick<ReturnType<typeof useFileDraft>, 'autoSaveEnabled' | 'autoSaveStatus' | 'isSaving' | 'setAutoSaveEnabled' | 'shortcutOverrides'>;
   fileKinds: Pick<ReturnType<typeof useFileKinds>, 'binaryCanvas' | 'canCopy' | 'canCopyPath' | 'canEdit' | 'canUseShikiFileView' | 'displaySelectedPath' | 'hasCanvas' | 'isDrawio' | 'isHtml' | 'isJson' | 'isMarkdown' | 'isMermaid' | 'isNotebook' | 'isSelectedSvg' | 'isTable' | 'isTableView' | 'isTextFile' | 'sourceEditorShown'>;
   canvasState: Pick<ReturnType<typeof useFileCanvasState>, 'canvasSaved' | 'setCanvasSaved'>;
@@ -46,7 +46,7 @@ export function useFileToolbar({ fileAssets, draft, fileKinds, canvasState, view
   t: ReturnType<typeof useI18n>['t'];
   openWith: Pick<OpenWithMenu, 'canOpenWith' | 'renderOpenWithItems'>;
 }) {
-  const { annotateWhenLoadedRef, canAnnotateHtmlPreview, htmlPreviewAnnotation, htmlPreviewUnreachable } = fileAssets;
+  const { annotateWhenLoadedRef, canAnnotateHtmlPreview, htmlPreviewAnnotation } = fileAssets;
   const { autoSaveEnabled, setAutoSaveEnabled, shortcutOverrides } = draft;
   const { canCopyPath, canEdit, displaySelectedPath, isHtml, isTextFile } = fileKinds;
 
@@ -76,7 +76,7 @@ export function useFileToolbar({ fileAssets, draft, fileKinds, canvasState, view
     const { searchAction, outlineAction, goToLineAction, symbolsAction, wrapAction, readAloudAction } = sourceActions;
     const saveShortcut = formatShortcutForDisplay(getEffectiveShortcutCombo('save_file', shortcutOverrides));
 
-    const annotateAction: ToolbarAction | null = isHtml && !isMobile && !runtime.isVSCode && !htmlPreviewUnreachable ? {
+    const annotateAction: ToolbarAction | null = isHtml && !isMobile && !runtime.isVSCode ? {
       id: 'annotate',
       label: t('contextPanel.browser.annotate.toggle'),
       icon: 'markup',

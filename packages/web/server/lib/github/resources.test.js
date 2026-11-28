@@ -256,6 +256,29 @@ test('the GitHub picker looks up a pasted Enterprise PR URL in its named reposit
   expect(graphql).not.toHaveBeenCalled();
 });
 
+test('issue search on an enterprise instance reads results from that instance API host', async () => {
+  const issue = (number) => ({ number, title: 'Bug', html_url: `https://acme.ghe.com/acme/app/issues/${number}`, state: 'open',
+    user: { id: 1, login: 'octocat' }, labels: [], comments: 0, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' });
+  const resourcesOn = (instance, host, remotePath = 'acme/app') => createGitHubResources({
+    load: async () => ({ rateLimit: { isGitHubRateLimited: () => false, noteIfGitHubRateLimit: () => false, isGitHubRateLimitError } }),
+    accountOf: () => ({ octokit: { rest: {
+      search: { issuesAndPullRequests: async () => ({ data: { total_count: 1, items: [
+        { number: 3, repository_url: `${host}/repos/acme/app` },
+      ] } }) },
+      issues: { get: async ({ issue_number }) => ({ data: issue(issue_number) }) },
+    } } }),
+    resolveRepo: async () => ({ repo: { owner: remotePath.split('/')[0], repo: remotePath.split('/')[1], host: instance } }),
+    resolveNetwork: async () => null,
+  }).listIssues({ session: { ...session, instance }, directory: '/repo', page: 1, query: 'bug', remote: 'origin' });
+
+  expect((await resourcesOn('acme.ghe.com', 'https://api.acme.ghe.com')).items).toMatchObject([{ number: 3 }]);
+  expect((await resourcesOn('github.example.com', 'https://github.example.com/api/v3')).items).toMatchObject([{ number: 3 }]);
+  expect((await resourcesOn('github.com', 'https://api.github.com')).items).toMatchObject([{ number: 3 }]);
+  expect((await resourcesOn('acme.ghe.com', 'https://api.acme.ghe.com', 'ACME/App')).items).toMatchObject([{ number: 3 }]);
+  // A result from another instance's API is not this instance's issue.
+  await expect(resourcesOn('acme.ghe.com', 'https://api.other.ghe.com')).rejects.toThrow('invalid repository URL');
+});
+
 describe('listChangeRequests filters', () => {
   const makeListResources = () => {
     const list = vi.fn(async () => ({ data: [], headers: {} }));
@@ -366,6 +389,79 @@ describe('change request context reviews', () => {
 
   const review = (id, login, state, createdAt, avatarUrl) => ({
     databaseId: id, author: { login, avatarUrl: avatarUrl ?? null }, body: '', state, createdAt, url: `r${id}`,
+  });
+
+  test('reads the comments, files, checks and reviews of a pull request together', async () => {
+    const started = [];
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const held = (name, data) => async () => { started.push(name); await gate; return { data }; };
+    const resources = createGitHubResources({
+      load: async () => ({
+        rateLimit: { isGitHubRateLimited: () => false, noteIfGitHubRateLimit: () => false, isGitHubRateLimitError },
+        checks: await import('./checks-summary.js'),
+      }),
+      accountOf: () => ({
+        user: { login: 'octocat' },
+        octokit: {
+          graphql: async () => { started.push('reviews'); await gate; return { repository: { pullRequest: {
+            reviews: { totalCount: 0, nodes: [] },
+            latestOpinionatedReviews: { pageInfo: { hasNextPage: false }, nodes: [] },
+            latestReviews: { pageInfo: { hasNextPage: false }, nodes: [] },
+          } } }; },
+          rest: {
+            pulls: {
+              get: async () => ({ data: { ...openPull, head: { ...openPull.head, sha: 'abc123' }, user: { id: 1, login: 'contributor' }, requested_reviewers: [] } }),
+              listReviewComments: held('review comments', []),
+              listFiles: held('files', []),
+            },
+            issues: { listComments: held('comments', []) },
+            checks: { listForRef: held('checks', { check_runs: [] }) },
+            repos: { getCombinedStatusForRef: held('statuses', { statuses: [] }) },
+          },
+        },
+      }),
+      resolveRepo: async () => ({ repo: { owner: 'acme', repo: 'app', host: 'github.com' } }),
+      resolveNetwork: async () => null,
+      resolvePrStatus: async () => null,
+      invalidateAccount: () => {},
+    });
+    const read = resources.changeRequestContext({
+      session, context: {}, directory: '/repo', number: 42, includeDiff: false, includeCIDetails: false, includeTimeline: false,
+    });
+    await vi.waitFor(() => expect(started).toHaveLength(6));
+    expect(started).toEqual(expect.arrayContaining(['reviews', 'comments', 'review comments', 'files', 'checks', 'statuses']));
+    release();
+    expect((await read).changeRequest).toMatchObject({ number: 42 });
+  });
+
+  test('reports the failure of the earliest read when several reads fail', async () => {
+    let reviewCommentsFailed;
+    const reviewCommentsFailure = new Promise((resolve) => { reviewCommentsFailed = resolve; });
+    const resources = createGitHubResources({
+      load: async () => ({ rateLimit: { isGitHubRateLimited: () => false, noteIfGitHubRateLimit: () => false, isGitHubRateLimitError } }),
+      accountOf: () => ({
+        user: { login: 'octocat' },
+        octokit: {
+          graphql: async () => ({ repository: { pullRequest: { reviews: { totalCount: 0, nodes: [] } } } }),
+          rest: {
+            pulls: {
+              get: async () => ({ data: { ...openPull, user: { id: 1, login: 'contributor' }, requested_reviewers: [] } }),
+              listReviewComments: async () => { reviewCommentsFailed(); throw httpError(429, 'rate limited'); },
+              listFiles: async () => ({ data: [] }),
+            },
+            issues: { listComments: async () => { await reviewCommentsFailure; throw httpError(502, 'bad gateway'); } },
+          },
+        },
+      }),
+      resolveRepo: async () => ({ repo: { owner: 'acme', repo: 'app', host: 'github.com' } }),
+      resolveNetwork: async () => null,
+      resolvePrStatus: async () => null,
+      invalidateAccount: () => {},
+    });
+    await expect(resources.changeRequestContext({
+      session, context: {}, directory: '/repo', number: 42, includeDiff: false, includeCIDetails: false, includeTimeline: false,
+    })).rejects.toMatchObject({ status: 502 });
   });
 
   test('carries every submitted review of the newest page, newest first, dismissed included', async () => {

@@ -69,6 +69,7 @@ import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
 import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { gitlabRunsI18n } from './gitlab-runs.i18n';
+import { diffReviewedI18n } from './diff-reviewed.i18n';
 import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
@@ -137,13 +138,12 @@ export const dict: Record<I18nKey, string> = {
   'commitComparison.loadError': '無法載入提交',
   'commitComparison.noCommits': '找不到提交',
   'commitComparison.emptyDiff': '此提交沒有變更',
-  'chat.liveActivity.title': '活動',
-  'chat.liveActivity.moreRows': '還有 {count} 項',
   'chat.liveActivity.changedFile': '變更了 {count} 個檔案',
   'chat.liveActivity.changedFiles': '變更了 {count} 個檔案',
-  'chat.liveActivity.explored': '探索了程式碼庫',
+  'chat.liveActivity.working': '工作中…',
   'chat.liveActivity.ranCommand': '執行了 {count} 條命令',
   'chat.liveActivity.ranCommands': '執行了 {count} 條命令',
+  'chat.liveActivity.explored': '探索了程式碼庫',
   'chat.liveActivity.researched': '進行了網路研究',
   'chat.liveActivity.usedSubagent': '使用了 {count} 個子代理',
   'chat.liveActivity.usedSubagents': '使用了 {count} 個子代理',
@@ -279,6 +279,7 @@ export const dict: Record<I18nKey, string> = {
   ...diffFindI18n['zh-TW'],
   ...gitlabIssueI18n['zh-TW'],
   ...gitlabRunsI18n['zh-TW'],
+  ...diffReviewedI18n['zh-TW'],
   ...contextWindowI18n['zh-TW'],
   ...markdownOutlineI18n['zh-TW'],
   ...markdownGithubI18n['zh-TW'],

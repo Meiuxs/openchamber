@@ -518,7 +518,8 @@ location is already running). The sessions of a directory announced with
 stream had a gap) and every entry when the control stream reconnects are read
 again only while their Tasks are on screen (`showSessionTodos`): a Work Status
 panel or the mobile Status pane is visible with Tasks enabled in its section
-layout. `useLoadSessionTodos` holds that demand and releases it, cancelling a
+layout, or the Panel sections dialog is open (so a hidden Tasks section can still
+be discovered and re-enabled). `useLoadSessionTodos` holds that demand and releases it, cancelling a
 pending retry, when the panel closes or Tasks is hidden. Such a re-read that
 arrives during a read queues its follow-up only while the Tasks are still
 shown when that read ends; a revert queues it regardless. The others are marked
@@ -749,6 +750,36 @@ the session's saved model becomes the new agent's, because readers outside the
 composer (guest prompts, form replies) take either as the next message's model.
 A target whose pinned model the catalog does not list still counts as pinned:
 it gets the defaults, never the previous agent's manual model.
+
+With Settings → Chat → Composer → *Keep the model and thinking level when
+switching agents* on (`keepModelOnAgentSwitch`, a profile preference, off by
+default), a switch the person makes (`setAgent(name, { pick: true })`: the
+agent menu on desktop and mobile, the composer's cycle key, the global cycle
+shortcut) keeps the model and the level on screen for any target that does not
+pin a model the catalog lists. A model saved for the target in this session
+does not apply; the kept pair becomes the target's own session model and level
+instead, so the composer's per-agent restores and a reopened session show the
+same pair, and it is held as the session's unsent model pick, so the next send
+switches to it even when the agent pick settles (switching back to the agent
+the session record already names). A target with a listed pin gets its pin
+before any model remembered for it in this session, and the pin is recorded as
+its session model so the per-agent restore does not bring the remembered one
+back. The level stays inherited when the target would inherit the same
+one, and travels as a choice when it would not (a level the previous agent
+pinned for its own model). Restores, defaults and following a switch made elsewhere pass
+no `pick` and are unaffected, so opening a session still shows that session's
+own model. Columns with their own selection (BTW, a pinned column) never move
+the model with the agent; the setting carries their level to the picked agent.
+Carrying a level writes nothing to the model's remembered level
+(`lastUsedEfforts`): nobody chose it. Subagents run on their own configuration
+on the server and are untouched.
+
+### Why the setting acts on picks and not on every `setAgent`
+
+`setAgent` also restores a session's agent when it opens, follows the record,
+and applies defaults. Keeping the model there would show the previous session's
+model on a session that ran on another one. Only a person's switch is a request
+to change what the agent may do while keeping who answers.
 
 ### Why a pinned agent's model wins over an unsent pick
 

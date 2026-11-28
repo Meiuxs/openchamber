@@ -12,12 +12,12 @@ import type { createGitCredentialResolver } from '../git/credential-resolver.js'
 import type { GitIdentityAccount } from '../git/identity-storage.js';
 import { isString } from './input-guards.js';
 
-import { allowedInsecureGitOrigins } from '../enterprise-mode.js';
+import { allowedInsecureGitOrigins, isEnterpriseMode } from '../enterprise-mode.js';
 
 const CLONE_TIMEOUT_MS = 60_000;
-export type PublicAddress = { address: string; family: 4 | 6 };
+export type ResolvedAddress = { address: string; family: 4 | 6 };
 export type AddressLookup = (hostname: string, options: { all: true }) => Promise<Array<{ address: string; family?: number }>>;
-type InstallTrust = { origins: Set<string>; hosts: Set<string> };
+export type InstallTrust = { mode: 'strict' | 'open'; origins: Set<string>; hosts: Set<string> };
 type InstallPolicyOptions = Parameters<typeof allowedInsecureGitOrigins>[0];
 type GitOptions = {
   gitBinary?: string | undefined;
@@ -47,6 +47,10 @@ export type GuestGitNetwork = {
 type CloneOptions = NetworkOptions & GitOptions & { ref?: string | undefined };
 export type CloneResult = { ok: true } | { ok: false; code: 'clone-failed' | 'clone-auth-failed' };
 
+const DISALLOWED_IPV4 = [/^169\.254\./, /^0\./];
+
+// Enterprise mode's default host policy: only the public internet, never a
+// private, loopback, single-label or `.local`/`.internal` name.
 const PRIVATE_IPV4 = [
   /^127\./, /^10\./, /^192\.168\./, /^169\.254\./, /^0\./,
   /^172\.(1[6-9]|2\d|3[01])\./, /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,
@@ -88,13 +92,54 @@ export const isPublicHostname = (hostname: string) => {
   return host.includes('.');
 };
 
+const isDisallowedIpv6 = (host: string) => {
+  if (host === '::' || /^fe[89ab][0-9a-f]:/.test(host)) {
+    return true;
+  }
+  if (!host.startsWith('::ffff:')) {
+    return false;
+  }
+  const mapped = host.slice('::ffff:'.length);
+  if (net.isIP(mapped) === 4) {
+    return DISALLOWED_IPV4.some((pattern) => pattern.test(mapped));
+  }
+  const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(mapped);
+  if (!hex) {
+    return false;
+  }
+  const high = Number.parseInt(hex[1] ?? '', 16);
+  return high === 0xa9fe || (high >> 8) === 0;
+};
+
+export const isAllowedInstallHost = (hostname: string) => {
+  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!host) {
+    return false;
+  }
+  const version = net.isIP(host);
+  if (version === 4) {
+    return !DISALLOWED_IPV4.some((pattern) => pattern.test(host));
+  }
+  if (version === 6) {
+    return !isDisallowedIpv6(host);
+  }
+  return true;
+};
+
 export const installTrust = (policyOptions?: InstallPolicyOptions): InstallTrust => {
+  // Outside enterprise mode installs keep the permissive host policy: any
+  // public host, a private-network host or an ssh alias is fine, and only
+  // link-local/metadata addresses are refused. Enterprise mode opts into the
+  // strict model below, where a host must be named in the policy file.
+  if (!isEnterpriseMode(policyOptions)) {
+    return { mode: 'open', origins: new Set(), hosts: new Set() };
+  }
   const origins = allowedInsecureGitOrigins(policyOptions);
   const hosts = new Set<string>();
   for (const origin of origins) {
     hosts.add(new URL(origin).hostname.replace(/^\[|\]$/g, '').toLowerCase());
   }
-  return { origins, hosts };
+  return { mode: 'strict', origins, hosts };
 };
 
 const isLocalOnlyHost = (hostname: string): boolean => {
@@ -116,6 +161,9 @@ const isInstallHostname = (hostname: string, trust: InstallTrust = installTrust(
 );
 
 export const isInstallableUrl = (value: string, trust: InstallTrust = installTrust()): boolean => {
+  if (trust.mode === 'open') {
+    return isHttpsGitUrl(value);
+  }
   try {
     const parsed = new URL(value);
     if (parsed.username !== '' || parsed.password !== '') return false;
@@ -127,8 +175,31 @@ export const isInstallableUrl = (value: string, trust: InstallTrust = installTru
   }
 };
 
-export const publicAddressesOf = async (hostname: string, lookup: AddressLookup = (name, options) => dns.lookup(name, options), trust: InstallTrust = installTrust()): Promise<PublicAddress[] | null> => {
+export const resolveInstallAddresses = async (hostname: string, lookup: AddressLookup = (name, options) => dns.lookup(name, options)): Promise<ResolvedAddress[] | null> => {
   const host = hostname.replace(/^\[|\]$/g, '');
+  if (!isAllowedInstallHost(host)) {
+    return null;
+  }
+  const literal = net.isIP(host);
+  if (literal) {
+    return [{ address: host, family: literal === 6 ? 6 : 4 }];
+  }
+  try {
+    const addresses = await lookup(host, { all: true });
+    if (addresses.length === 0 || !addresses.every((entry) => isAllowedInstallHost(entry.address))) {
+      return null;
+    }
+    return addresses.map((entry) => ({ address: entry.address, family: net.isIP(entry.address) === 6 ? 6 : 4 }));
+  } catch {
+    return null;
+  }
+};
+
+export const publicAddressesOf = async (hostname: string, lookup: AddressLookup = (name, options) => dns.lookup(name, options), trust: InstallTrust = installTrust()): Promise<ResolvedAddress[] | null> => {
+  const host = hostname.replace(/^\[|\]$/g, '');
+  if (trust.mode === 'open') {
+    return resolveInstallAddresses(host, lookup);
+  }
   if (!isInstallHostname(host, trust)) {
     return null;
   }
@@ -149,10 +220,23 @@ export const publicAddressesOf = async (hostname: string, lookup: AddressLookup 
   }
 };
 
+const httpTarget = (value: string): { hostname: string; port: string } | null => {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    return { hostname: parsed.hostname, port: parsed.port || (parsed.protocol === 'https:' ? '443' : '80') };
+  } catch {
+    return null;
+  }
+};
+
 export const gitNetworkArgs = async (url: string, lookup?: AddressLookup, trust: InstallTrust = installTrust()) => {
   const target = httpTarget(url);
   if (target === null) {
     return [];
+  }
+  if (trust.mode === 'open') {
+    return isHttpsGitUrl(url) ? ['-c', 'http.followRedirects=false'] : [];
   }
   if (!isInstallableUrl(url, trust)) {
     return null;
@@ -167,20 +251,10 @@ export const gitNetworkArgs = async (url: string, lookup?: AddressLookup, trust:
   ];
 };
 
-const httpTarget = (value: string): { hostname: string; port: string } | null => {
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
-    return { hostname: parsed.hostname, port: parsed.port || (parsed.protocol === 'https:' ? '443' : '80') };
-  } catch {
-    return null;
-  }
-};
-
 const isHttpsGitUrl = (value: string) => {
   try {
     const parsed = new URL(value);
-    return parsed.protocol === 'https:' && parsed.username === '' && parsed.password === '' && isPublicHostname(parsed.hostname);
+    return parsed.protocol === 'https:' && parsed.username === '' && parsed.password === '' && isAllowedInstallHost(parsed.hostname);
   } catch {
     return false;
   }
@@ -192,7 +266,10 @@ const parseSshGitUrl = (value: string, trust: InstallTrust = installTrust()) => 
   let username;
   let repository;
   let port;
+  let hasExplicitUser = false;
+  let isUri = false;
   if (value.slice(0, 6).toLowerCase() === 'ssh://') {
+    isUri = true;
     try {
       const url = new URL(value);
       if (url.password || url.search || url.hash) return null;
@@ -203,14 +280,23 @@ const parseSshGitUrl = (value: string, trust: InstallTrust = installTrust()) => 
       if (port && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)) return null;
     } catch { return null; }
   } else {
-    const match = /^(?:([A-Za-z0-9_][A-Za-z0-9_.-]*)@)?([A-Za-z0-9][A-Za-z0-9.-]*):(.+)$/.exec(value);
+    const match = /^(?:([A-Za-z0-9_][A-Za-z0-9_.-]*)@)?([A-Za-z0-9][A-Za-z0-9._-]*):(.+)$/.exec(value);
     if (!match) return null;
     username = match[1] ?? '';
+    hasExplicitUser = Boolean(match[1]);
     hostname = match[2] ?? '';
     repository = match[3] ?? '';
   }
-  if (!/^[A-Za-z0-9.-]+$/.test(hostname) && !net.isIP(hostname.replace(/^\[|\]$/g, ''))) return null;
-  if (!isInstallHostname(hostname, trust) || (username && !/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(username))) return null;
+  if (trust.mode === 'open') {
+    const unbracketed = hostname.replace(/^\[|\]$/g, '');
+    const isIp = net.isIP(unbracketed) !== 0;
+    if (!isIp && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(hostname)) return null;
+    if (!isUri && !hasExplicitUser && !isIp && !hostname.includes('.')) return null;
+    if (!isAllowedInstallHost(hostname) || (username && !/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(username))) return null;
+  } else {
+    if (!/^[A-Za-z0-9.-]+$/.test(hostname) && !net.isIP(hostname.replace(/^\[|\]$/g, ''))) return null;
+    if (!isInstallHostname(hostname, trust) || (username && !/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(username))) return null;
+  }
   if (!/^\/?[A-Za-z0-9_.~][A-Za-z0-9_./~-]*$/.test(repository) || repository.split('/').includes('..')) return null;
   return port ? { hostname, port } : { hostname };
 };
@@ -331,7 +417,7 @@ const quoteSshPath = (value: string) => {
   return `'${normalized.replace(/'/g, "'\\''")}'`;
 };
 
-const accountHttpsNetwork = async (source: string, pinning: string[], account: GitIdentityAccount, accounts: GuestGitAccounts, timeoutMs: number): Promise<GuestGitNetwork | null> => {
+const accountHttpsNetwork = async (source: string, networkArgs: string[], account: GitIdentityAccount, accounts: GuestGitAccounts, timeoutMs: number): Promise<GuestGitNetwork | null> => {
   const stored = await accounts.readAccount(account);
   if (!stored || stored.credentialId !== account.accountId) return null;
   const operationId = randomUUID();
@@ -366,7 +452,7 @@ const accountHttpsNetwork = async (source: string, pinning: string[], account: G
       '-c', 'http.cookieFile=',
       '-c', 'credential.interactive=false',
       ...lease.gitConfigArgs,
-      ...pinning,
+      ...networkArgs,
     ],
     env: lease.env,
     baseEnv: managedEnvironment(process.env, process.platform),
@@ -391,22 +477,24 @@ export const prepareGuestGitNetwork = async (source: string, { gitIdentityId, gi
   }
   const ssh = parseSshGitUrl(source, trust);
   if (ssh) {
-    const addresses = await publicAddressesOf(ssh.hostname, lookup, trust);
-    if (!addresses) return null;
+    if (trust.mode === 'strict') {
+      const addresses = await publicAddressesOf(ssh.hostname, lookup, trust);
+      if (!addresses) return null;
+    }
     if (!sshCommand) {
       const { getGlobalIdentity } = await import('../git/index.js');
       const globalIdentity = await getGlobalIdentity();
       sshCommand = globalIdentity.sshCommand || (process.env.GIT_SSH ? quoteSshPath(process.env.GIT_SSH) : 'ssh');
     }
-    const [address] = addresses;
-    if (!address) throw new Error('Public DNS answer has no addresses');
-    sshCommand += ` -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o Hostname=${address.address} -o HostKeyAlias=${ssh.hostname.replace(/^\[|\]$/g, '')} -o ProxyCommand=none -o ProxyJump=none`;
+    sshCommand += ' -o BatchMode=yes -o StrictHostKeyChecking=accept-new';
     return { args: [], env: { GIT_SSH_COMMAND: sshCommand, GIT_SSH_VARIANT: 'ssh' } };
   }
-  const args = await gitNetworkArgs(source, lookup, trust);
+  const args = trust.mode === 'strict'
+    ? await gitNetworkArgs(source, lookup, trust)
+    : (isHttpsGitUrl(source) ? ['-c', 'http.followRedirects=false'] : []);
   if (!args) return null;
   if (account) {
-    if (!gitAccounts) return null;
+    if (!gitAccounts || !isHttpsGitUrl(source)) return null;
     return accountHttpsNetwork(source, args, account, gitAccounts, timeoutMs);
   }
   return sshCommand ? { args, env: { GIT_SSH_COMMAND: sshCommand } } : { args };
@@ -427,11 +515,11 @@ const AUTH_FAILURE_PATTERN = /Authentication failed|could not read (?:Username|P
 
 export const isGitAuthFailure = (stderr: string | undefined) => AUTH_FAILURE_PATTERN.test(stderr ?? '');
 
-export const cloneGitRepository = async (source: string, dest: string, { gitBinary = 'git', timeoutMs = CLONE_TIMEOUT_MS, ref, lookup, gitIdentityId, gitAccounts }: CloneOptions = {}): Promise<CloneResult> => {
+export const cloneGitRepository = async (source: string, dest: string, { gitBinary = 'git', timeoutMs = CLONE_TIMEOUT_MS, ref, gitIdentityId, gitAccounts }: CloneOptions = {}): Promise<CloneResult> => {
   if (ref !== undefined && !isGitRef(ref)) {
     return { ok: false, code: 'clone-failed' };
   }
-  const network = await prepareGuestGitNetwork(source, { lookup, gitIdentityId, gitAccounts, timeoutMs }).catch(() => null);
+  const network = await prepareGuestGitNetwork(source, { gitIdentityId, gitAccounts, timeoutMs }).catch(() => null);
   if (!network) {
     return { ok: false, code: 'clone-failed' };
   }

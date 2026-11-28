@@ -272,6 +272,7 @@ export interface UIStore {
   modelRateLimitRequests: number;
   modelRateLimitWindowMinutes: number;
   modelRateLimitGateways: string;
+  lastGitPanelScope: Exclude<PendingDiffScope, 'staged'>;
   toolJsonViewMode: 'summary' | 'formatted' | 'raw';
   isTimelineDialogOpen: boolean;
   isPromptNavigatorPanelOpen: boolean;
@@ -348,6 +349,7 @@ export interface UIStore {
   copyMessagesAsPlainText: boolean;
   selectionApprovalText: string;
   showToolFileIcons: boolean;
+  showLiveActivityPreview: boolean;
   showTurnChangedFiles: boolean;
   keepEarlierReplies: boolean;
   timeFormatPreference: TimeFormatPreference;
@@ -362,6 +364,7 @@ export interface UIStore {
   showSplitAssistantMessageActions: boolean;
   allowPromptingSubagentSessions: boolean;
   savePastedImagesAsFiles: boolean;
+  keepModelOnAgentSwitch: boolean;
   isExpandedInput: boolean;
   reportUsage: boolean;
   shortcutOverrides: Record<string, ShortcutCombo>;
@@ -560,6 +563,7 @@ export interface UIStore {
   setDiffFileTreeWidth: (width: number) => void;
   setWalkthroughTocWidth: (width: number) => void;
   setGitChangesViewMode: (mode: 'flat' | 'tree') => void;
+  setLastGitPanelScope: (scope: Exclude<PendingDiffScope, 'staged'>) => void;
   setToolJsonViewMode: (mode: 'summary' | 'formatted' | 'raw') => void;
   setRunOverviewKey: (runKey: string | null) => void;
   setTimelineDialogOpen: (open: boolean) => void;
@@ -630,6 +634,7 @@ export interface UIStore {
   setCopyMessagesAsPlainText: (value: boolean) => void;
   setSelectionApprovalText: (value: string) => void;
   setShowToolFileIcons: (value: boolean) => void;
+  setShowLiveActivityPreview: (value: boolean) => void;
   setShowTurnChangedFiles: (value: boolean) => void;
   setKeepEarlierReplies: (value: boolean) => void;
   setTimeFormatPreference: (value: TimeFormatPreference) => void;
@@ -644,6 +649,7 @@ export interface UIStore {
   setShowSplitAssistantMessageActions: (value: boolean) => void;
   setAllowPromptingSubagentSessions: (value: boolean) => void;
   setSavePastedImagesAsFiles: (value: boolean) => void;
+  setKeepModelOnAgentSwitch: (value: boolean) => void;
   viewPagerPage: 'left' | 'center' | 'right';
   setViewPagerPage: (page: 'left' | 'center' | 'right') => void;
   toggleExpandedInput: () => void;

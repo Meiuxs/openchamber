@@ -68,6 +68,7 @@ import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
 import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { gitlabRunsI18n } from './gitlab-runs.i18n';
+import { diffReviewedI18n } from './diff-reviewed.i18n';
 import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
@@ -136,13 +137,12 @@ export const dict = {
   'commitComparison.loadError': 'Commits konnten nicht geladen werden',
   'commitComparison.noCommits': 'Keine Commits gefunden',
   'commitComparison.emptyDiff': 'Keine Änderungen in diesem Commit',
-  'chat.liveActivity.title': 'Aktivität',
-  'chat.liveActivity.moreRows': '+{count} weitere',
   'chat.liveActivity.changedFile': '{count} Datei geändert',
   'chat.liveActivity.changedFiles': '{count} Dateien geändert',
-  'chat.liveActivity.explored': 'Codebasis untersucht',
+  'chat.liveActivity.working': 'Arbeitet…',
   'chat.liveActivity.ranCommand': '{count} Befehl ausgeführt',
   'chat.liveActivity.ranCommands': '{count} Befehle ausgeführt',
+  'chat.liveActivity.explored': 'Codebasis untersucht',
   'chat.liveActivity.researched': 'Im Web recherchiert',
   'chat.liveActivity.usedSubagent': '{count} Unteragent eingesetzt',
   'chat.liveActivity.usedSubagents': '{count} Unteragenten eingesetzt',
@@ -278,6 +278,7 @@ export const dict = {
   ...diffFindI18n['de'],
   ...gitlabIssueI18n['de'],
   ...gitlabRunsI18n['de'],
+  ...diffReviewedI18n['de'],
   ...contextWindowI18n['de'],
   ...markdownOutlineI18n['de'],
   ...markdownGithubI18n['de'],

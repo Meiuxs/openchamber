@@ -138,6 +138,8 @@ const MessagesTab: React.FC = () => {
   const setCollapsibleThinkingBlocks = useUIStore((state) => state.setCollapsibleThinkingBlocks);
   const expandReasoningWhileStreaming = useUIStore((state) => state.expandReasoningWhileStreaming);
   const setExpandReasoningWhileStreaming = useUIStore((state) => state.setExpandReasoningWhileStreaming);
+  const showLiveActivityPreview = useUIStore((state) => state.showLiveActivityPreview);
+  const setShowLiveActivityPreview = useUIStore((state) => state.setShowLiveActivityPreview);
   const showToolFileIcons = useUIStore((state) => state.showToolFileIcons);
   const setShowToolFileIcons = useUIStore((state) => state.setShowToolFileIcons);
   const keepEarlierReplies = useUIStore((state) => state.keepEarlierReplies);
@@ -191,6 +193,19 @@ const MessagesTab: React.FC = () => {
           />
         </SettingsFieldRow>
         <div className={SETTINGS_OPTION_STACK_CLASS} data-settings-item="chat.reasoning">
+          {activityRenderMode === 'collapsed' ? (
+            <SettingsCheckboxRow
+              checked={showLiveActivityPreview}
+              onChange={(enabled) => {
+                setShowLiveActivityPreview(enabled);
+                void updateDesktopSettings({ showLiveActivityPreview: enabled });
+              }}
+              label={t('settings.openchamber.visual.field.showLiveActivityPreview')}
+              ariaLabel={t('settings.openchamber.visual.field.showLiveActivityPreview')}
+              info={t('settings.openchamber.visual.field.showLiveActivityPreviewInfo')}
+              settingsItem="chat.live-activity-preview"
+            />
+          ) : null}
           <SettingsCheckboxRow
             checked={showReasoningTraces}
             onChange={setShowReasoningTraces}
@@ -408,6 +423,8 @@ const ComposerTab: React.FC = () => {
   const setAllowPromptingSubagentSessions = useUIStore((state) => state.setAllowPromptingSubagentSessions);
   const savePastedImagesAsFiles = useUIStore((state) => state.savePastedImagesAsFiles);
   const setSavePastedImagesAsFiles = useUIStore((state) => state.setSavePastedImagesAsFiles);
+  const keepModelOnAgentSwitch = useUIStore((state) => state.keepModelOnAgentSwitch);
+  const setKeepModelOnAgentSwitch = useUIStore((state) => state.setKeepModelOnAgentSwitch);
   const inputSpellcheckEnabled = useUIStore((state) => state.inputSpellcheckEnabled);
   const setInputSpellcheckEnabled = useUIStore((state) => state.setInputSpellcheckEnabled);
   const inputHistoryScope = useInputHistoryStore((state) => state.scope);
@@ -547,6 +564,17 @@ const ComposerTab: React.FC = () => {
             settingsItem="chat.save-pasted-images"
           />
         </div>
+      </SettingsSection>
+
+      <SettingsSection title={t('settings.layout.chat.section.agentSwitching')}>
+        <SettingsCheckboxRow
+          checked={keepModelOnAgentSwitch}
+          onChange={setKeepModelOnAgentSwitch}
+          label={t('settings.openchamber.visual.field.keepModelOnAgentSwitch')}
+          ariaLabel={t('settings.openchamber.visual.field.keepModelOnAgentSwitch')}
+          info={t('settings.openchamber.visual.field.keepModelOnAgentSwitchInfo')}
+          settingsItem="chat.keep-model-on-agent-switch"
+        />
       </SettingsSection>
 
       <SettingsSection title={t('settings.layout.chat.section.draftsAndHistory')} contentClassName="space-y-3">

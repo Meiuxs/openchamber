@@ -689,6 +689,45 @@ describe('fs write', () => {
       expect(await nativeFs.readFile(file, 'utf8')).toBe('original');
     });
 
+    it('checks the path of a save only after the earlier save of that path has answered', async () => {
+      const file = path.join(repo, 'notes.md');
+      await nativeFs.writeFile(file, 'original');
+      const events = [];
+      const { app, getRoute } = createRouteRegistry();
+      registerFsRoutes(app, {
+        os: { homedir: () => repo },
+        path,
+        fsPromises: nativeFs,
+        spawn: vi.fn(),
+        crypto: { randomUUID: () => 'job-0' },
+        normalizeDirectoryPath: (p) => p,
+        resolveProjectDirectory: async () => {
+          events.push('check');
+          return { directory: repo };
+        },
+        buildAugmentedPath: () => '/usr/bin',
+        resolveGitBinaryForSpawn: () => 'git',
+        openchamberUserConfigRoot: path.join(repo, '.config'),
+      });
+      const save = getRoute('POST', '/api/fs/write');
+      const send = async (content) => {
+        const res = createMockResponse();
+        const json = res.json.bind(res);
+        res.json = (payload) => {
+          events.push(`answer ${content}`);
+          return json(payload);
+        };
+        await save({ body: { path: file, content } }, res);
+        return res;
+      };
+
+      const [first, second] = await Promise.all([send('first'), send('second')]);
+
+      expect([first.statusCode, second.statusCode]).toEqual([200, 200]);
+      expect(events).toEqual(['check', 'answer first', 'check', 'answer second']);
+      expect(await nativeFs.readFile(file, 'utf8')).toBe('second');
+    });
+
     it('keeps a file whole when several saves arrive at once', async () => {
       const file = path.join(repo, 'notes.md');
       await nativeFs.writeFile(file, 'start');
@@ -3730,10 +3769,10 @@ describe('fs html preview grants', () => {
       await mintHandler({ body: { path: pagePath }, query }, res);
       return res;
     };
-    const serve = async (url) => {
+    const serve = async (url, query = {}) => {
       const match = url.match(serveRoute.routePath);
       const res = createMockResponse();
-      await serveRoute.handler({ params: { 0: decodeURIComponent(match[1]), 1: decodeURIComponent(match[2]) }, query: {} }, res);
+      await serveRoute.handler({ params: { 0: decodeURIComponent(match[1]), 1: decodeURIComponent(match[2]) }, query }, res);
       return res;
     };
     return { mint, serve };
@@ -3774,6 +3813,12 @@ describe('fs html preview grants', () => {
 
     const secret = await serve(`/api/fs/preview/${grant}/home/user/.config/openchamber/guest-auth.json`);
     expect(secret.getHeader('access-control-allow-origin')).toBeUndefined();
+
+    // Inline preview reads enforce readRoot server-side so secret bytes never enter data: URLs.
+    const inlineData = await serve(`/api/fs/preview/${grant}/home/user/.config/openchamber/projects/p1/canvases/c1/data.json`, { inline: '1' });
+    expect(inlineData.statusCode).toBe(200);
+    const inlineSecret = await serve(`/api/fs/preview/${grant}/home/user/.config/openchamber/guest-auth.json`, { inline: '1' });
+    expect(inlineSecret.statusCode).toBe(403);
   });
 
   it('refuses unknown grants and files outside the workspace', async () => {

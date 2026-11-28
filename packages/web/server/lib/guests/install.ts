@@ -29,7 +29,7 @@ import {
 import type { GitOrigin, ExtensionStore } from './persist.js';
 import type { GuestPackage, JsonValue } from './contracts.js';
 import type { PublicGuest } from './catalog.js';
-import type { AddressLookup, GuestGitAccounts, PublicAddress } from './clone.js';
+import type { AddressLookup, GuestGitAccounts, ResolvedAddress } from './clone.js';
 import type { TcpNetConnectOpts } from 'node:net';
 import { isString } from './input-guards.js';
 
@@ -39,7 +39,6 @@ type GitInstallOptions = InstallOptions & {
   gitIdentityId?: string | undefined;
   gitAccounts?: GuestGitAccounts | undefined;
   ref?: string | undefined;
-  lookup?: AddressLookup | undefined;
 };
 type InstallFailure = { ok: false; code: string; id?: string; reason?: string; required?: string; capabilities?: string[] };
 type InstallResult = { ok: true; guest: PublicGuest; replaced: boolean } | InstallFailure;
@@ -200,7 +199,7 @@ const readLocalZip = async (filePath: string) => {
 
 const MAX_ZIP_REDIRECTS = 5;
 
-const requestPinned = (url: string, target: PublicAddress, maxBytes: number) => new Promise<{ status: number; location: string | null; body: Buffer | null }>((resolve, reject) => {
+const requestPinned = (url: string, target: ResolvedAddress, maxBytes: number) => new Promise<{ status: number; location: string | null; body: Buffer | null }>((resolve, reject) => {
   const parsed = new URL(url);
   const options: https.RequestOptions & Pick<TcpNetConnectOpts, 'autoSelectFamily'> = {
     method: 'GET',
@@ -257,9 +256,18 @@ export const downloadZip = async (url: string, { request = requestPinned, lookup
     if (!addresses) {
       return null;
     }
-    const [target] = addresses;
-    if (!target) throw new Error('Public DNS answer has no addresses');
-    const response = await request(current, target, MAX_ZIP_BYTES);
+    let response = null;
+    for (const target of addresses) {
+      try {
+        response = await request(current, target, MAX_ZIP_BYTES);
+        break;
+      } catch {
+        continue;
+      }
+    }
+    if (!response) {
+      return null;
+    }
     if (response.status >= 300 && response.status < 400) {
       if (!response.location) {
         return null;
@@ -341,7 +349,7 @@ export const installGuestFromUrl = async (rawUrl: string, persistPath: string, {
   return installGuestFromGitSource(gitSource.url, persistPath, { openchamberVersion, replace, gitBinary, ref: gitSource.ref, gitIdentityId, gitAccounts, folders });
 };
 
-export const installGuestFromGitSource = async (source: string, persistPath: string, { openchamberVersion, replace = false, gitBinary, ref, gitIdentityId, gitAccounts, lookup, folders }: GitInstallOptions = {}) => {
+export const installGuestFromGitSource = async (source: string, persistPath: string, { openchamberVersion, replace = false, gitBinary, ref, gitIdentityId, gitAccounts, folders }: GitInstallOptions = {}) => {
   const origin: GitOrigin = { url: source };
   if (ref) origin.ref = ref;
   if (gitIdentityId) origin.gitIdentityId = gitIdentityId;
@@ -353,7 +361,7 @@ export const installGuestFromGitSource = async (source: string, persistPath: str
     origin,
     folders,
     prepare: async (staging) => {
-      const cloned = await cloneGitRepository(source, staging, { gitBinary, ref, gitIdentityId, gitAccounts, lookup });
+      const cloned = await cloneGitRepository(source, staging, { gitBinary, ref, gitIdentityId, gitAccounts });
       return cloned.ok ? { ok: true, root: staging } : cloned;
     },
   });

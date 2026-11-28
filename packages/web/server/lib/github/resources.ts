@@ -16,10 +16,8 @@ import {
   requireGitHubCheckRuns,
   requireGitHubComment,
   requireGitHubIssue,
-  requireGitHubPullFile,
   requireGitHubPullRequest,
   requireGitHubRepoNetwork,
-  requireGitHubReviewComment,
   requireGitHubStatuses,
   requireGitHubWorkflowJobs,
   requireProviderArray,
@@ -38,12 +36,14 @@ import {
   searchGitHubReferencesAcross,
 } from './reference-search.js';
 import { createContextCache } from './context-cache.js';
+import { repositoryOfApiUrl } from './api-host.js';
 import { readAssignablePeople } from './people.js';
 import { fetchPullStack } from './pull-stack.js';
 import { referencesField } from './references.js';
 import { parseReferenceLink } from './reference-links.js';
 import { fetchReviewState } from './review-draft.js';
-import { readReviewContext, type ContextReviewFields } from './review-summaries.js';
+import { readPullContextParts } from './pull-context-reads.js';
+import type { ContextReviewFields } from './review-summaries.js';
 import type { Octokit, RestEndpointMethodTypes } from '@octokit/rest';
 import type { ProviderImplementation, ProviderSession } from '../source-control/provider-contract.js';
 import type { ContributorProvenanceRead } from '../git/contributor-provenance-storage.js';
@@ -477,24 +477,24 @@ export function createGitHubResources({
       const route = { owner: repo.owner, repo: repo.repo };
       const projectDTO = mapProject(repo, identity);
       const prData = requireGitHubPullRequest((await octokit.rest.pulls.get({ ...route, pull_number: number }))?.data, 'GitHub returned an invalid pull request');
-      const reviewContextRead = readReviewContext(octokit, route, number, prData.requested_reviewers, identity);
-      const issueComments = requireProviderArray<Rest['issues']['listComments']['response']['data'][number]>(
-        (await octokit.rest.issues.listComments({ ...route, issue_number: number, per_page: 100 }))?.data,
-        'GitHub returned an invalid issue comment list',
-      ).map((comment) => mapComment(requireGitHubComment(comment, 'GitHub returned an invalid issue comment'), identity));
-      const reviewComments = requireProviderArray(
-        (await octokit.rest.pulls.listReviewComments({ ...route, pull_number: number, per_page: 100 }))?.data,
-        'GitHub returned an invalid review comment list',
-      ).map((comment) => mapReviewComment(requireGitHubReviewComment(comment), identity));
-      const files = requireProviderArray<Rest['pulls']['listFiles']['response']['data'][number]>(
-        (await octokit.rest.pulls.listFiles({ ...route, pull_number: number, per_page: 100 }))?.data,
-        'GitHub returned an invalid pull request file list',
-      ).map((file) => mapFile(requireGitHubPullFile(file)));
-
-      let ci: CI | null = null;
+      const readDiff = async () => {
+        if (!includeDiff) return undefined;
+        const response = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
+          ...route, pull_number: number, headers: { accept: 'application/vnd.github.v3.diff' },
+        });
+        if (!isProviderString(response?.data)) throw invalidProviderPayload('GitHub returned an invalid pull request diff');
+        return response.data;
+      };
       const sha = prData.head?.sha;
-      if (sha) {
-        const { summary, checkRuns, statuses } = await readChecks(octokit, repo, sha, { runs: true });
+      const { issueComments, reviewComments, files, checks, diff, reviewFields } = await readPullContextParts({
+        octokit, route, number, identity,
+        requestedReviewers: prData.requested_reviewers,
+        readChecks: async () => (sha ? readChecks(octokit, repo, sha, { runs: true }) : null),
+        readDiff,
+      });
+      let ci: CI | null = null;
+      if (checks) {
+        const { summary, checkRuns, statuses } = checks;
         if (summary && checkRuns.length + statuses.length > 0) {
           const details = includeCIDetails ? await readCheckDetails(octokit, repo, checkRuns) : () => ({});
           ci = mapCI(summary, [
@@ -506,15 +506,6 @@ export function createGitHubResources({
         }
       }
 
-      let diff;
-      if (includeDiff) {
-        const response = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
-          ...route, pull_number: number, headers: { accept: 'application/vnd.github.v3.diff' },
-        });
-        if (!isProviderString(response?.data)) throw invalidProviderPayload('GitHub returned an invalid pull request diff');
-        diff = response.data;
-      }
-
       const result: PullContext = {
         identity,
         fetchedAt: Date.now(),
@@ -522,7 +513,7 @@ export function createGitHubResources({
         changeRequest: mapChangeRequest(prData, projectDTO, identity),
         issueComments,
         reviewComments,
-        ...await reviewContextRead,
+        ...reviewFields,
         files,
         ci,
       };
@@ -557,8 +548,7 @@ export function createGitHubResources({
           if (!isPlainObject(item) || !Number.isSafeInteger(item.number) || item.number <= 0) {
             throw invalidProviderPayload('GitHub returned an invalid issue search item');
           }
-          const match = (isProviderString(item.repository_url) ? item.repository_url : '').match(/^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)$/);
-          const repoRef = match ? repos.find((entry) => entry.owner === match[1] && entry.repo === match[2]) : null;
+          const repoRef = isProviderString(item.repository_url) ? repositoryOfApiUrl(repos, item.repository_url, identity.instance) : null;
           if (!repoRef) throw invalidProviderPayload('GitHub issue search returned an invalid repository URL');
           try {
             const issue = await octokit.rest.issues.get({ owner: repoRef.owner, repo: repoRef.repo, issue_number: item.number });

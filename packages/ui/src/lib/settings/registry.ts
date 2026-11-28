@@ -395,6 +395,7 @@ export const SETTINGS_REGISTRY = {
   wideChatLayoutEnabled: field({ scope: 'profile', perSurface: true, parse: parseBoolean }),
   showSplitAssistantMessageActions: field({ scope: 'profile', parse: parseBoolean, ui: uiStore('showSplitAssistantMessageActions', (v) => useUIStore.getState().setShowSplitAssistantMessageActions(v)) }),
   showToolFileIcons: field({ scope: 'profile', parse: parseBoolean, ui: uiStore('showToolFileIcons', (v) => useUIStore.getState().setShowToolFileIcons(v)) }),
+  showLiveActivityPreview: field({ scope: 'profile', parse: parseBoolean, ui: uiStore('showLiveActivityPreview', (v) => useUIStore.getState().setShowLiveActivityPreview(v)) }),
   codeBlockLineWrap: field({ scope: 'profile', parse: parseBoolean, ui: uiStore('codeBlockLineWrap', (v) => useUIStore.getState().setCodeBlockLineWrap(v)) }),
   tableCellWrap: field({ scope: 'profile', parse: parseBoolean, ui: uiStore('tableCellWrap', (v) => useUIStore.getState().setTableCellWrap(v)) }),
   copyMessagesAsPlainText: field({ scope: 'profile', parse: parseBoolean, ui: uiStore('copyMessagesAsPlainText', (v) => useUIStore.getState().setCopyMessagesAsPlainText(v)) }),
@@ -485,6 +486,7 @@ export const SETTINGS_REGISTRY = {
   largeTextPasteBehavior: field({ scope: 'profile', parse: parseLargeTextPasteBehavior, ui: uiStore('largeTextPasteBehavior', (v) => useUIStore.getState().setLargeTextPasteBehavior(v)) }),
   documentAttachBehavior: field({ scope: 'profile', parse: parseDocumentAttachBehavior, ui: uiStore('documentAttachBehavior', (v) => useUIStore.getState().setDocumentAttachBehavior(v)) }),
   savePastedImagesAsFiles: field({ scope: 'profile', parse: parseBoolean, ui: uiStore('savePastedImagesAsFiles', (v) => useUIStore.getState().setSavePastedImagesAsFiles(v)) }),
+  keepModelOnAgentSwitch: field({ scope: 'profile', parse: parseBoolean, ui: uiStore('keepModelOnAgentSwitch', (v) => useUIStore.getState().setKeepModelOnAgentSwitch(v)) }),
   followUpBehavior: field({
     scope: 'profile',
     parse: parseFollowUpBehavior,
@@ -664,6 +666,7 @@ export const LOCAL_DEVICE_KEYS = [
   'contextEditorVisible',
   'contextEditorTreeWidth',
   'gitSidebarWidth',
+  'lastGitPanelScope',
   'workStatusExpandedSections',
   'messageQueueExpanded',
   'workStatusScrollTop',

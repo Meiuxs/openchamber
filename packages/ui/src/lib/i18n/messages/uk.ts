@@ -69,6 +69,7 @@ import { integrationsCatalogI18n } from './integrations-catalog.i18n';
 import { diffFindI18n } from './diff-find.i18n';
 import { gitlabIssueI18n } from './gitlab-issue.i18n';
 import { gitlabRunsI18n } from './gitlab-runs.i18n';
+import { diffReviewedI18n } from './diff-reviewed.i18n';
 import { contextWindowI18n } from './context-window.i18n';
 import { markdownOutlineI18n } from './markdown-outline.i18n';
 import { markdownGithubI18n } from './markdown-github.i18n';
@@ -137,13 +138,12 @@ export const dict: Record<I18nKey, string> = {
   'commitComparison.loadError': 'Не вдалося завантажити коміти',
   'commitComparison.noCommits': 'Комітів не знайдено',
   'commitComparison.emptyDiff': 'У цьому коміті немає змін',
-  'chat.liveActivity.title': 'Дії',
-  'chat.liveActivity.moreRows': 'Ще {count}',
   'chat.liveActivity.changedFile': 'Змінено {count} файл',
   'chat.liveActivity.changedFiles': 'Змінено файлів: {count}',
-  'chat.liveActivity.explored': 'Досліджено кодову базу',
+  'chat.liveActivity.working': 'Працює…',
   'chat.liveActivity.ranCommand': 'Виконано {count} команду',
   'chat.liveActivity.ranCommands': 'Виконано команд: {count}',
+  'chat.liveActivity.explored': 'Досліджено кодову базу',
   'chat.liveActivity.researched': 'Проведено пошук в інтернеті',
   'chat.liveActivity.usedSubagent': 'Залучено {count} сабагента',
   'chat.liveActivity.usedSubagents': 'Залучено сабагентів: {count}',
@@ -289,6 +289,7 @@ export const dict: Record<I18nKey, string> = {
   ...diffFindI18n['uk'],
   ...gitlabIssueI18n['uk'],
   ...gitlabRunsI18n['uk'],
+  ...diffReviewedI18n['uk'],
   ...contextWindowI18n['uk'],
   ...markdownOutlineI18n['uk'],
   ...markdownGithubI18n['uk'],

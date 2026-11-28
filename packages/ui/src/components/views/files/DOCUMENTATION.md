@@ -807,11 +807,11 @@ which asks for a new grant and reloads the frame, so a page changed on disk
 shows up in an open preview. A save from the editor sets the content directly;
 the preview gets it when the user switches back from the code.
 
-On a relay connection the panel says the preview is unavailable and offers the
-code, asks for no grant, and the toolbar has no "Annotate page". The browser loads the page and its files itself,
-and a URL it loads never enters the tunnel. Reading the page through the tunnel
-into `srcDoc` was rejected: its neighbouring files would be lost, and a relative
-URL in a `srcDoc` frame resolves against the app's own address.
+On a relay connection, or in Capacitor with custom runtime headers (`runtimeAssetsNeedFetch()`), the browser cannot reach `/api/fs/preview/<grant>/<path>` directly with an iframe `src`. Instead `useHtmlPreviewUrl` still mints the grant and fetches the HTML and its relative styles, scripts, and media through `runtimeFetch` with `inline=1` using the shared `inlineRelayHtmlDocument` helper, inlining them as `data:` URLs for `<iframe srcDoc>`. The server enforces the grant's canonical `readRoot` for `inline=1` requests so files outside `readRoot` (such as `~/.config/openchamber` secrets) are refused with 403 and never inlined into script-readable `data:` URLs. Because the server still serves the root HTML through `/api/fs/preview/<grant>/<path>`, it injects `preview-bridge.js` and in-memory storage as usual.
+
+### Why inline `srcDoc` over relay with `<base href>` and a fragment-scroll handler
+
+Previously relay connections showed an "unavailable over the relay" placeholder because passing raw HTML into `srcDoc` lost neighbouring files and let relative URLs resolve against the app's own address. Inlining local subresources through the preview grant fixes neighbouring assets, and prepending `<base href="https://preview.invalid/...">` isolates every unresolved relative URL, form action, and dynamic script URL from the host app's address. Because `<base href>` makes clicks on `<a href="#section">` attempt to navigate away from `about:srcdoc`, the preview injects a small click handler that scrolls to the target element inside the frame. Missing subresources degrade in place instead of failing the whole page, unlike strict extension packages, and preview load errors stay inside the preview pane so the loaded source code remains accessible. Runtime `fetch('./...')` from page scripts still cannot cross the relay tunnel from an opaque `srcDoc` frame.
 
 The preview toolbar has the browser panel's "Annotate page" toggle
 (`useHtmlPreviewAnnotation`, a thin use of `components/browser/useFrameAnnotation.ts`,
